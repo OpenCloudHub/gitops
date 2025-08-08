@@ -16,6 +16,10 @@ spec:
   - repoURL: git@github.com:opencloudhub/gitops.git
     path: src/application-sets/platform
     targetRevision: HEAD
+  # MLOps Apps
+  - repoURL: git@github.com:opencloudhub/gitops.git
+    path: src/application-sets/mlops
+    targetRevision: HEAD
 
   destination:
     namespace: argocd
