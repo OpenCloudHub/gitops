@@ -8,3 +8,4 @@ resources:
 - external-secrets.yaml
 - http-route.yaml
 - service-monitors.yaml
+- root-app-meta.yaml
