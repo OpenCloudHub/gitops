@@ -263,7 +263,7 @@ vault_setup_create_secrets() {
   vault_cmd kv put kv/mlops/storage/cnpg/mlflow \
     username="$DB_MLFLOW_USER" password="$DB_MLFLOW_PASSWORD"
 
-  vault_cmd kv put kv/platform/storage/cnpg/example-app \
+  vault_cmd kv put kv/demo-app/storage/cnpg/demo-app \
     username="$DB_DEMO_APP_USER" password="$DB_DEMO_APP_PASSWORD"
 
   vault_cmd kv put kv/platform/storage/pgadmin/credentials \
