@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: minio-tenant
+
+resources:
+  - external-secrets.yaml
+  - http-route.yaml
+
+helmCharts:
+  - name: tenant
+    releaseName: minio
+    version: 7.1.1
+    repo: https://operator.min.io
+    valuesInline:
+      tenant:
+        name: minio
+        pools:
+          - name: pool-0 
+            servers: 1
+            volumesPerServer: 1
+            size: 10Gi
+            storageClassName: standard
+        buckets:
+          - name: mlflow
+          - name: argo-workflows
+          - name: loki-chunks
+          - name: loki-ruler
+          - name: loki-admin
+          - name: tempo-traces
+        configSecret:
+          name: minio-tenant-secret
+          existingSecret: true
+        console:
+          enabled: true
+        # Disable TLS for development
+        certificate:
+          requestAutoCert: false
+    

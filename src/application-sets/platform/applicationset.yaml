@@ -48,7 +48,7 @@ spec:
           - ServerSideApply=true
         #   - RespectIgnoreDifferences=true
       ignoreDifferences:
-        # Ignore differences in the failurePolicy field of the following istio resources that caused out-of-sync
+        # FIXME: Ignore differences in the failurePolicy field of the following istio resources that caused out-of-sync
         - group: admissionregistration.k8s.io
           kind: ValidatingWebhookConfiguration
           name: istio-validator-istio-system
