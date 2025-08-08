@@ -1,0 +1,24 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: demo-app-db-cluster
+  namespace: storage
+spec:
+  instances: 2
+  bootstrap:
+    initdb:
+      database: demo_app
+      owner: demo-app
+      secret:
+        name: demo-app-db-user
+      postInitApplicationSQL:
+        - "CREATE ROLE cnpg_pooler_pgbouncer WITH LOGIN"
+        - "GRANT CONNECT ON DATABASE demo_app TO cnpg_pooler_pgbouncer"
+        - "CREATE OR REPLACE FUNCTION public.user_search(uname TEXT) RETURNS TABLE (usename name, passwd text) LANGUAGE sql SECURITY DEFINER AS 'SELECT usename, passwd FROM pg_catalog.pg_shadow WHERE usename=$1;'"
+        - "REVOKE ALL ON FUNCTION public.user_search(text) FROM public"
+        - "GRANT EXECUTE ON FUNCTION public.user_search(text) TO cnpg_pooler_pgbouncer"
+  storage:
+    size: 1Gi
+    storageClass: standard
+  monitoring:
+    enablePodMonitor: true
