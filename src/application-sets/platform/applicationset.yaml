@@ -59,6 +59,14 @@ spec:
           name: istiod-default-validator
           jsonPointers:
             - /webhooks/0/failurePolicy
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/template/spec/containers/*/env/*/valueFrom/resourceFieldRef/divisor
+        - group: apps
+          kind: DaemonSet
+          jsonPointers:
+            - /spec/template/spec/containers/*/env/*/valueFrom/resourceFieldRef/divisor
         # Ignore ExternalSecret status and data fields (applies to all ExternalSecrets)
         - group: external-secrets.io
           kind: ExternalSecret
