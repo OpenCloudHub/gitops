@@ -5,6 +5,7 @@ namespace: mlops
 
 resources:
   - external-secrets.yaml
+  - http-route.yaml
 
 helmCharts:
   - name: mlflow
