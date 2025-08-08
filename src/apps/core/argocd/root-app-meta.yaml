@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app-meta
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:opencloudhub/gitops.git
+    path: src/
+    targetRevision: HEAD
+    directory:
+      include: "root-app.yaml"
+  destination:
+    namespace: argocd
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
