@@ -16,3 +16,6 @@ spec:
   clusterResourceWhitelist:
     - group: "*"
       kind: "*"
+
+
+# TODO: manage projetcs via argocd as well to watch for changes
