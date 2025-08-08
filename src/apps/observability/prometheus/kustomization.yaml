@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+helmCharts:
+  - name: prometheus
+    releaseName: prometheus
+    version: 27.28.1
+    repo: https://prometheus-community.github.io/helm-charts
+    namespace: observability
+    valuesInline:
+      alertmanager:
+        enabled: false
+      kube-state-metrics:
+        enabled: false  # Let k8s-monitoring handle this
+      prometheus-node-exporter:
+        enabled: false  # Let k8s-monitoring handle this
+      pushgateway:
+        enabled: false
+      server:
+        replicaCount: 1
+        resources:
+          limits:
+            cpu: 1
+            memory: 2Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        extraArgs:
+          web.enable-remote-write-receiver: ""
+

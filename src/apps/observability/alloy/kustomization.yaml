@@ -1,0 +1,156 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+
+helmCharts:
+  - name: k8s-monitoring
+    releaseName: k8s-monitoring
+    version: 3.2.0
+    repo: https://grafana.github.io/helm-charts
+    namespace: observability
+    includeCRDs: true
+    valuesInline:
+      cluster:
+        name: local-kind-cluster
+      
+      # Fixed destinations with proper routing
+      destinations:
+        - name: loki
+          type: loki
+          url: http://loki-gateway.observability.svc.cluster.local/loki/api/v1/push
+        - name: prometheus
+          type: prometheus
+          url: http://prometheus-server.observability.svc.cluster.local/api/v1/write
+        - name: tempo
+          type: otlp
+          protocol: http
+          url: http://tempo.observability.svc.cluster.local:4318
+      
+      # Enable basic log collection with explicit routing
+      podLogs:
+        enabled: true
+        gatherMethod: kubernetesApi
+        collector: alloy-logs
+        destinations:
+          - loki
+        labelsToKeep:
+          - "app"
+          - "container"
+          - "namespace"
+          - "pod"
+          - "job"
+          - "service.name"  # Important for trace correlation
+      
+      # Enable cluster events
+      clusterEvents:
+        enabled: true
+        collector: alloy-logs
+        destinations:
+          - loki
+      
+      # Enable metrics collection with OpenCost integration
+      clusterMetrics:
+        enabled: true
+        destinations:
+          - prometheus
+        collector: alloy-metrics
+        # Enable OpenCost integration
+        opencost:
+          enabled: true
+          metricsSource: prometheus
+          opencost:
+            exporter:
+              defaultClusterId: "opencloudhub-local"  # TODO: change in prod
+              extraEnv:
+                CURRENT_CLUSTER_ID_FILTER_ENABLED: "true"
+                PROM_CLUSTER_ID_LABEL: cluster
+            prometheus:
+              external:
+                enabled: true
+                url: "http://prometheus-server.observability.svc.cluster.local"
+              internal:
+                enabled: false
+            customPricing:
+              enabled: true
+              configmapName: custom-pricing-model
+              configPath: /tmp/custom-config
+              createConfigmap: true
+              provider: custom
+              costModel:
+                description: Modified pricing configuration for local development.
+                CPU: 1.25
+                spotCPU: 0.006655
+                RAM: 0.50
+                spotRAM: 0.000892
+                GPU: 0.95
+                storage: 0.25
+                zoneNetworkEgress: 0.01
+                regionNetworkEgress: 0.01
+                internetNetworkEgress: 0.12
+      
+      # Enable Prometheus Operator Objects
+      prometheusOperatorObjects:
+        enabled: true
+        destinations:
+          - prometheus
+        collector: alloy-metrics
+        crds:
+          deploy: true
+      
+      # Enable Application Observability for traces
+      applicationObservability:
+        enabled: true
+        destinations:
+          - tempo
+        receivers:
+          otlp:
+            grpc:
+              enabled: true
+              port: 4317
+            http:
+              enabled: true
+              port: 4318
+        connectors:
+          spanLogs:
+            enabled: true
+          spanMetrics:
+            enabled: true
+          collector: alloy-receiver
+        # Enable metrics and traces
+        metrics:
+          enabled: true
+        traces:
+          enabled: true
+      
+      # Configure alloy-logs collector
+      alloy-logs:
+        enabled: true
+        alloy:
+          clustering:
+            enabled: true
+          mounts:
+            varlog: false
+            dockercontainers: false
+      
+      # Configure alloy-metrics collector
+      alloy-metrics:
+        enabled: true
+      
+      alloy-singleton:
+        enabled: true
+      
+      # Configure alloy-receiver for traces
+      alloy-receiver:
+        enabled: true
+        alloy:
+          extraPorts:
+            - name: otlp-grpc
+              port: 4317
+              targetPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              port: 4318
+              targetPort: 4318
+              protocol: TCP
+          service:
+            enabled: true
