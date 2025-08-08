@@ -6,14 +6,21 @@
 		"ghcr.io/devcontainers-extra/features/pre-commit:2": {},
 		"ghcr.io/devcontainers-extra/features/act:1": {},
 		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
-		"ghcr.io/devcontainers-extra/features/kind:1": {}
+		"ghcr.io/devcontainers-extra/features/kind:1": {},
+		"ghcr.io/devcontainers/features/go:1": {},
+		"ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {
+			"jqVersion": "latest",
+			"yqVersion": "latest"
+		}
 	},
 	"mounts": [
 		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
 		"source=${localEnv:HOME}/.ssh/opencloudhub,target=/home/vscode/.ssh/opencloudhub,type=bind,readonly"
 	],
-	"runArgs": ["--network=host"],
-	"postCreateCommand": "pre-commit install && pre-commit run --all-files",
+	"runArgs": [
+		"--network=host"
+	],
+	"postCreateCommand": "./scripts/devcontainer-postCreate.sh",
 	"customizations": {
 		"vscode": {
 			"extensions": [

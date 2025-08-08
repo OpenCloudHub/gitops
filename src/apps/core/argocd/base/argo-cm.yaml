@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  kustomize.buildOptions: --enable-helm
+  resource.customizations.health.argoproj.io_Application: |
+    hs = {}
+    hs.status = "Progressing"
+    hs.message = ""
+
+    if obj and obj.status then
+      if obj.status.health then
+        hs.status = obj.status.health.status or "Progressing"
+        hs.message = obj.status.health.message or ""
+      end
+    end
+
+    return hs
+

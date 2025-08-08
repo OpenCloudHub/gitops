@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: security-policies
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - name: namespaces
+        path: src/security/namespaces
+        syncWave: "0"
+      - name: rbac
+        path: src/security/rbac
+        syncWave: "1"
+      - name: resource-limits
+        path: src/security/resource-limits
+        syncWave: "2"
+  template:
+    metadata:
+      name: 'security-{{name}}'
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{syncWave}}'
+    spec:
+      project: default
+      source:
+        repoURL: git@github.com:opencloudhub/gitops.git
+        path: '{{path}}'
+        targetRevision: HEAD
+      destination:
+        server: https://kubernetes.default.svc
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true

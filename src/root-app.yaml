@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application  
+metadata:
+  name: root-app
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+  # Security policies ApplicationSet
+  - repoURL: git@github.com:opencloudhub/gitops.git
+    path: src/application-sets/security
+    targetRevision: HEAD
+  # Platform team apps
+  - repoURL: git@github.com:opencloudhub/gitops.git
+    path: src/application-sets/platform
+    targetRevision: HEAD
+    destination:
+      namespace: argocd
+      server: https://kubernetes.default.svc

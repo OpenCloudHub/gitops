@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: argocd
+
+resources:
+  # Could also be curled and saved first to provision the installation in a restricted environment
+  # Use HA installation for production
+  # TODO: specify and lock version
+  - https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+patches:
+  - target:
+      kind: Service
+      name: argocd-server
+    path: argocd-server-service.yaml
+  - target:
+      kind: ConfigMap
+      name: argocd-cmd-params-cm
+    path: argocd-cmd-params-cm.yaml
+  - target:
+      kind: ConfigMap
+      name: argocd-cm
+    path: argo-cm.yaml
+
+images:
+  - name: quay.io/argoproj/argocd
+    newName: ghcr.io/argoproj/argo-cd/argocd
+    newTag: 3.2.0-09b5cbdd
