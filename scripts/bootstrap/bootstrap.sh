@@ -87,7 +87,7 @@ EOF
 bootstrap_check_prerequisites() {
   log_step "Check prerequisites"
   validate_command_exists kubectl "https://kubernetes.io/docs/tasks/tools/"
-  check_git_status
+  # check_git_status
   check_cluster_connectivity
   
   if [[ "$DRY_RUN" == "true" ]]; then
@@ -110,9 +110,7 @@ bootstrap_cluster_prep() {
   # Create repository secrets for each repo
   log_info "Creating ArgoCD repository secrets..."
   local repos=(
-    "gitops|git@github.com:opencloudhub/gitops.git|argocd_main_ed25519"
-    "gitops-mlops|git@github.com:opencloudhub/gitops-mlops.git|argocd_mlops_ed25519"
-    "gitops-example-apps|git@github.com:opencloudhub/gitops-example-apps.git|argocd_example_apps_ed25519"
+    "gitops|git@github.com:opencloudhub/gitops.git|argocd_gitops_ed25519"
   )
   
   for repo_config in "${repos[@]}"; do

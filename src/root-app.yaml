@@ -16,6 +16,12 @@ spec:
   - repoURL: git@github.com:opencloudhub/gitops.git
     path: src/application-sets/platform
     targetRevision: HEAD
-    destination:
-      namespace: argocd
-      server: https://kubernetes.default.svc
+
+  destination:
+    namespace: argocd
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    
