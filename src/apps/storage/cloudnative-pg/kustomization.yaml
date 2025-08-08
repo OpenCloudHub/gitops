@@ -4,8 +4,9 @@ kind: Kustomization
 namespace: storage
 
 resources:
-  - platform/
+  - keycloak/
   - demo-app/
+  - mlops/
 
 helmCharts:
   - name: cloudnative-pg
