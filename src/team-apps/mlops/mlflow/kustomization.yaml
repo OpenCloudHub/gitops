@@ -1,0 +1,65 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mlops
+
+resources:
+  - external-secrets.yaml
+
+helmCharts:
+  - name: mlflow
+    releaseName: mlflow
+    version: 5.1.0
+    repo: oci://registry-1.docker.io/bitnamicharts
+    valuesInline:
+      postgresql:
+        enabled: false
+
+      minio:
+        enabled: false
+
+      tracking:
+        host: "0.0.0.0"
+        containerPorts:
+          http: 5000
+        auth:
+          enabled: false
+        service:
+          type: ClusterIP
+        networkPolicy:
+          enabled: true
+          allowExternal: false
+          ingressNSMatchLabels:
+            name: istio-ingress
+          extraIngress:
+            - ports:
+                - port: 15008  # HBONE port
+                - port: 5000   # MLflow application port
+              from:
+                - namespaceSelector:
+                    matchLabels:
+                      name: istio-ingress
+                - namespaceSelector:
+                    matchLabels:
+                      istio.io/dataplane-mode: ambient  # Allow ambient pods
+
+
+      externalDatabase:
+        dialectDriver: postgresql
+        host: mlflow-db-pooler.storage.svc.cluster.local
+        port: 5432
+        user: mlflow           
+        database: mlflow
+        existingSecret: mlflow-db-user
+        existingSecretPasswordKey: password
+
+      externalS3:
+        host: minio-hl.minio-tenant.svc.cluster.local
+        port: 9000
+        useCredentialsInSecret: true
+        existingSecret: minio-tenant-secret
+        existingSecretAccessKeyIDKey: accesskey
+        existingSecretKeySecretKey: secretkey
+        bucket: mlflow
+        protocol: http
+        serveArtifacts: true
