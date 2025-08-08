@@ -214,7 +214,7 @@ create_summary() {
     local argocd_password argocd_url vault_addr
     argocd_password=$(jq -r '.argocd.password' "$BOOTSTRAP_SUMMARY_FILE" 2>/dev/null || echo "<unknown>")
     vault_addr=$(jq -r '.environment_exports.VAULT_ADDR' "$VAULT_SUMMARY_FILE" 2>/dev/null || echo "<unknown>")
-    argocd_url="https://argocd.core.internal.opencloudhub.io"
+    argocd_url="https://argocd.core.internal.opencloudhub.org"
 
     if ! curl -k --connect-timeout 5 "$argocd_url" >/dev/null 2>&1; then
         log_warning "ArgoCD not accessible via ingress. Port-forward may be needed."

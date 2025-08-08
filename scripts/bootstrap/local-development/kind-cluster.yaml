@@ -9,7 +9,7 @@ nodes:
         kind: InitConfiguration
         nodeRegistration:
           kubeletExtraArgs:
-            node-labels: "networking.opencloudhub.io/gateway-controller=true,kubernetes.io/os=linux"
+            node-labels: "networking.opencloudhub.org/gateway-controller=true,kubernetes.io/os=linux"
     extraPortMappings:
       # HTTP traffic
       - containerPort: 80
@@ -34,7 +34,7 @@ nodes:
         kind: JoinConfiguration
         nodeRegistration:
           kubeletExtraArgs:
-            node-labels: "node.opencloudhub.io/type=storage,node.opencloudhub.io/storage=true"
+            node-labels: "node.opencloudhub.org/type=storage,node.opencloudhub.org/storage=true"
     labels:
       tier: storage
 
@@ -45,7 +45,7 @@ nodes:
         kind: JoinConfiguration
         nodeRegistration:
           kubeletExtraArgs:
-            node-labels: "node.opencloudhub.io/type=observability,node.opencloudhub.io/observability=true"
+            node-labels: "node.opencloudhub.org/type=observability,node.opencloudhub.org/observability=true"
     labels:
       tier: observability
 
@@ -56,7 +56,7 @@ nodes:
         kind: JoinConfiguration
         nodeRegistration:
           kubeletExtraArgs:
-            node-labels: "node.opencloudhub.io/type=application,node.opencloudhub.io/application=true"
+            node-labels: "node.opencloudhub.org/type=application,node.opencloudhub.org/application=true"
     labels:
       tier: application
 
@@ -68,6 +68,6 @@ nodes:
         kind: JoinConfiguration
         nodeRegistration:
           kubeletExtraArgs:
-            node-labels: "node.opencloudhub.io/type=gpu-training,node.opencloudhub.io/gpu-training=true"
+            node-labels: "node.opencloudhub.org/type=gpu-training,node.opencloudhub.org/gpu-training=true"
     labels:
       tier: gpu-training

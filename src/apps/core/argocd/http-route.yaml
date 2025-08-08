@@ -7,10 +7,10 @@ spec:
   parentRefs:
     - group: gateway.networking.k8s.io
       kind: Gateway
-      name: ingress-gateway
+      name: ingress-gateway-istio
       namespace: istio-ingress
   hostnames:
-    - argocd.core.internal.opencloudhub.io
+    - argocd.core.internal.opencloudhub.org
   rules:
     - matches:
         - path:

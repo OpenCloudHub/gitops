@@ -362,7 +362,7 @@ check_git_status() {
 }
 
 get_exposed_services() {
-    local base="opencloudhub.io"
+    local base="opencloudhub.org"
 
     echo "argocd.core.internal.${base}"
     echo "keycloak.auth.internal.${base}"
