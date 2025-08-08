@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: external-secrets
+
+resources:
+  - cluster-secret-stores.yaml
+
+helmCharts:
+  - name: external-secrets
+    releaseName: external-secrets
+    version: 0.18.2
+    repo: https://charts.external-secrets.io
+    includeCRDs: true
+    valuesInline:
+      namespaceOverride: external-secrets
+      # certController:
+      #   enabled: true
+      # webhook:
+      #   certManager:
+      #     enabled: true
+      #     addInjectorAnnotations: true
+      #     cert:
+      #       create: true
+      #       issuerRef:
+      #         kind: ClusterIssuer
+      #         name: ca-issuer    

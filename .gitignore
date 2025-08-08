@@ -40,3 +40,4 @@ terraform.rc
 *.env
 *.env.local
 bootstrap-summaries/
+.vscode/

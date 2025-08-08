@@ -362,7 +362,7 @@ check_git_status() {
 }
 
 get_exposed_services() {
-    local base="presentable-mlops.io"
+    local base="opencloudhub.io"
 
     echo "argocd.core.internal.${base}"
     echo "keycloak.auth.internal.${base}"

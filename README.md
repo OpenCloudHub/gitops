@@ -62,6 +62,7 @@
 <h2 id="features">✨ Features</h2>
 
 <!-- GETTING STARTED -->
+# TODO: preinstall script with cloud provider kind and yq
 
 <h2 id="getting-started">🚀 Getting Started</h2>
 1. Clone this repository and cd into the directory:

@@ -1,0 +1,71 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: git@github.com:opencloudhub/gitops.git
+        revision: HEAD
+        directories:
+          - path: src/apps/*/*
+  template:
+    metadata:
+      name: "{{index .path.segments 3}}"
+      labels:
+        app.kubernetes.io/name: "{{index .path.segments 3}}"
+      annotations:
+        argocd.argoproj.io/sync-options: |
+          {{- if eq (index .path.segments 3) "cloudnative-pg" }}
+          SkipDryRunOnMissingResource=true,ServerSideApply=true
+          {{- else }}
+          SkipDryRunOnMissingResource=true
+          {{- end }}
+        argocd.argoproj.io/sync-wave: |
+          {{- if eq (index .path.segments 3) "gateway" }}-600
+          {{- else if eq (index .path.segments 3) "cert-manager" }}-500
+          {{- else if eq (index .path.segments 3) "external-secrets" }}-400
+          {{- else if eq (index .path.segments 3) "istio" }}-300
+          {{- else if or (eq (index .path.segments 2) "storage") (eq (index .path.segments 2) "observability") }}-200
+          {{- else }}-100{{- end }}
+
+    spec:
+      project: platform
+      source:
+        repoURL: git@github.com:opencloudhub/gitops.git
+        targetRevision: HEAD
+        path: "{{.path.path}}"
+      destination:
+        server: https://kubernetes.default.svc
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true
+        #   - RespectIgnoreDifferences=true
+      ignoreDifferences:
+        # Ignore differences in the failurePolicy field of the following istio resources that caused out-of-sync
+        - group: admissionregistration.k8s.io
+          kind: ValidatingWebhookConfiguration
+          name: istio-validator-istio-system
+          jsonPointers:
+            - /webhooks/0/failurePolicy
+        - group: admissionregistration.k8s.io
+          kind: ValidatingWebhookConfiguration
+          name: istiod-default-validator
+          jsonPointers:
+            - /webhooks/0/failurePolicy
+        # Ignore ExternalSecret status and data fields (applies to all ExternalSecrets)
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jsonPointers:
+            - /status
+            - /spec/data
+            - /metadata/generation
+            - /metadata/resourceVersion
+            - /metadata/managedFields
+
