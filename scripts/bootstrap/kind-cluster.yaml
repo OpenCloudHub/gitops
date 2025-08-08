@@ -1,0 +1,73 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: opencloudhub-local
+nodes:
+  # Control plane node - Gateway API & Management
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "networking.opencloudhub.io/gateway-controller=true,kubernetes.io/os=linux"
+    extraPortMappings:
+      # HTTP traffic
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+      # HTTPS traffic
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP
+      # Gateway API specific ports
+      - containerPort: 15021
+        hostPort: 15021
+        protocol: TCP
+      - containerPort: 15443
+        hostPort: 15443
+        protocol: TCP
+
+  # Storage Node
+  - role: worker
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "node.opencloudhub.io/type=storage,node.opencloudhub.io/storage=true"
+    labels:
+      tier: storage
+
+  # Observability Node
+  - role: worker
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "node.opencloudhub.io/type=observability,node.opencloudhub.io/observability=true"
+    labels:
+      tier: observability
+
+  # Application + Inference Node
+  - role: worker
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "node.opencloudhub.io/type=application,node.opencloudhub.io/application=true"
+    labels:
+      tier: application
+
+
+    # GPU Training Node
+  - role: worker
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "node.opencloudhub.io/type=gpu-training,node.opencloudhub.io/gpu-training=true"
+    labels:
+      tier: gpu-training
