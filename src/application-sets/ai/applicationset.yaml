@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: mlops-apps
+  name: ai-apps
   namespace: argocd
 spec:
   goTemplate: true
@@ -11,16 +11,16 @@ spec:
       repoURL: git@github.com:opencloudhub/gitops.git
       revision: HEAD
       directories:
-      - path: src/team-apps/mlops/*
+      - path: src/team-apps/ai/*
   template:
     metadata:
       name: "{{index .path.segments 3}}"
       labels:
         app.kubernetes.io/name: "{{index .path.segments 3}}"
-        app.kubernetes.io/part-of: mlops
+        app.kubernetes.io/part-of: ai
         app.kubernetes.io/managed-by: argocd
     spec:
-      project: mlops
+      project: ai
       source:
         repoURL: git@github.com:opencloudhub/gitops.git
         targetRevision: HEAD

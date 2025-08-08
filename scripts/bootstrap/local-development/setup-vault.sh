@@ -260,7 +260,7 @@ vault_setup_create_secrets() {
     clientId="$OAUTH2_PROXY_CLIENT_ID_EXTERNAL" clientSecret="$OAUTH2_PROXY_CLIENT_SECRET_EXTERNAL" \
     cookieSecret="$OAUTH2_PROXY_COOKIE_SECRET_EXTERNAL"
 
-  vault_cmd kv put kv/mlops/storage/cnpg/mlflow \
+  vault_cmd kv put kv/ai/storage/cnpg/mlflow \
     username="$DB_MLFLOW_USER" password="$DB_MLFLOW_PASSWORD"
 
   vault_cmd kv put kv/demo-app/storage/cnpg/demo-app \

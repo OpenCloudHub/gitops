@@ -18,7 +18,7 @@ spec:
     targetRevision: HEAD
   # MLOps Apps
   - repoURL: git@github.com:opencloudhub/gitops.git
-    path: src/application-sets/mlops
+    path: src/application-sets/ai
     targetRevision: HEAD
 
   destination:
