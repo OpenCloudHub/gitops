@@ -11,7 +11,7 @@ helmCharts:
     includeCRDs: true
     valuesInline:
       cluster:
-        name: local-kind-cluster
+        name: opencloudhub-local
       
       # Fixed destinations with proper routing
       destinations:
