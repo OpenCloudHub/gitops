@@ -107,6 +107,9 @@ bootstrap_cluster_prep() {
   log_info "Creating vault token secret..."
   kubectl create secret generic vault-token --from-literal=token=$VAULT_TOKEN -n external-secrets --dry-run=client -o yaml | kubectl apply -f -
   
+  # Install ServiceMonitor CRD
+  kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+
   # Create repository secrets for each repo
   log_info "Creating ArgoCD repository secrets..."
   local repos=(
