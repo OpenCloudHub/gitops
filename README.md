@@ -64,6 +64,42 @@
 <!-- GETTING STARTED -->
 
 <h2 id="getting-started">🚀 Getting Started</h2>
+1. Clone this repository and cd into the directory:
+   ```bash
+   git clone https://github.com/opencloudhub/gitops.git
+   cd opencloudhub
+   ```
+
+2. Create access token for the repo used by ArgoCD ( Can use GithubApp as well )
+1. Create folder to store shh key
+
+````
+```bash
+mkdir -p ~/.ssh/opencloudhub
+```
+````
+
+2. Create asynchronous deploy token without passphrase
+
+```bash
+ssh-keygen -t ed25519 -C "argocd_gitops@opencoudhub.com" -f ~/.ssh/opencloudhub/argocd_gitops_ed25519 -N ""
+
+
+```
+
+3. Get public key and add it as deploy token to gh repo:
+
+```bash
+echo "Public Key:" && cat ~/.ssh/opencloudhub/argocd_gitops_ed25519.pub
+```
+
+- Navigate to Github repo
+- Go to settings
+- Under Security Section: Deploy Keys > Add Key
+  - title: argocd_gitops_ed25519
+  - allow write access: true
+
+3. Update the .env file
 
 ### Prerequisites
 
