@@ -97,13 +97,6 @@ repos:
           - ruff
 
   ### Shell ###
-  - repo: https://github.com/koalaman/shellcheck-precommit
-    rev: v0.10.0
-    hooks:
-      - id: shellcheck
-        name: "🐚 shell · Check shell scripts"
-        args: ["--severity=warning"]
-
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.10.0.1
     hooks:

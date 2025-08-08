@@ -1,0 +1,16 @@
+{
+	"vault_info": {
+		"timestamp": "2025-08-08T14:10:10Z",
+		"container_name": "vault-dev",
+		"external_address": "http://127.0.0.1:8200",
+		"internal_port": "8200",
+		"host_ip": "127.0.0.1",
+		"host_port": "8200",
+		"vault_token": "1234"
+	},
+	"environment_exports": {
+		"VAULT_ADDR": "http://127.0.0.1:8200",
+		"VAULT_TOKEN": "1234"
+	},
+	"example_usage": ["vault login $VAULT_TOKEN", "vault kv list kv/"]
+}

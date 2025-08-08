@@ -9,7 +9,8 @@
 		"ghcr.io/devcontainers-extra/features/kind:1": {}
 	},
 	"mounts": [
-		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
+		"source=${localEnv:HOME}/.ssh/opencloudhub,target=/home/vscode/.ssh/opencloudhub,type=bind,readonly"
 	],
 	"runArgs": ["--network=host"],
 	"postCreateCommand": "pre-commit install && pre-commit run --all-files",
