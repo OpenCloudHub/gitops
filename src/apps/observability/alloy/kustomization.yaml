@@ -72,8 +72,8 @@ helmCharts:
                 enabled: false
             customPricing:
               enabled: true
-              configmapName: custom-pricing-model
-              configPath: /tmp/custom-config
+              # configmapName: custom-pricing-model
+              # configPath: /tmp/custom-config
               createConfigmap: true
               provider: custom
               costModel:
