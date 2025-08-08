@@ -6,7 +6,7 @@ namespace: storage
 resources:
   - keycloak/
   - demo-app/
-  - mlops/
+  - mlflow/
 
 helmCharts:
   - name: cloudnative-pg
