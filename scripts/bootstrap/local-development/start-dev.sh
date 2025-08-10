@@ -140,8 +140,11 @@ dev_setup_assign_external_ip() {
 
     CLOUD_KIND_PIDS=$(pgrep -f "cloud-provider-kind" || true)
     if [[ -n "$CLOUD_KIND_PIDS" ]]; then
-        log_info "Killing old cloud-provider-kind processes (PIDs: $CLOUD_KIND_PIDS)"
-        echo "$CLOUD_KIND_PIDS" | xargs kill
+        log_info "Force killing old cloud-provider-kind processes (PIDs: $CLOUD_KIND_PIDS)"
+        echo "$CLOUD_KIND_PIDS" | xargs kill -9 2>/dev/null || \
+        echo "$CLOUD_KIND_PIDS" | xargs sudo kill -9 2>/dev/null || \
+        log_warning "Could not force kill processes, continuing anyway..."
+        sleep 2
     fi
 
     cloud-provider-kind >/dev/null 2>&1 &

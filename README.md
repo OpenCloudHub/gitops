@@ -102,6 +102,8 @@ echo "Public Key:" && cat ~/.ssh/opencloudhub/argocd_gitops_ed25519.pub
 
 3. Update the .env file
 
+4. Start dev bash scripts/bootstrap/local-development/start-dev.sh
+
 ### Prerequisites
 
 ### Usage
