@@ -6,6 +6,7 @@ namespace: ai
 resources:
   # - external-secrets.yaml
   - http-route.yaml
+  - service.yaml
 
 helmCharts:
   - name: kuberay-operator
