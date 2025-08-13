@@ -19,7 +19,7 @@ spec:
               num_cpus: 0.1
 
   rayClusterConfig:
-    rayVersion: '2.38.0'
+    rayVersion: '2.48.0'
 
     # Head node configuration - runs on application node
     headGroupSpec:

@@ -370,5 +370,5 @@ get_exposed_services() {
     echo "minio.storage.internal.${base}"
     echo "mlflow.ai.internal.${base}"
     echo "ray.ai.internal.${base}"
-    echo "sklearn-v2-iris.models.internal.${base}"
+    echo "api.ai.internal.${base}"
 }
