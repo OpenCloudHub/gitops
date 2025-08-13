@@ -34,18 +34,23 @@ spec:
 
           containers:
           - name: ray-head
-            image: rayproject/ray:2.38.0
+            image: rayproject/ray:2.48.0
             ports:
             - containerPort: 6379
               name: gcs
+              protocol: TCP
             - containerPort: 8265
               name: dashboard
+              protocol: TCP
             - containerPort: 10001
               name: client
+              protocol: TCP
             - containerPort: 8080
               name: metrics
+              protocol: TCP
             - containerPort: 8000
               name: serve
+              protocol: TCP
 
             resources:
               limits:
@@ -76,7 +81,7 @@ spec:
 
           containers:
           - name: ray-worker
-            image: rayproject/ray:2.38.0
+            image: rayproject/ray:2.48.0
 
             resources:
               limits:
@@ -112,7 +117,7 @@ spec:
 
           containers:
           - name: ray-worker
-            image: rayproject/ray:2.38.0-gpu  # GPU-enabled image
+            image: rayproject/ray:2.48.0-gpu  # GPU-enabled image
 
             resources:
               limits:
