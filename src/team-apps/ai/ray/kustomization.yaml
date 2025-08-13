@@ -22,10 +22,3 @@ helmCharts:
         serviceMonitor:
           # -- Enable a prometheus ServiceMonitor
           enabled: false
-      env:
-      - name: RAY_GRAFANA_IFRAME_HOST
-        value: "https://grafana.observability.internal.opencloudhub.org"
-      - name: RAY_GRAFANA_HOST
-        value: "http://grafana.observability.svc.cluster.local:80"
-      - name: RAY_PROMETHEUS_HOST
-        value: "http://prometheus-server.observability.svc.cluster.local:80"
