@@ -12,7 +12,7 @@ helmCharts:
     valuesInline:
       cluster:
         name: opencloudhub-local
-      
+
       # Fixed destinations with proper routing
       destinations:
         - name: loki
@@ -25,7 +25,7 @@ helmCharts:
           type: otlp
           protocol: http
           url: http://tempo.observability.svc.cluster.local:4318
-      
+
       # Enable basic log collection with explicit routing
       podLogs:
         enabled: true
@@ -40,14 +40,14 @@ helmCharts:
           - "pod"
           - "job"
           - "service.name"  # Important for trace correlation
-      
+
       # Enable cluster events
       clusterEvents:
         enabled: true
         collector: alloy-logs
         destinations:
           - loki
-      
+
       # Enable metrics collection with OpenCost integration
       clusterMetrics:
         enabled: true
@@ -87,7 +87,7 @@ helmCharts:
                 zoneNetworkEgress: 0.01
                 regionNetworkEgress: 0.01
                 internetNetworkEgress: 0.12
-      
+
       # Enable Prometheus Operator Objects
       prometheusOperatorObjects:
         enabled: true
@@ -96,7 +96,7 @@ helmCharts:
         collector: alloy-metrics
         crds:
           deploy: true
-      
+
       # Enable Application Observability for traces
       applicationObservability:
         enabled: true
@@ -121,7 +121,7 @@ helmCharts:
           enabled: true
         traces:
           enabled: true
-      
+
       # Configure alloy-logs collector
       alloy-logs:
         enabled: true
@@ -131,14 +131,14 @@ helmCharts:
           mounts:
             varlog: false
             dockercontainers: false
-      
+
       # Configure alloy-metrics collector
       alloy-metrics:
         enabled: true
-      
+
       alloy-singleton:
         enabled: true
-      
+
       # Configure alloy-receiver for traces
       alloy-receiver:
         enabled: true

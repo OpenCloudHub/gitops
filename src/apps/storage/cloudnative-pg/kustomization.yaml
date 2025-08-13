@@ -12,4 +12,4 @@ helmCharts:
   - name: cloudnative-pg
     releaseName: cnpg-cloudnative-pg
     version: 0.24.0
-    repo: https://cloudnative-pg.github.io/charts 
+    repo: https://cloudnative-pg.github.io/charts

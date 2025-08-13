@@ -16,7 +16,7 @@ helmCharts:
       tenant:
         name: minio
         pools:
-          - name: pool-0 
+          - name: pool-0
             servers: 1
             volumesPerServer: 1
             size: 10Gi
@@ -36,4 +36,3 @@ helmCharts:
         # Disable TLS for development
         certificate:
           requestAutoCert: false
-    

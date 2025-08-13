@@ -49,7 +49,7 @@ helmCharts:
         dialectDriver: postgresql
         host: mlflow-db-pooler.storage.svc.cluster.local
         port: 5432
-        user: mlflow           
+        user: mlflow
         database: mlflow
         existingSecret: mlflow-db-user
         existingSecretPasswordKey: password

@@ -62,6 +62,7 @@
 <h2 id="features">✨ Features</h2>
 
 <!-- GETTING STARTED -->
+
 # TODO: preinstall script with cloud provider kind and yq
 
 <h2 id="getting-started">🚀 Getting Started</h2>
@@ -102,7 +103,7 @@ echo "Public Key:" && cat ~/.ssh/opencloudhub/argocd_gitops_ed25519.pub
 
 3. Update the .env file
 
-4. Start dev bash scripts/bootstrap/local-development/start-dev.sh
+1. Start dev bash scripts/bootstrap/local-development/start-dev.sh
 
 ### Prerequisites
 

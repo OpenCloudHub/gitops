@@ -30,7 +30,7 @@ helmCharts:
               access_key: minio_access_key
               secret_key: 12345678  # TODO: from secret in prod
               insecure: true
-        
+
         reportingEnabled: false
         # ENABLE metrics generation for service graphs and TraceQL
         overrides:
@@ -43,6 +43,6 @@ helmCharts:
         metricsGenerator:
           enabled: true
           remoteWriteUrl: "http://prometheus-server.observability.svc.cluster.local/api/v1/write"
-      
+
       serviceMonitor:
         enabled: true

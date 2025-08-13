@@ -44,7 +44,7 @@ helmCharts:
                     matcherRegex: "trace_id=(\\w+)"
                     name: TraceID
                     url: "$${__value.raw}"
-                    
+
             - name: Prometheus
               type: prometheus
               access: proxy
@@ -60,7 +60,7 @@ helmCharts:
                   - datasourceUid: tempo
                     name: TraceID
                     labelName: traceID
-                    
+
             - name: Tempo
               type: tempo
               access: proxy
@@ -97,8 +97,8 @@ helmCharts:
                   filterBySpanID: false
                   # customQuery: true
                   # query: '{service_name="$${__span.tags["service.name"]}"} |~ "(?i)$${__span.traceId}"'
-      
-      
+
+
       dashboardProviders:
         dashboardproviders.yaml:
           apiVersion: 1
@@ -135,7 +135,7 @@ helmCharts:
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/opencost
-      
+
       dashboards:
         kubernetes:
           k8s-cluster:
@@ -160,7 +160,7 @@ helmCharts:
             gnetId: 22208
             revision: 1
             datasource: Prometheus
-      
+
       securityContext:
         runAsNonRoot: true
         runAsUser: 472

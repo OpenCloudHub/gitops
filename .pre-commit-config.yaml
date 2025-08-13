@@ -79,6 +79,7 @@ repos:
       - id: check-yaml
         name: "📄 yaml · Validate YAML syntax"
         args: [--allow-multiple-documents]
+        exclude: '^(\.devcontainer/devcontainer\.json|scripts/bootstrap/local-development/kind/.*-gpu\.yaml)$'
       - id: check-toml
         name: "📄 toml · Validate TOML syntax"
       - id: check-xml

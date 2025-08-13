@@ -26,7 +26,6 @@ declare -gr ICON_ERROR="❌"
 declare -gr ICON_WARNING="⚠️"
 declare -gr ICON_INFO="ℹ️"
 declare -gr ICON_STEP="🔄"
-# declare -gr ICON_ROCKET="🚀"
 
 # ==========================
 # Configuration & Constants
@@ -369,7 +368,7 @@ get_exposed_services() {
     echo "grafana.observability.internal.${base}"
     echo "pgadmin.storage.internal.${base}"
     echo "minio.storage.internal.${base}"
-    echo "mlflow.mlops.internal.${base}"
-    echo "argo.mlops.internal.${base}"
+    echo "mlflow.ai.internal.${base}"
+    echo "ray.ai.internal.${base}"
     echo "sklearn-v2-iris.models.internal.${base}"
 }

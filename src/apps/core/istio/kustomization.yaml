@@ -49,4 +49,3 @@ helmCharts:
       global:
         variant: distroless
         istioNamespace: istio-system
-    

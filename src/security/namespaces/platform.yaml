@@ -42,7 +42,7 @@ metadata:
   labels:
     istio.io/dataplane-mode: ambient
 
-# Observability service namespaces  
+# Observability service namespaces
 ---
 apiVersion: v1
 kind: Namespace

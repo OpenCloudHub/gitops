@@ -10,7 +10,7 @@ set -euo pipefail
 # Load Common Libraries
 # ------------------------------
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
-source "$REPO_ROOT/scripts/bootstrap/_utils.sh"
+source "$REPO_ROOT/scripts/_utils.sh"
 
 # ------------------------------
 # Configuration Inputs

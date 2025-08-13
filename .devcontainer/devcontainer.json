@@ -11,16 +11,20 @@
 		"ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {
 			"jqVersion": "latest",
 			"yqVersion": "latest"
-		}
+		},
+		"ghcr.io/jungaretti/features/make:1": {},
+		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+			"minikube": "none"
+		},
+		"ghcr.io/audacioustux/devcontainers/kustomize:1": {}
 	},
 	"mounts": [
 		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
-		"source=${localEnv:HOME}/.ssh/opencloudhub,target=/home/vscode/.ssh/opencloudhub,type=bind,readonly"
+		"source=${localEnv:HOME}/.ssh/opencloudhub,target=/home/vscode/.ssh/opencloudhub,type=bind,readonly",
+		"source=${localEnv:HOME}/.kube,target=/home/vscode/.kube,type=bind"
 	],
-	"runArgs": [
-		"--network=host"
-	],
-	"postCreateCommand": "./scripts/devcontainer-postCreate.sh",
+	"runArgs": ["--network", "host", "--gpus", "all"],
+	"postCreateCommand": "bash scripts/devcontainer-postCreate.sh",
 	"customizations": {
 		"vscode": {
 			"extensions": [

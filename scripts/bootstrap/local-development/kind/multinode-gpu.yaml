@@ -1,6 +1,8 @@
+# Copyright 2024 NVIDIA CORPORATION.
+# OpenCloudHub Multi-Node GPU Cluster Configuration for nvkind
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: opencloudhub-local
+name: opencloudhub-local-multinode-gpu
 nodes:
   # Control plane node - Gateway API & Management
   - role: control-plane
@@ -35,8 +37,6 @@ nodes:
         nodeRegistration:
           kubeletExtraArgs:
             node-labels: "node.opencloudhub.org/type=storage,node.opencloudhub.org/storage=true"
-    labels:
-      tier: storage
 
   # Observability Node
   - role: worker
@@ -46,10 +46,8 @@ nodes:
         nodeRegistration:
           kubeletExtraArgs:
             node-labels: "node.opencloudhub.org/type=observability,node.opencloudhub.org/observability=true"
-    labels:
-      tier: observability
 
-  # Application + Inference Node
+  # Application + Inference Node (CPU-only)
   - role: worker
     kubeadmConfigPatches:
       - |
@@ -57,17 +55,30 @@ nodes:
         nodeRegistration:
           kubeletExtraArgs:
             node-labels: "node.opencloudhub.org/type=application,node.opencloudhub.org/application=true"
-    labels:
-      tier: application
 
-
-    # GPU Training Node
+{{- if gt numGPUs 0 }}
+  # GPU Training Nodes - One worker per GPU for maximum isolation
+{{- range $gpu := until numGPUs }}
   - role: worker
     kubeadmConfigPatches:
       - |
         kind: JoinConfiguration
         nodeRegistration:
           kubeletExtraArgs:
-            node-labels: "node.opencloudhub.org/type=gpu-training,node.opencloudhub.org/gpu-training=true"
-    labels:
-      tier: gpu-training
+            node-labels: "node.opencloudhub.org/type=gpu-training,node.opencloudhub.org/gpu-training=true,nvidia.com/gpu.present=true,nvidia.com/gpu.id={{ $gpu }}"
+    extraMounts:
+      # Inject specific GPU using nvidia-container-runtime
+      # Requires `accept-nvidia-visible-devices-as-volume-mounts = true` in /etc/nvidia-container-runtime/config.toml
+      - hostPath: /dev/null
+        containerPath: /var/run/nvidia-container-devices/{{ $gpu }}
+{{- end }}
+{{- else }}
+  # No GPUs detected - Create a single mock GPU training node for testing
+  - role: worker
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "node.opencloudhub.org/type=gpu-training,node.opencloudhub.org/gpu-training=true,nvidia.com/gpu.mock=true"
+{{- end }}

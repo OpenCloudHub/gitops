@@ -10,7 +10,7 @@ set -euo pipefail
 # Load Common Libraries
 # ------------------------------
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
-source "$REPO_ROOT/scripts/bootstrap/_utils.sh"
+source "$REPO_ROOT/scripts/_utils.sh"
 
 # ------------------------------
 # Configuration
@@ -36,7 +36,7 @@ check_cluster_connectivity() {
     log_error "No kubectl context found. Please set up kubectl context first."
     return 1
   fi
-  
+
   if kubectl cluster-info >/dev/null 2>&1; then
     log_success "Connected to cluster context: $current_context"
     KUBECTL_CONTEXT="$current_context"
@@ -58,7 +58,7 @@ create_summary() {
   if kubectl get secret argocd-initial-admin-secret -n argocd >/dev/null 2>&1; then
     argocd_password=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null || echo "failed to retrieve")
   fi
-  
+
   # Create summary JSON
   cat > "$BOOTSTRAP_SUMMARY_FILE" << EOF
 {
@@ -74,7 +74,7 @@ create_summary() {
   }
 }
 EOF
-  
+
   print_section_header "Bootstrap Complete"
   log_info "✅ Bootstrap completed successfully!"
   log_info "📋 Summary and credentials saved to: ${BOOTSTRAP_SUMMARY_FILE}"
@@ -82,55 +82,56 @@ EOF
 }
 
 # ------------------------------
-# Bootstrap Steps 
+# Bootstrap Steps
 # ------------------------------
 bootstrap_check_prerequisites() {
   log_step "Check prerequisites"
   validate_command_exists kubectl "https://kubernetes.io/docs/tasks/tools/"
-  # check_git_status
+  validate_command_exists kustomize "https://kubernetes-sigs.github.io/kustomize/installation/"
+  # TODO: add back later check_git_status
   check_cluster_connectivity
-  
+
   if [[ "$DRY_RUN" == "true" ]]; then
     log_info "🔍 DRY RUN MODE - No changes will be applied"
   fi
 }
 
 bootstrap_cluster_prep() {
-  log_step "Install essential CRDs and secrets"
-  
-  # Create essential namespaces and secrets
-  log_info "Creating essential namespaces..."
-  kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
-  kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-  
-  # Create vault token secret
-  log_info "Creating vault token secret..."
-  kubectl create secret generic vault-token --from-literal=token=$VAULT_TOKEN -n external-secrets --dry-run=client -o yaml | kubectl apply -f -
-  
-  # Install ServiceMonitor CRD
-  kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+    log_step "Install essential CRDs and secrets"
 
-  # Create repository secrets for each repo
-  log_info "Creating ArgoCD repository secrets..."
-  local repos=(
-    "gitops|git@github.com:opencloudhub/gitops.git|argocd_gitops_ed25519"
-  )
-  
-  for repo_config in "${repos[@]}"; do
-    IFS='|' read -r secret_name repo_url key_file <<< "$repo_config"
-    
-    if [[ "$DRY_RUN" == "true" ]]; then
-      log_info "(DRY RUN) Would create repository secret: ${secret_name}"
-      continue
-    fi
-    
-    # Check if key file exists
-    if [[ ! -f "${SSH_KEYS_BASE_PATH}/${key_file}" ]]; then
-      log_error "SSH key file not found: ${SSH_KEYS_BASE_PATH}/${key_file}"
-      return 1
-    fi
-    
-    cat <<EOF | kubectl apply -f -
+    # Create essential namespaces and secrets
+    log_info "Creating essential namespaces..."
+    kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+
+    # Create vault token secret
+    log_info "Creating vault token secret..."
+    kubectl create secret generic vault-token --from-literal=token="$VAULT_TOKEN" -n external-secrets --dry-run=client -o yaml | kubectl apply -f -
+
+    # Install ServiceMonitor CRD
+    kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+
+    # Create repository secrets for each repo
+    log_info "Creating ArgoCD repository secrets..."
+    local repos=(
+        "gitops|git@github.com:opencloudhub/gitops.git|argocd_gitops_ed25519"
+    )
+
+    for repo_config in "${repos[@]}"; do
+        IFS='|' read -r secret_name repo_url key_file <<< "$repo_config"
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_info "(DRY RUN) Would create repository secret: ${secret_name}"
+            continue
+        fi
+
+        # Check if key file exists
+        if [[ ! -f "${SSH_KEYS_BASE_PATH}/${key_file}" ]]; then
+            log_error "SSH key file not found: ${SSH_KEYS_BASE_PATH}/${key_file}"
+            return 1
+        fi
+
+        cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Secret
 metadata:
@@ -142,16 +143,15 @@ stringData:
   type: git
   url: ${repo_url}
   sshPrivateKey: |
-$(cat ${SSH_KEYS_BASE_PATH}/${key_file} | sed 's/^/    /')
+$(sed 's/^/    /' "${SSH_KEYS_BASE_PATH}/${key_file}")
 EOF
-    
-    log_success "Created repository secret: ${secret_name}"
-  done
+        log_success "Created repository secret: ${secret_name}"
+    done
 }
 
 bootstrap_install_argocd() {
   log_step "Install ArgoCD and core applications"
-  
+
   # Install base ArgoCD
   log_info "Installing ArgoCD base..."
   if [[ "$DRY_RUN" == "true" ]]; then
@@ -162,10 +162,10 @@ bootstrap_install_argocd() {
       log_error "Failed to build ArgoCD base manifests"
       return 1
     fi
-    
+
     echo "$manifests" | kubectl apply -f -
     log_success "ArgoCD base installed"
-    
+
     # Wait for ArgoCD server to be ready
     log_info "Waiting for ArgoCD server to be ready..."
     if kubectl wait --for=condition=available --timeout="$KUBECTL_TIMEOUT" deployment/argocd-server -n argocd >/dev/null 2>&1; then
@@ -175,15 +175,15 @@ bootstrap_install_argocd() {
       return 1
     fi
   fi
-  
+
   # Apply ArgoCD applications
   log_info "Applying ArgoCD applications..."
   if [[ "$DRY_RUN" == "true" ]]; then
     log_info "(DRY RUN) Would apply ArgoCD applications"
   else
-    kubectl apply -f ${REPO_ROOT}/src/app-projects/
-    kubectl apply -f ${REPO_ROOT}/src/application-sets/security/applicationset.yaml
-    kubectl apply -f ${REPO_ROOT}/src/root-app.yaml
+    kubectl apply -f "${REPO_ROOT}/src/app-projects/"
+    kubectl apply -f "${REPO_ROOT}/src/application-sets/security/applicationset.yaml"
+    kubectl apply -f "${REPO_ROOT}/src/root-app.yaml"
     log_success "ArgoCD applications applied"
   fi
 }
