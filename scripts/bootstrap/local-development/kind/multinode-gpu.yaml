@@ -6,6 +6,7 @@ name: opencloudhub-local-multinode-gpu
 nodes:
   # Control plane node - Gateway API & Management
   - role: control-plane
+    name: gateway-control
     kubeadmConfigPatches:
       - |
         kind: InitConfiguration
@@ -31,6 +32,7 @@ nodes:
 
   # Storage Node
   - role: worker
+    name: storage-worker
     kubeadmConfigPatches:
       - |
         kind: JoinConfiguration
@@ -40,6 +42,7 @@ nodes:
 
   # Observability Node
   - role: worker
+    name: observability-worker
     kubeadmConfigPatches:
       - |
         kind: JoinConfiguration
@@ -49,6 +52,7 @@ nodes:
 
   # Application + Inference Node (CPU-only)
   - role: worker
+    name: app-worker
     kubeadmConfigPatches:
       - |
         kind: JoinConfiguration
@@ -60,6 +64,7 @@ nodes:
   # GPU Training Nodes - One worker per GPU for maximum isolation
 {{- range $gpu := until numGPUs }}
   - role: worker
+    name: gpu-worker-{{ $gpu }}
     kubeadmConfigPatches:
       - |
         kind: JoinConfiguration
@@ -75,6 +80,7 @@ nodes:
 {{- else }}
   # No GPUs detected - Create a single mock GPU training node for testing
   - role: worker
+    name: cpu-worker
     kubeadmConfigPatches:
       - |
         kind: JoinConfiguration
