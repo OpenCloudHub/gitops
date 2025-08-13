@@ -109,6 +109,37 @@ echo "Public Key:" && cat ~/.ssh/opencloudhub/argocd_gitops_ed25519.pub
 
 ### Usage
 
+#### Test GPU
+
+#### See the allocation of GPUs to nodes
+
+```bash
+kubectl --context kind-opencloudhub-local-multinode-gpu get nodes -o json | jq '.items[] | {name: .metadata.name, gpus: .status.allocatable["nvidia.com/gpu"]}'
+```
+
+To test a workload, run:
+
+```bash
+cat << EOF | kubectl --context kind-opencloudhub-local-multinode-gpu apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-test
+spec:
+  restartPolicy: OnFailure
+  runtimeClassName: nvidia
+  nodeSelector:
+    node.opencloudhub.org/gpu-training: "true"
+  containers:
+  - name: gpu-test
+    image: ubuntu:22.04
+    command: ["nvidia-smi", "-L"]
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+EOF
+```
+
 <h2 id="project-structure">📁 Project Structure</h2>
 
 ```
