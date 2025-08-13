@@ -1,0 +1,58 @@
+# PodMonitor for Ray Head nodes
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  labels:
+    release: k8s-monitoring  # Match k8s-monitoring release
+  name: ray-head-monitor
+  namespace: observability
+spec:
+  jobLabel: ray-head
+  namespaceSelector:
+    matchNames:
+      - ai
+  selector:
+    matchLabels:
+      ray.io/node-type: head
+  podMetricsEndpoints:
+    - port: metrics
+      relabelings:
+        - action: replace
+          sourceLabels:
+            - __meta_kubernetes_pod_label_ray_io_cluster
+          targetLabel: ray_io_cluster
+    - port: as-metrics # autoscaler metrics
+      relabelings:
+        - action: replace
+          sourceLabels:
+            - __meta_kubernetes_pod_label_ray_io_cluster
+          targetLabel: ray_io_cluster
+    - port: dash-metrics # dashboard metrics
+      relabelings:
+        - action: replace
+          sourceLabels:
+            - __meta_kubernetes_pod_label_ray_io_cluster
+          targetLabel: ray_io_cluster
+
+---
+# PodMonitor for Ray Worker nodes
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ray-workers-monitor
+  namespace: observability
+  labels:
+    release: k8s-monitoring  # Match k8s-monitoring release
+spec:
+  jobLabel: ray-workers
+  namespaceSelector:
+    matchNames:
+      - ai
+  selector:
+    matchLabels:
+      ray.io/node-type: worker
+  podMetricsEndpoints:
+  - port: metrics
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_label_ray_io_cluster]
+      targetLabel: ray_io_cluster

@@ -7,6 +7,7 @@ resources:
   # - external-secrets.yaml
   - http-route.yaml
   - service.yaml
+  - pod-moitors.yaml
 
 helmCharts:
   - name: kuberay-operator
