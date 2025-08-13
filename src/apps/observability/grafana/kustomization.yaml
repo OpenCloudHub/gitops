@@ -13,6 +13,7 @@ helmCharts:
     repo: https://grafana.github.io/helm-charts
     namespace: observability
     valuesInline:
+      # For Ray integration settings
       grafana.ini:
           security:
             allow_embedding: true
@@ -141,6 +142,14 @@ helmCharts:
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/opencost
+            - name: 'ray'
+              orgId: 1
+              folder: 'Ray'
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /var/lib/grafana/dashboards/ray
 
       dashboards:
         kubernetes:
@@ -165,6 +174,23 @@ helmCharts:
           cost-overview:
             gnetId: 22208
             revision: 1
+            datasource: Prometheus
+        ray:
+          # Ray default dashboard
+          ray-default:
+            url: https://raw.githubusercontent.com/ray-project/kuberay/master/config/grafana/default_grafana_dashboard.json
+            datasource: Prometheus
+          # Ray serve dashboard
+          ray-serve:
+            url: https://raw.githubusercontent.com/ray-project/kuberay/master/config/grafana/serve_grafana_dashboard.json
+            datasource: Prometheus
+          # Ray data dashboard
+          ray-data:
+            url: https://raw.githubusercontent.com/ray-project/kuberay/master/config/grafana/data_grafana_dashboard.json
+            datasource: Prometheus
+          # Operator dashboard
+          ray-operator:
+            url: https://raw.githubusercontent.com/ray-project/kuberay/master/config/grafana/KubeRay-Operator.json
             datasource: Prometheus
 
       securityContext:
