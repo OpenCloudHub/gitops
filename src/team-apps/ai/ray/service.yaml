@@ -34,7 +34,7 @@ spec:
 
           containers:
           - name: ray-head
-            image: rayproject/ray:2.48.0
+            image: rayproject/ray:2.48.0-py312
             ports:
             - containerPort: 6379
               name: gcs
@@ -81,7 +81,7 @@ spec:
 
           containers:
           - name: ray-worker
-            image: rayproject/ray:2.48.0
+            image: rayproject/ray:2.48.0-py312
 
             resources:
               limits:
@@ -117,7 +117,7 @@ spec:
 
           containers:
           - name: ray-worker
-            image: rayproject/ray:2.48.0-gpu  # GPU-enabled image
+            image: rayproject/ray:2.48.0-py312-gpu  # GPU-enabled image
 
             resources:
               limits:
