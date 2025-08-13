@@ -13,6 +13,12 @@ helmCharts:
     repo: https://grafana.github.io/helm-charts
     namespace: observability
     valuesInline:
+      grafana.ini:
+          security:
+            allow_embedding: true
+          auth.anonymous:
+            enabled: true
+            org_role: Viewer
       persistence:
         type: pvc
         enabled: true
