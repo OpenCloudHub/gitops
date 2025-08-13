@@ -20,5 +20,5 @@ spec:
         - group: ""
           kind: Service
           name: mlflow-tracking
-          port: 80
+          port: 8265
           weight: 1

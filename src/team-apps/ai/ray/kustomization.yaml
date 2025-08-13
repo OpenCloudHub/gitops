@@ -5,7 +5,7 @@ namespace: ai
 
 resources:
   # - external-secrets.yaml
-  # - http-route.yaml
+  - http-route.yaml
 
 helmCharts:
   - name: kuberay-operator
@@ -14,3 +14,10 @@ helmCharts:
     repo: https://ray-project.github.io/kuberay-helm/
     namespace: ai
     includeCRDs: true
+    valuesInline:
+      metrics:
+        # -- Whether KubeRay operator should emit control plane metrics.
+        enabled: true
+        serviceMonitor:
+          # -- Enable a prometheus ServiceMonitor
+          enabled: false
