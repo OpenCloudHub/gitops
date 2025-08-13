@@ -10,6 +10,8 @@ set -euo pipefail
 # Load Common Libraries
 # ------------------------------
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+# (utils sourcing skipped as requested)
+# shellcheck disable=SC1091
 source "$REPO_ROOT/scripts/_utils.sh"
 
 # ------------------------------
@@ -243,7 +245,7 @@ dev_setup_prepare_kind_cluster() {
 
     log_info "Creating KIND cluster with config: $(basename "$KIND_CONFIG")"
     # Use nvkind for all cluster creation
-    nvkind cluster create --config-template "$KIND_CONFIG"
+    nvkind cluster create --config-template="$KIND_CONFIG"
 
     log_info "Applying resource limits to KIND nodes"
     apply_resource_limits "$CLUSTER_NAME"

@@ -1,24 +1,55 @@
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: mlflow-route
+  name: ray-dashboard-route
   namespace: ai
 spec:
   parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: ingress-gateway
-      namespace: istio-ingress
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: ingress-gateway
+    namespace: istio-ingress
+
   hostnames:
-    - mlflow.ai.internal.opencloudhub.org
+  - ray.ai.internal.opencloudhub.org
+
   rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: "/"
-      backendRefs:
-        - group: ""
-          kind: Service
-          name: mlflow-tracking
-          port: 8265
-          weight: 1
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/"
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: ray-ai-platform-head-svc  # RayService creates this
+      port: 8265
+      weight: 1
+
+---
+# Serve API route
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ray-serve-route
+  namespace: ai
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: ingress-gateway
+    namespace: istio-ingress
+
+  hostnames:
+  - api.ai.internal.opencloudhub.org
+
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/"
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: ray-ai-platform-serve-svc  # RayService creates this for Serve endpoints
+      port: 8000
+      weight: 1

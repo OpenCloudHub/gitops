@@ -140,6 +140,18 @@ spec:
 EOF
 ```
 
+To see if it is working:
+
+```bash
+kubectl logs pod/gpu-test -n default
+```
+
+and you should see something like:
+
+```bash
+GPU 0: NVIDIA GeForce RTX 4070 Ti SUPER (UUID: GPU-6a40bb1d-57b2-78e1-5220-e458c7a764f3)
+```
+
 <h2 id="project-structure">📁 Project Structure</h2>
 
 ```
