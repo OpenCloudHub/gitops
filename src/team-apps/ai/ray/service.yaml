@@ -69,6 +69,8 @@ spec:
               value: "http://grafana.observability.svc.cluster.local:80"
             - name: RAY_PROMETHEUS_HOST
               value: "http://prometheus-server.observability.svc.cluster.local:80"
+            - name: RAY_RUNTIME_ENV_HOOK
+              value: ray._private.runtime_env.uv_runtime_env_hook.hook
 
     # Worker groups
     workerGroupSpecs:
