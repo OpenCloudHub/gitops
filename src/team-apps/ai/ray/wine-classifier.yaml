@@ -19,8 +19,6 @@ spec:
       - name: wine_classifier_app
         import_path: src.serving.wine_classifier:deployment
         route_prefix: /models/wine-classifier
-        runtime_env:
-          working_dir: "/workspace/project"
         deployments:
           - name: WineClassifier
             num_replicas: 1
@@ -116,7 +114,7 @@ spec:
         type: PathPrefix
         value: /models/wine-classifier
     backendRefs:
-    - name: wine-classifier-service-serve-svc
+    - name: wine-classifier-service-dwdtj-head-svc
       port: 8000
       kind: Service
       weight: 100
