@@ -6,17 +6,12 @@ metadata:
   labels:
     release: k8s-monitoring
 spec:
+  endpoints:
+  - interval: 30s
+    path: /minio/v2/metrics/cluster
+    port: http-minio
+    # Remove basicAuth section since metrics are public
   selector:
     matchLabels:
       app: minio
-  endpoints:
-  - port: http-minio
-    path: /minio/v2/metrics/cluster
-    interval: 30s
-    basicAuth:
-      username:
-        name: minio-tenant-secret
-        key: accesskey
-      password:
-        name: minio-tenant-secret
-        key: secretkey
+      v1.min.io/tenant: minio
