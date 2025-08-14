@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: minio-tenant-monitor
-  namespace: minio-tenant
+  namespace: observability
   labels:
     release: k8s-monitoring
 spec:
@@ -10,8 +10,10 @@ spec:
   - interval: 30s
     path: /minio/v2/metrics/cluster
     port: http-minio
-    # Remove basicAuth section since metrics are public
   selector:
     matchLabels:
       app: minio
       v1.min.io/tenant: minio
+  namespaceSelector:
+    matchNames:
+    - minio-tenant
