@@ -150,6 +150,14 @@ helmCharts:
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/ray
+            - name: 'minio'
+              orgId: 1
+              folder: 'MinIO'
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /var/lib/grafana/dashboards/minio
 
       dashboards:
         kubernetes:
@@ -191,6 +199,22 @@ helmCharts:
           # Operator dashboard
           ray-operator:
             url: https://raw.githubusercontent.com/ray-project/kuberay/master/config/grafana/KubeRay-Operator.json
+            datasource: Prometheus
+        minio:
+          # MinIO Server Metrics
+          minio-server:
+            gnetId: 13502
+            revision: 1
+            datasource: Prometheus
+          # MinIO Bucket Metrics
+          minio-bucket:
+            gnetId: 19237
+            revision: 1
+            datasource: Prometheus
+          # MinIO Replication Metrics
+          minio-replication:
+            gnetId: 15305
+            revision: 1
             datasource: Prometheus
 
       securityContext:
