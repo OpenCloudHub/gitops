@@ -2,13 +2,12 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: minio-tenant-monitor
-  namespace: minio-tenant  # or observability if that worked better
+  namespace: observability
   labels:
     release: k8s-monitoring
 spec:
   selector:
     matchLabels:
-      app: minio
       v1.min.io/tenant: minio
   endpoints:
   # Cluster metrics
