@@ -6,9 +6,10 @@ metadata:
   labels:
     release: k8s-monitoring
 spec:
-  selector:
-    matchLabels:
-      v1.min.io/tenant: minio
+  selector: {}  # Empty selector matches all services  # Empty selector matches all services
+  namespaceSelector:
+    matchNames:
+    - minio-tenant
   endpoints:
   # Cluster metrics
   - port: http-minio
