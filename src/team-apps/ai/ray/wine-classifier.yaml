@@ -102,9 +102,10 @@ metadata:
     app.kubernetes.io/component: gateway-route
 spec:
   parentRefs:
-  - name: ingress-gateway
-    namespace: istio-ingress
-    sectionName: https
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ingress-gateway
+      namespace: istio-ingress
 
   hostnames:
   - "api.opencloudhub.org"
@@ -118,6 +119,7 @@ spec:
     - name: wine-classifier-service-serve-svc
       port: 8000
       weight: 100
+      group: ""
 
 ---
 # HTTPRoute for Ray Dashboard (internal only - data scientists)
@@ -131,9 +133,10 @@ metadata:
     app.kubernetes.io/component: dashboard-route
 spec:
   parentRefs:
-  - name: ingress-gateway
-    namespace: istio-ingress
-    sectionName: https
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ingress-gateway
+      namespace: istio-ingress
 
   hostnames:
   - "wine-classifier.ai.internal.opencloudhub.org"
@@ -147,3 +150,4 @@ spec:
     - name: wine-classifier-service-head-svc  # Ray dashboard service
       port: 8265
       weight: 100
+      group: ""
