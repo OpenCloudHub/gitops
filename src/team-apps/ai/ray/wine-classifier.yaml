@@ -1,0 +1,138 @@
+# Wine Classifier - Complete Service Definition
+---
+# RayService for model serving
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: wine-classifier-service
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: wine-classifier
+    app.kubernetes.io/component: serving
+    model.opencloudhub.org/type: sklearn
+spec:
+  serviceUnhealthySecondThreshold: 900
+  deploymentUnhealthySecondThreshold: 300
+
+  serveConfigV2: |
+    applications:
+      - name: wine_classifier_app
+        import_path: src.serving.wine_classifier:deployment
+        route_prefix: /models/wine-classifier
+        runtime_env:
+          working_dir: "/workspace/project"
+        deployments:
+          - name: WineClassifier
+            num_replicas: 1
+            ray_actor_options:
+              num_cpus: 0.5
+
+  rayClusterConfig:
+    rayVersion: '2.48.0'
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: '0.0.0.0'
+        metrics-export-port: '8080'
+      template:
+        spec:
+          nodeSelector:
+            node.opencloudhub.org/application: "true"
+          containers:
+          - name: ray-head
+            image: opencloudhuborg/wine-classifier-training:latest
+            ports:
+            - containerPort: 8000
+              name: serve
+            - containerPort: 8080
+              name: metrics
+            resources:
+              requests:
+                cpu: "500m"
+                memory: "1Gi"
+              limits:
+                cpu: "1"
+                memory: "2Gi"
+            env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow-tracking.ai.svc.cluster.local"
+
+    workerGroupSpecs:
+    - groupName: serving-workers
+      replicas: 1
+      minReplicas: 1
+      maxReplicas: 2
+      template:
+        spec:
+          nodeSelector:
+            node.opencloudhub.org/application: "true"
+          containers:
+          - name: ray-worker
+            image: opencloudhuborg/wine-classifier-training:latest
+            resources:
+              requests:
+                cpu: "500m"
+                memory: "1Gi"
+              limits:
+                cpu: "1"
+                memory: "2Gi"
+            env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow-tracking.ai.svc.cluster.local"
+
+---
+# HTTPRoute for model API (external access)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: wine-classifier-api-route
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: wine-classifier
+    app.kubernetes.io/component: gateway-route
+spec:
+  parentRefs:
+  - name: ingress-gateway
+    namespace: istio-ingress
+    sectionName: https
+
+  hostnames:
+  - "api.opencloudhub.org"
+
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /models/wine-classifier
+    backendRefs:
+    - name: wine-classifier-service-serve-svc
+      port: 8000
+      weight: 100
+
+---
+# HTTPRoute for Ray Dashboard (internal only - data scientists)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: wine-classifier-dashboard-route
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: wine-classifier
+    app.kubernetes.io/component: dashboard-route
+spec:
+  parentRefs:
+  - name: ingress-gateway
+    namespace: istio-ingress
+    sectionName: https
+
+  hostnames:
+  - "wine-classifier.ai.internal.opencloudhub.org"
+
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/"
+    backendRefs:
+    - name: wine-classifier-service-head-svc  # Ray dashboard service
+      port: 8265
+      weight: 100

@@ -1,11 +1,11 @@
-# PodMonitor for Ray Head nodes
+# PodMonitor for all Ray Head nodes in ai namespace
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
-  labels:
-    release: k8s-monitoring  # Match k8s-monitoring release
   name: ray-head-monitor
   namespace: observability
+  labels:
+    release: k8s-monitoring # Match k8s-monitoring release
 spec:
   jobLabel: ray-head
   namespaceSelector:
@@ -15,34 +15,48 @@ spec:
     matchLabels:
       ray.io/node-type: head
   podMetricsEndpoints:
+    # Main Ray metrics
     - port: metrics
       relabelings:
         - action: replace
-          sourceLabels:
-            - __meta_kubernetes_pod_label_ray_io_cluster
+          sourceLabels: [__meta_kubernetes_pod_label_ray_io_cluster]
           targetLabel: ray_io_cluster
-    - port: as-metrics # autoscaler metrics
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: instance
+        - action: replace
+          sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: kubernetes_namespace
+
+    # Autoscaler metrics (if available)
+    - port: as-metrics
       relabelings:
         - action: replace
-          sourceLabels:
-            - __meta_kubernetes_pod_label_ray_io_cluster
+          sourceLabels: [__meta_kubernetes_pod_label_ray_io_cluster]
           targetLabel: ray_io_cluster
-    - port: dash-metrics # dashboard metrics
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: instance
+
+    # Dashboard metrics (if available)
+    - port: dash-metrics
       relabelings:
         - action: replace
-          sourceLabels:
-            - __meta_kubernetes_pod_label_ray_io_cluster
+          sourceLabels: [__meta_kubernetes_pod_label_ray_io_cluster]
           targetLabel: ray_io_cluster
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: instance
 
 ---
-# PodMonitor for Ray Worker nodes
+# PodMonitor for all Ray Worker nodes in ai namespace
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
   name: ray-workers-monitor
   namespace: observability
   labels:
-    release: k8s-monitoring  # Match k8s-monitoring release
+    release: k8s-monitoring # Match k8s-monitoring release
 spec:
   jobLabel: ray-workers
   namespaceSelector:
@@ -52,7 +66,14 @@ spec:
     matchLabels:
       ray.io/node-type: worker
   podMetricsEndpoints:
-  - port: metrics
-    relabelings:
-    - sourceLabels: [__meta_kubernetes_pod_label_ray_io_cluster]
-      targetLabel: ray_io_cluster
+    - port: metrics
+      relabelings:
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_label_ray_io_cluster]
+          targetLabel: ray_io_cluster
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: instance
+        - action: replace
+          sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: kubernetes_namespace
