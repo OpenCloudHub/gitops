@@ -43,8 +43,13 @@ spec:
             ports:
             - containerPort: 8000
               name: serve
+              protocol: TCP
             - containerPort: 8080
               name: metrics
+              protocol: TCP
+            - containerPort: 8265
+              name: dashboard
+              protocol: TCP
             resources:
               requests:
                 cpu: "500m"
@@ -55,6 +60,12 @@ spec:
             env:
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow-tracking.ai.svc.cluster.local"
+            - name: RAY_GRAFANA_HOST
+              value: "http://grafana.observability.svc.cluster.local:80"
+            - name: RAY_PROMETHEUS_HOST
+              value: "http://prometheus-server.observability.svc.cluster.local:80"
+            - name: RAY_GRAFANA_IFRAME_HOST
+              value: "https://grafana.ai.internal.opencloudhub.org"
 
     workerGroupSpecs:
     - groupName: serving-workers
