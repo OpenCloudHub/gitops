@@ -8,16 +8,29 @@ metadata:
 spec:
   gatewayClassName: istio
   listeners:
-    - name: https
-      port: 443
-      protocol: HTTPS
-      hostname: "*.internal.opencloudhub.org"  # TODO: extend later
-      allowedRoutes:
-        namespaces:
-          from: All
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ingress-gateway-cert
-            group: ''
-            kind: Secret
+  - name: https-internal
+    port: 443
+    protocol: HTTPS
+    hostname: "*.internal.opencloudhub.org"
+    allowedRoutes:
+      namespaces:
+        from: All
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: ingress-gateway-cert
+        group: ''
+        kind: Secret
+  - name: https-external
+    port: 443
+    protocol: HTTPS
+    hostname: "api.opencloudhub.org"  # Add external domain
+    allowedRoutes:
+      namespaces:
+        from: All
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: ingress-gateway-cert  # Same cert or different one
+        group: ''
+        kind: Secret
