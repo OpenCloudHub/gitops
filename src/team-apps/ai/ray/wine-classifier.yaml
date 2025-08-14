@@ -114,7 +114,7 @@ spec:
         type: PathPrefix
         value: /models/wine-classifier
     backendRefs:
-    - name: wine-classifier-service-dwdtj-head-svc
+    - name: wine-classifier-service-head-svc
       port: 8000
       kind: Service
       weight: 100
