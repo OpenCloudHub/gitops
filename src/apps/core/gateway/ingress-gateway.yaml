@@ -8,6 +8,7 @@ metadata:
 spec:
   gatewayClassName: istio
   listeners:
+  # Internal services
   - name: https-internal
     port: 443
     protocol: HTTPS
@@ -18,19 +19,30 @@ spec:
     tls:
       mode: Terminate
       certificateRefs:
-      - name: ingress-gateway-cert
-        group: ''
-        kind: Secret
-  - name: https-external
+      - name: ingress-gateway-cert  # TODO: differentiate later
+
+  # External APIs
+  - name: https-api
     port: 443
     protocol: HTTPS
-    hostname: "api.opencloudhub.org"  # Add external domain
+    hostname: "api.opencloudhub.org"
     allowedRoutes:
       namespaces:
         from: All
     tls:
       mode: Terminate
       certificateRefs:
-      - name: ingress-gateway-cert  # Same cert or different one
-        group: ''
-        kind: Secret
+      - name: ingress-gateway-cert
+
+  # External applications
+  - name: https-app
+    port: 443
+    protocol: HTTPS
+    hostname: "app.opencloudhub.org"
+    allowedRoutes:
+      namespaces:
+        from: All
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: ingress-gateway-cert
