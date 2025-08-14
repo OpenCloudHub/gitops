@@ -36,3 +36,5 @@ helmCharts:
         # Disable TLS for development
         certificate:
           requestAutoCert: false
+        metrics:
+          enabled: true

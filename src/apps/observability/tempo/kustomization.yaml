@@ -28,7 +28,7 @@ helmCharts:
               bucket: tempo-traces
               region: us-east-1
               access_key: admin
-              secret_key: 12345678  # TOD : fix
+              secret_key: 12345678  # TODO : fix
               insecure: true
 
         reportingEnabled: false
