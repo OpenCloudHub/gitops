@@ -118,6 +118,7 @@ spec:
     backendRefs:
     - name: wine-classifier-service-serve-svc
       port: 8000
+      kind: Service
       weight: 100
       group: ""
 
@@ -149,5 +150,6 @@ spec:
     backendRefs:
     - name: wine-classifier-service-head-svc  # Ray dashboard service
       port: 8265
+      kind: Service
       weight: 100
       group: ""
