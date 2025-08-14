@@ -8,37 +8,10 @@ metadata:
 spec:
   gatewayClassName: istio
   listeners:
-  # Internal services
-  - name: https-internal
+  - name: https
     port: 443
     protocol: HTTPS
-    hostname: "*.internal.opencloudhub.org"
-    allowedRoutes:
-      namespaces:
-        from: All
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - name: ingress-gateway-cert  # TODO: differentiate later
-
-  # External APIs
-  - name: https-api
-    port: 443
-    protocol: HTTPS
-    hostname: "api.opencloudhub.org"
-    allowedRoutes:
-      namespaces:
-        from: All
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - name: ingress-gateway-cert
-
-  # External applications
-  - name: https-app
-    port: 443
-    protocol: HTTPS
-    hostname: "app.opencloudhub.org"
+    hostname: "*.opencloudhub.org"  # Matches everything
     allowedRoutes:
       namespaces:
         from: All
