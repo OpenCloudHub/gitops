@@ -27,8 +27,8 @@ helmCharts:
               endpoint: minio.minio-tenant.svc.cluster.local:80
               bucket: tempo-traces
               region: us-east-1
-              access_key: minio_access_key
-              secret_key: 12345678  # TODO: from secret in prod
+              access_key: ${accesskey}
+              secret_key: ${secretkey}
               insecure: true
 
         reportingEnabled: false

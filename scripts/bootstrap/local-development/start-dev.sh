@@ -340,6 +340,50 @@ dev_setup_gpu_operator() {
     fi
 }
 
+dev_setup_device_plugin() {
+    log_step "Setting up NVIDIA k8s-device-plugin"
+
+    local cluster_type
+    cluster_type=$(detect_cluster_type)
+
+    # Only install device plugin for multi-node clusters with GPU support
+    if [[ "$cluster_type" != "multi_node" ]]; then
+        log_info "Skipping device plugin installation for single-node cluster"
+        return 0
+    fi
+
+    # Check if we have any GPU nodes
+    local gpu_nodes
+    gpu_nodes=$(kubectl get nodes -l "nvidia.com/gpu.present=true" --no-headers 2>/dev/null | wc -l || echo "0")
+
+    if [[ "$gpu_nodes" -eq 0 ]]; then
+        log_warning "No GPU nodes found, skipping device plugin installation"
+        return 0
+    fi
+
+    log_info "Found $gpu_nodes GPU node(s), installing NVIDIA k8s-device-plugin..."
+
+    # Add NVIDIA device plugin Helm repo if not already added
+    if ! helm repo list | grep -q "nvidia.github.io/k8s-device-plugin"; then
+        helm repo add nvdp https://nvidia.github.io/k8s-device-plugin
+    fi
+    helm repo update nvdp
+
+    # Install k8s-device-plugin force targeted to GPU nodes ( auto detection fails to detect)
+    helm upgrade -i \
+        --namespace nvidia \
+        --create-namespace \
+        --set runtimeClassName=nvidia \
+        nvidia-device-plugin nvdp/nvidia-device-plugin
+
+    # Wait for device plugin to be ready
+    log_info "Waiting for NVIDIA device plugin pods to be ready..."
+    kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=nvidia-device-plugin -n nvidia --timeout=60s || {
+        log_warning "NVIDIA device plugin pods may not be fully ready yet"
+    }
+}
+
+
 dev_setup_update_hosts() {
     log_step "Updating /etc/hosts for local access"
 
@@ -464,8 +508,8 @@ main() {
     dev_setup_setup_local_vault
     dev_setup_prepare_kind_cluster
     dev_setup_assign_external_ip
+    dev_setup_device_plugin
     dev_setup_bootstrap_cluster
-    dev_setup_gpu_operator
     dev_setup_update_hosts
     create_summary
     dev_setup_open_uis
