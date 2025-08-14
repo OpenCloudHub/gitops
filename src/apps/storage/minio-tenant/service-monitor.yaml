@@ -4,20 +4,19 @@ metadata:
   name: minio-tenant-monitor
   namespace: minio-tenant
   labels:
-    release: k8s-monitoring  # Match k8s-monitoring release
+    release: k8s-monitoring
 spec:
   selector:
     matchLabels:
-      app: minio  # MinIO service labels
+      app: minio
   endpoints:
-  - port: metrics  # MinIO metrics port
-    path: /minio/metrics/cluster
+  - port: http-minio
+    path: /minio/v2/metrics/cluster
     interval: 30s
-    relabelings:
-    - sourceLabels: [__meta_kubernetes_service_name]
-      targetLabel: service_name
-    - sourceLabels: [__meta_kubernetes_namespace]
-      targetLabel: kubernetes_namespace
-  namespaceSelector:
-    matchNames:
-    - minio-tenant
+    basicAuth:
+      username:
+        name: minio-tenant-secret
+        key: accesskey
+      password:
+        name: minio-tenant-secret
+        key: secretkey
