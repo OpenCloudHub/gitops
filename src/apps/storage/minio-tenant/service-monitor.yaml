@@ -1,0 +1,23 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: minio-tenant-monitor
+  namespace: minio-tenant
+  labels:
+    release: k8s-monitoring  # Match k8s-monitoring release
+spec:
+  selector:
+    matchLabels:
+      app: minio  # MinIO service labels
+  endpoints:
+  - port: metrics  # MinIO metrics port
+    path: /minio/metrics/cluster
+    interval: 30s
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_service_name]
+      targetLabel: service_name
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: kubernetes_namespace
+  namespaceSelector:
+    matchNames:
+    - minio-tenant

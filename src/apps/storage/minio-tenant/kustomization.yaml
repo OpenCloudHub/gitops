@@ -6,6 +6,7 @@ namespace: minio-tenant
 resources:
   - external-secrets.yaml
   - http-route.yaml
+  - service-monitor.yaml
 
 helmCharts:
   - name: tenant
