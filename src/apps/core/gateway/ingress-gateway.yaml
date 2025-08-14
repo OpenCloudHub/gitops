@@ -11,7 +11,7 @@ spec:
   - name: https
     port: 443
     protocol: HTTPS
-    hostname: "*.opencloudhub.org"  # Matches everything
+    hostname: "*.opencloudhub.org"  # Matches everything  # TODO:
     allowedRoutes:
       namespaces:
         from: All

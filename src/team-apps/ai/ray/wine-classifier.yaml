@@ -63,7 +63,7 @@ spec:
             - name: RAY_PROMETHEUS_HOST
               value: "http://prometheus-server.observability.svc.cluster.local:80"
             - name: RAY_GRAFANA_IFRAME_HOST
-              value: "https://grafana.ai.internal.opencloudhub.org"
+              value: "https://grafana.observability.internal.opencloudhub.org"
 
     workerGroupSpecs:
     - groupName: serving-workers
