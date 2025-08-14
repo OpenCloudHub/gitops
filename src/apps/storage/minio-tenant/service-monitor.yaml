@@ -2,18 +2,28 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: minio-tenant-monitor
-  namespace: observability
+  namespace: minio-tenant  # or observability if that worked better
   labels:
     release: k8s-monitoring
 spec:
-  endpoints:
-  - interval: 30s
-    path: /minio/v2/metrics/cluster
-    port: http-minio
   selector:
     matchLabels:
       app: minio
       v1.min.io/tenant: minio
-  namespaceSelector:
-    matchNames:
-    - minio-tenant
+  endpoints:
+  # Cluster metrics
+  - port: http-minio
+    path: /minio/v2/metrics/cluster
+    interval: 30s
+  # Bucket metrics (needed for bucket dashboards)
+  - port: http-minio
+    path: /minio/v2/metrics/bucket
+    interval: 30s
+  # Node metrics (optional)
+  - port: http-minio
+    path: /minio/v2/metrics/node
+    interval: 30s
+  # Resource metrics (optional)
+  - port: http-minio
+    path: /minio/v2/metrics/resource
+    interval: 30s
