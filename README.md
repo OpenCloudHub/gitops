@@ -63,6 +63,10 @@
 
 <!-- GETTING STARTED -->
 
+# TODO: when running start dev, opening websites doesn't work as argocd is unbound
+
+# TODO: start dev /etc/hosts doesn't work
+
 # TODO: preinstall script with cloud provider kind and yq
 
 # TODO: follow issues with fedora and nvkind: https://github.com/NVIDIA/nvkind/issues/57
