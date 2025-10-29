@@ -15,7 +15,8 @@ helmCharts:
   valuesInline:
     extraArgs:
       host: "0.0.0.0"
-      allowedHosts: "mlflow.ai.internal.opencloudhub.org"
+    extraFlags:
+      - disableSecurityMiddleware
     backendStore:
       postgres:
         enabled: true
