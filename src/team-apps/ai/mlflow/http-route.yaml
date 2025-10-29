@@ -19,6 +19,6 @@ spec:
       backendRefs:
         - group: ""
           kind: Service
-          name: mlflow-tracking
+          name: mlflow
           port: 80
           weight: 1
