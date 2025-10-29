@@ -20,10 +20,10 @@ helmCharts:
         port: 5432
         database: "mlflow"
         driver: "psycopg2"
-        existingDatabaseSecret:
-          name: "mlflow-db-user"
-          usernameKey: "username"
-          passwordKey: "password"
+      existingDatabaseSecret:
+        name: "mlflow-db-user"
+        usernameKey: "username"
+        passwordKey: "password"
 
     artifactRoot:
       proxiedArtifactStorage: true  # Enables artifact proxy
