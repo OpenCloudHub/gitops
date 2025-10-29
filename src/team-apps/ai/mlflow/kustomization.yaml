@@ -14,8 +14,6 @@ helmCharts:
     extraArgs:
       host: "0.0.0.0"
       gunicornOpts: ""  # Remove gunicorn, use default uvicorn
-    extraFlags:
-      - disableSecurityMiddleware
     backendStore:
       postgres:
         enabled: true
@@ -47,3 +45,21 @@ helmCharts:
       namespace: ai
       labels:
         release: prometheus
+
+
+patches:
+  - target:
+      kind: Deployment
+      name: mlflow
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args
+        value:
+          - server
+          - --host=0.0.0.0
+          - --port=5000
+          - --backend-store-uri=postgresql+psycopg2://
+          - --artifacts-destination=s3://mlflow/
+          - --serve-artifacts
+          - --expose-prometheus=/mlflow/metrics
+          - --disable-security-middleware
