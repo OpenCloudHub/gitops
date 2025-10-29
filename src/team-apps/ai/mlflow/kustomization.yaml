@@ -1,8 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 namespace: ai
-
 resources:
   - external-secrets.yaml
   - http-route.yaml
@@ -13,10 +11,11 @@ helmCharts:
   version: 1.7.3
   repo: https://community-charts.github.io/helm-charts
   valuesInline:
-    # extraArgs:
-    #   host: "0.0.0.0"
-    # extraFlags:
-    #   - disableSecurityMiddleware
+    extraArgs:
+      host: "0.0.0.0"
+      gunicornOpts: null  # Remove gunicorn, use default uvicorn
+    extraFlags:
+      - disableSecurityMiddleware
     backendStore:
       postgres:
         enabled: true
@@ -28,9 +27,8 @@ helmCharts:
         name: "mlflow-db-user"
         usernameKey: "username"
         passwordKey: "password"
-
     artifactRoot:
-      proxiedArtifactStorage: true  # Enables artifact proxy
+      proxiedArtifactStorage: true
       s3:
         enabled: true
         bucket: "mlflow"
@@ -38,78 +36,14 @@ helmCharts:
           name: "minio-tenant-secret"
           keyOfAccessKeyId: "accesskey"
           keyOfSecretAccessKey: "secretkey"
-
     extraEnvVars:
       MLFLOW_S3_ENDPOINT_URL: "http://minio-hl.minio-tenant.svc.cluster.local:9000"
-      MLFLOW_S3_IGNORE_TLS: "true"  # For MinIO HTTP
-
+      MLFLOW_S3_IGNORE_TLS: "true"
     service:
       port: 80
       containerPort: 5000
-
     serviceMonitor:
       enabled: true
       namespace: ai
       labels:
         release: prometheus
-
-
-# helmCharts:
-#   - name: mlflow
-#     releaseName: mlflow
-#     version: 5.1.0
-#     repo: oci://registry-1.docker.io/bitnamicharts
-#     valuesInline:
-#       postgresql:
-#         enabled: false
-#       minio:
-#         enabled: false
-#       tracking:
-#         host: "0.0.0.0"
-#         containerPorts:
-#           http: 5000
-#         auth:
-#           enabled: false
-#         service:
-#           type: ClusterIP
-#         metrics:
-#           enabled: true
-#           serviceMonitor:
-#             enabled: true
-#         networkPolicy:
-#           enabled: true
-#           allowExternal: false
-#           ingressNSMatchLabels:
-#             name: istio-ingress
-#           extraIngress:
-#             - ports:
-#                 - port: 15008  # HBONE port
-#                 - port: 5000   # MLflow application port
-#               from:
-#                 - namespaceSelector:
-#                     matchLabels:
-#                       name: istio-ingress
-#                 - namespaceSelector:
-#                     matchLabels:
-#                       istio.io/dataplane-mode: ambient  # Allow ambient pods
-
-
-#       externalDatabase:
-#         dialectDriver: postgresql
-#         host: mlflow-db-pooler.storage.svc.cluster.local
-#         port: 5432
-#         user: mlflow
-#         database: mlflow
-#         existingSecret: mlflow-db-user
-#         existingSecretPasswordKey: password
-
-#       externalS3:
-#         host: minio-hl.minio-tenant.svc.cluster.local
-#         port: 9000
-#         useCredentialsInSecret: true
-#         existingSecret: minio-tenant-secret
-#         existingSecretAccessKeyIDKey: accesskey
-#         existingSecretKeySecretKey: secretkey
-#         bucket: mlflow
-#         protocol: http
-#         serveArtifacts: true
