@@ -88,7 +88,7 @@ bootstrap_check_prerequisites() {
   log_step "Check prerequisites"
   validate_command_exists kubectl "https://kubernetes.io/docs/tasks/tools/"
   validate_command_exists kustomize "https://kubernetes-sigs.github.io/kustomize/installation/"
-  # TODO: add back later check_git_status
+  # TODO: add back later: check_git_status
   check_cluster_connectivity
 
   if [[ "$DRY_RUN" == "true" ]]; then

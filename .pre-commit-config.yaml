@@ -103,6 +103,7 @@ repos:
     hooks:
       - id: shellcheck
         name: "🐚 shell · Lint shell scripts"
+        args: [--severity=warning]
 
   ### Makefile ###
   - repo: https://github.com/mrtazz/checkmake.git

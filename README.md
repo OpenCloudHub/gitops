@@ -65,31 +65,31 @@
 
 # TODO: preinstall script with cloud provider kind and yq
 
+# TODO: follow issues with fedora and nvkind: https://github.com/NVIDIA/nvkind/issues/57
+
 <h2 id="getting-started">🚀 Getting Started</h2>
+
 1. Clone this repository and cd into the directory:
-   ```bash
-   git clone https://github.com/opencloudhub/gitops.git
-   cd opencloudhub
-   ```
+
+```bash
+git clone https://github.com/opencloudhub/gitops.git
+cd opencloudhub
+```
 
 2. Create access token for the repo used by ArgoCD ( Can use GithubApp as well )
 1. Create folder to store shh key
 
-````
 ```bash
 mkdir -p ~/.ssh/opencloudhub
 ```
-````
 
-2. Create asynchronous deploy token without passphrase
+4. Create asynchronous deploy token without passphrase
 
 ```bash
 ssh-keygen -t ed25519 -C "argocd_gitops@opencoudhub.com" -f ~/.ssh/opencloudhub/argocd_gitops_ed25519 -N ""
-
-
 ```
 
-3. Get public key and add it as deploy token to gh repo:
+5. Get public key and add it as deploy token to gh repo:
 
 ```bash
 echo "Public Key:" && cat ~/.ssh/opencloudhub/argocd_gitops_ed25519.pub
@@ -101,9 +101,13 @@ echo "Public Key:" && cat ~/.ssh/opencloudhub/argocd_gitops_ed25519.pub
   - title: argocd_gitops_ed25519
   - allow write access: true
 
-3. Update the .env file
+6. Update the .env file
 
-1. Start dev bash scripts/bootstrap/local-development/start-dev.sh
+1. Start dev:
+
+```bash
+bash scripts/bootstrap/local-development/start-dev.sh
+```
 
 ### Prerequisites
 
@@ -140,6 +144,7 @@ spec:
 EOF
 ```
 
+c
 To see if it is working:
 
 ```bash
