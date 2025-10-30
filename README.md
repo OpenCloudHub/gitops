@@ -113,6 +113,15 @@ echo "Public Key:" && cat ~/.ssh/opencloudhub/argocd_gitops_ed25519.pub
 bash scripts/bootstrap/local-development/start-dev.sh
 ```
 
+#### Connect PGAdmin
+
+Host: mlflow-db-cluster-rw
+Port: 5432
+Database: mlflow
+Username: mlflow
+Password: 1234
+SSL mode: disable
+
 ### Prerequisites
 
 ### Usage

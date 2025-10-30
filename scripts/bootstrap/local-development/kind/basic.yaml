@@ -2,14 +2,13 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: opencloudhub-local-basic
 nodes:
-  # Control plane node - Gateway API & Management
   - role: control-plane
     kubeadmConfigPatches:
       - |
         kind: InitConfiguration
         nodeRegistration:
           kubeletExtraArgs:
-            node-labels: "networking.opencloudhub.org/gateway-controller=true,kubernetes.io/os=linux"
+            node-labels: "node.opencloudhub.org/application=true,node.opencloudhub.org/type=application,networking.opencloudhub.org/gateway-controller=true"
     extraPortMappings:
       # HTTP traffic
       - containerPort: 80

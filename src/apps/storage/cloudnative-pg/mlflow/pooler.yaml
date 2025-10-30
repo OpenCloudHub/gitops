@@ -14,7 +14,7 @@ spec:
     poolMode: session
     parameters:
       max_client_conn: "100"
-      default_pool_size: "10"
+      default_pool_size: "25"  # Increase pool size
+      query_wait_timeout: "0"  # Disable timeout for MLflow
+      server_idle_timeout: "0"  # Keep connections alive
       ignore_startup_parameters: "search_path"
-      query_wait_timeout: "300"  # 5 minutes instead of 2
-      server_idle_timeout: "600"  # keep connections alive longer
