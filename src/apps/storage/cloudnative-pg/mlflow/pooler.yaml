@@ -16,3 +16,5 @@ spec:
       max_client_conn: "100"
       default_pool_size: "10"
       ignore_startup_parameters: "search_path"
+      query_wait_timeout: "300"  # 5 minutes instead of 2
+      server_idle_timeout: "600"  # keep connections alive longer
