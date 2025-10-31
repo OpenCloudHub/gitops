@@ -1,0 +1,176 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: mlops-training
+  namespace: ai
+spec:
+  serviceAccountName: workflow-executor
+
+  templates:
+  - name: training-phase
+    inputs:
+      parameters:
+      - name: model_name
+      - name: experiment_name
+      - name: compute_type
+      - name: training_image
+      - name: training_entrypoint
+      - name: training_args
+
+    outputs:
+      parameters:
+      - name: model_version
+        valueFrom:
+          path: /tmp/model_version.txt
+      - name: run_id
+        valueFrom:
+          path: /tmp/run_id.txt
+
+    script:
+      image: python:3.11-slim
+      command: [bash]
+      source: |
+        set -e
+
+        # Install dependencies
+        pip install --quiet mlflow kubernetes
+
+        python <<'EOF'
+        import os
+        import time
+        import json
+        from kubernetes import client, config
+        from mlflow import MlflowClient
+
+        # Parameters
+        model_name = "{{inputs.parameters.model_name}}"
+        experiment_name = "{{inputs.parameters.experiment_name}}"
+        compute_type = "{{inputs.parameters.compute_type}}"
+        training_image = "{{inputs.parameters.training_image}}"
+        training_entrypoint = "{{inputs.parameters.training_entrypoint}}"
+        training_args = "{{inputs.parameters.training_args}}"
+
+        # Map compute_type to Ray resources
+        compute_configs = {
+            "cpu-small": {"cpu": 2, "memory": "4Gi"},
+            "cpu-medium": {"cpu": 4, "memory": "8Gi"},
+            "cpu-large": {"cpu": 8, "memory": "16Gi"},
+            "gpu-small": {"cpu": 4, "memory": "16Gi", "gpu": 1},
+            "gpu-medium": {"cpu": 8, "memory": "32Gi", "gpu": 2},
+            "gpu-large": {"cpu": 16, "memory": "64Gi", "gpu": 4}
+        }
+        resources = compute_configs[compute_type]
+
+        # Create RayJob
+        config.load_incluster_config()
+        custom_api = client.CustomObjectsApi()
+
+        ray_job = {
+            "apiVersion": "ray.io/v1",
+            "kind": "RayJob",
+            "metadata": {
+                "generateName": f"{model_name}-training-",
+                "namespace": "ai"
+            },
+            "spec": {
+                "entrypoint": training_entrypoint + (" " + training_args if training_args else ""),
+                "runtimeEnvYAML": json.dumps({
+                    "env_vars": {
+                        "MLFLOW_TRACKING_URI": "http://mlflow.mlops.svc.cluster.local:5000",
+                        "MLFLOW_EXPERIMENT_NAME": experiment_name,
+                        "MODEL_NAME": model_name
+                    }
+                }),
+                "rayClusterSpec": {
+                    "rayVersion": "2.48.0",
+                    "headGroupSpec": {
+                        "rayStartParams": {},
+                        "template": {
+                            "spec": {
+                                "containers": [{
+                                    "name": "ray-head",
+                                    "image": training_image,
+                                    "resources": {
+                                        "requests": {
+                                            "cpu": str(resources["cpu"]),
+                                            "memory": resources["memory"]
+                                        },
+                                        "limits": {
+                                            "cpu": str(resources["cpu"]),
+                                            "memory": resources["memory"]
+                                        }
+                                    }
+                                }]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        # Add GPU if needed
+        if "gpu" in resources:
+            ray_job["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0]["resources"]["limits"]["nvidia.com/gpu"] = str(resources["gpu"])
+
+        print(f"Submitting RayJob for {model_name}...")
+        created_job = custom_api.create_namespaced_custom_object(
+            group="ray.io",
+            version="v1",
+            namespace="ai",
+            plural="rayjobs",
+            body=ray_job
+        )
+
+        job_name = created_job["metadata"]["name"]
+        print(f"RayJob created: {job_name}")
+
+        # Wait for completion
+        print("Waiting for RayJob to complete...")
+        timeout = 7200  # 2 hours
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            job = custom_api.get_namespaced_custom_object(
+                group="ray.io",
+                version="v1",
+                namespace="ai",
+                plural="rayjobs",
+                name=job_name
+            )
+
+            status = job.get("status", {}).get("jobStatus")
+            print(f"Current status: {status}")
+
+            if status == "SUCCEEDED":
+                print("RayJob completed successfully!")
+                break
+            elif status == "FAILED":
+                raise Exception(f"RayJob failed: {job.get('status', {}).get('message', 'Unknown error')}")
+
+            time.sleep(30)
+        else:
+            raise Exception(f"RayJob timed out after {timeout} seconds")
+
+        # Query MLflow for latest model version
+        print(f"Querying MLflow for latest model in ci.{model_name}...")
+        mlflow_client = MlflowClient("http://mlflow.mlops.svc.cluster.local:5000")
+
+        versions = mlflow_client.search_model_versions(f"name='ci.{model_name}'")
+        if not versions:
+            raise Exception(f"No model versions found for ci.{model_name}")
+
+        latest = sorted(versions, key=lambda x: x.creation_timestamp, reverse=True)[0]
+        model_version = latest.version
+        run_id = latest.run_id
+
+        print(f"Latest model version: {model_version}")
+        print(f"Run ID: {run_id}")
+
+        # Write outputs
+        with open("/tmp/model_version.txt", "w") as f:
+            f.write(str(model_version))
+
+        with open("/tmp/run_id.txt", "w") as f:
+            f.write(run_id)
+
+        EOF

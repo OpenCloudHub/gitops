@@ -1,0 +1,130 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: ml-complete-lifecycle
+  namespace: ai
+spec:
+  serviceAccountName: workflow-executor
+
+  arguments:
+    parameters:
+    - name: model_name
+      description: "Model name (e.g., wine-classifier)"
+    - name: experiment_name
+      description: "The name of the MLflow experiment to register the run under"
+    - name: compute_type
+      enum:
+      - cpu-small
+      - cpu-medium
+      - cpu-large
+      - gpu-small
+      - gpu-medium
+      - gpu-large
+    - name: approval_mode
+      value: "manual"
+      enum:
+      - manual
+      - automatic
+    - name: comparison_metric
+      value: "accuracy"
+      description: "Metric to compare (accuracy, f1_score, etc.)"
+    - name: comparison_direction
+      value: "higher"
+      enum:
+      - higher
+      - lower
+      description: "Direction for metric comparison (higher is better or lower is better)"
+    - name: comparison_threshold
+      value: "0.05"
+      description: "Minimum improvement threshold (e.g., 0.05 = 5%)"
+    - name: training_image
+      description: "Container image with training code"
+    - name: training_entrypoint
+      value: "python src/training/train.py"
+      description: "Command to run training"
+    - name: training_args
+      value: ""
+      description: "Additional training arguments"
+
+  entrypoint: main
+
+  templates:
+  - name: main
+    steps:
+    # Phase 1: Training
+    - - name: train
+        templateRef:
+          name: mlops-training
+          template: training-phase
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: experiment_name
+            value: "{{workflow.parameters.experiment_name}}"
+          - name: compute_type
+            value: "{{workflow.parameters.compute_type}}"
+          - name: training_image
+            value: "{{workflow.parameters.training_image}}"
+          - name: training_entrypoint
+            value: "{{workflow.parameters.training_entrypoint}}"
+          - name: training_args
+            value: "{{workflow.parameters.training_args}}"
+
+  #   # Phase 2: Comparison & Staging
+  #   - - name: compare-stage
+  #       templateRef:
+  #         name: mlops-comparison
+  #         template: comparison-build-test-phase
+  #       arguments:
+  #         parameters:
+  #         - name: model_name
+  #           value: "{{workflow.parameters.model_name}}"
+  #         - name: ci_version
+  #           value: "{{steps.train.outputs.parameters.model_version}}"
+  #         - name: comparison_metric
+  #           value: "{{workflow.parameters.comparison_metric}}"
+  #         - name: comparison_direction
+  #           value: "{{workflow.parameters.comparison_direction}}"
+  #         - name: comparison_threshold
+  #           value: "{{workflow.parameters.comparison_threshold}}"
+  #         - name: training_image
+  #           value: "{{workflow.parameters.training_image}}"
+
+  #   # Phase 3: Approval Gate
+  #   - - name: approval-gate
+  #       template: approval-suspend
+  #       when: "{{workflow.parameters.approval_mode}} == manual"
+
+  #   # Phase 4: Production Deployment
+  #   - - name: promote-prod
+  #       templateRef:
+  #         name: mlops-production
+  #         template: promote-and-retag
+  #       arguments:
+  #         parameters:
+  #         - name: model_name
+  #           value: "{{workflow.parameters.model_name}}"
+  #         - name: staging_version
+  #           value: "{{steps.compare-stage.outputs.parameters.staging_version}}"
+  #         - name: staging_image_tag
+  #           value: "{{steps.compare-stage.outputs.parameters.staging_image_tag}}"
+  #         - name: git_sha
+  #           value: "{{steps.compare-stage.outputs.parameters.git_sha}}"
+
+  #   - - name: log-deploy
+  #       templateRef:
+  #         name: mlops-production
+  #         template: log-deployment
+  #       arguments:
+  #         parameters:
+  #         - name: model_name
+  #           value: "{{workflow.parameters.model_name}}"
+  #         - name: prod_version
+  #           value: "{{steps.promote-prod.outputs.parameters.prod_version}}"
+  #         - name: prod_image_tag
+  #           value: "{{steps.promote-prod.outputs.parameters.prod_image_tag}}"
+
+  # - name: approval-suspend
+  #   suspend:
+  #     duration: "48h"
