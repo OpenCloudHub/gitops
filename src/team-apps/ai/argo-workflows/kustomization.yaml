@@ -24,7 +24,10 @@ patches:
       path: /spec/template/spec/containers/0/args/-
       value: --auth-mode=server
 # NO TLS, # TODO: do we want in prod?
-patch: |-
+- target:
+    kind: Deployment
+    name: argo-server
+  patch: |-
     - op: add
       path: /spec/template/spec/containers/0/args/-
       value: --secure=false
