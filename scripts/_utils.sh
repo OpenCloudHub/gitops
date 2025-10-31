@@ -369,6 +369,7 @@ get_exposed_services() {
     echo "pgadmin.storage.internal.${base}"
     echo "minio.storage.internal.${base}"
     echo "mlflow.ai.internal.${base}"
+    echo "argo.ai.internal.${base}"
     echo "wine-classifier.ai.internal.${base}"
     echo "api.${base}"
 }

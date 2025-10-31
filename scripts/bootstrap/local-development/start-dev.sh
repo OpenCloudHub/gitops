@@ -388,7 +388,7 @@ dev_setup_update_hosts() {
     log_step "Updating /etc/hosts for local access"
 
     local GATEWAY_IP=""
-    for i in {1..300}; do
+    for i in {1..600}; do
         GATEWAY_IP=$(kubectl get svc -n istio-ingress ingress-gateway-istio \
             -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
         [[ -n "$GATEWAY_IP" ]] && break
