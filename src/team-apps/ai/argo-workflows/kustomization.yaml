@@ -4,7 +4,6 @@ kind: Kustomization
 namespace: ai
 
 resources:
-- https://github.com/argoproj/argo-workflows/manifests/base/crds/full?ref=v3.7.3
 - https://github.com/argoproj/argo-workflows/releases/download/v3.7.3/namespace-install.yaml
 
 patches:
