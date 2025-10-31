@@ -15,7 +15,7 @@ patches:
     - op: replace
       path: /metadata/name
       value: ai
-# Disable AUuh
+
 - target:
     kind: Deployment
     name: argo-server
@@ -23,11 +23,9 @@ patches:
     - op: add
       path: /spec/template/spec/containers/0/args/-
       value: --auth-mode=server
-# NO TLS, # TODO: do we want in prod?
-- target:
-    kind: Deployment
-    name: argo-server
-  patch: |-
     - op: add
       path: /spec/template/spec/containers/0/args/-
       value: --secure=false
+    - op: replace
+      path: /spec/template/spec/containers/0/readinessProbe/httpGet/scheme
+      value: HTTP
