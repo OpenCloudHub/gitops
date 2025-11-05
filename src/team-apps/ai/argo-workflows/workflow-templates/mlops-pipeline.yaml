@@ -240,26 +240,16 @@ spec:
       - name: job-name
         valueFrom:
           jsonPath: '{.metadata.name}'
-    script:
-      image: bitnami/kubectl:latest
-      command: [sh]
-      source: |
-        GPU="{{inputs.parameters.gpu}}"
-
-        # Build GPU resources block if needed
-        GPU_RESOURCES=""
-        GPU_NODE_SELECTOR=""
-        if [ "$GPU" != "0" ]; then
-          GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
-          GPU_NODE_SELECTOR="nodeSelector:\n        node.opencloudhub.org/gpu: \"true\""
-        fi
-
-        cat <<EOF | kubectl apply -f -
+    resource:
+      action: create
+      manifest: |
         apiVersion: ray.io/v1
         kind: RayJob
         metadata:
           generateName: {{inputs.parameters.model_name}}-training-
           namespace: ai
+          labels:
+            model: "{{inputs.parameters.model_name}}"
         spec:
           entrypoint: {{inputs.parameters.training_entrypoint}} {{inputs.parameters.training_args}}
           shutdownAfterJobFinishes: true
@@ -270,7 +260,10 @@ spec:
               serviceType: ClusterIP
               template:
                 spec:
-                  $(echo -e "$GPU_NODE_SELECTOR")
+                  {{- if ne (toString (index . "gpu")) "0" }}
+                  nodeSelector:
+                    node.opencloudhub.org/gpu: "true"
+                  {{- end }}
                   containers:
                   - name: ray-head
                     image: {{inputs.parameters.training_image}}
@@ -281,7 +274,9 @@ spec:
                       limits:
                         cpu: "{{inputs.parameters.cpu}}"
                         memory: "{{inputs.parameters.memory}}"
-                        $([ "$GPU" != "0" ] && echo "$GPU_RESOURCES")
+                        {{- if ne (toString (index . "gpu")) "0" }}
+                        nvidia.com/gpu: "{{inputs.parameters.gpu}}"
+                        {{- end }}
                     env:
                     - name: MLFLOW_TRACKING_URI
                       value: http://mlflow.ai.svc.cluster.local:5000
@@ -294,7 +289,10 @@ spec:
               groupName: worker
               template:
                 spec:
-                  $(echo -e "$GPU_NODE_SELECTOR")
+                  {{- if ne (toString (index . "gpu")) "0" }}
+                  nodeSelector:
+                    node.opencloudhub.org/gpu: "true"
+                  {{- end }}
                   containers:
                   - name: ray-worker
                     image: {{inputs.parameters.training_image}}
@@ -305,7 +303,9 @@ spec:
                       limits:
                         cpu: "{{inputs.parameters.cpu}}"
                         memory: "{{inputs.parameters.memory}}"
-                        $([ "$GPU" != "0" ] && echo "$GPU_RESOURCES")
+                        {{- if ne (toString (index . "gpu")) "0" }}
+                        nvidia.com/gpu: "{{inputs.parameters.gpu}}"
+                        {{- end }}
                     env:
                     - name: MLFLOW_TRACKING_URI
                       value: http://mlflow.ai.svc.cluster.local:5000
@@ -313,12 +313,6 @@ spec:
                       value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_REGISTERED_MODEL_NAME
                       value: {{inputs.parameters.model_name}}
-        EOF
-
-        # Get the created job name
-        sleep 2
-        JOB_NAME=$(kubectl get rayjobs -n ai -l ray.io/cluster-name={{inputs.parameters.model_name}}-training --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}')
-        echo "$JOB_NAME" > /tmp/job-name.txt
 
     # outputs:
     # parameters:
