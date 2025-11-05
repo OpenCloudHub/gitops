@@ -34,7 +34,7 @@ spec:
     - name: training_args
       value: ""
     - name: mlflow_tracking_uri
-      value: "http://mlflow.ai.svc.cluster.local:5000"
+      value: "http://mlflow.ai.svc.cluster.local:80"
     - name: docker_registry
       value: "docker.io/yourusername"
 
