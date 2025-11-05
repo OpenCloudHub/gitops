@@ -239,16 +239,32 @@ spec:
       parameters:
       - name: job-name
         valueFrom:
-          jsonPath: '{.metadata.name}'
-    resource:
-      action: create
-      manifest: |
+          path: /tmp/job-name.txt  # Changed from jsonPath
+    script:
+      image: bitnami/kubectl:latest
+      command: [sh]
+      source: |
+        GPU="{{inputs.parameters.gpu}}"
+
+        # Build GPU resources block if needed
+        GPU_RESOURCES=""
+        GPU_NODE_SELECTOR=""
+        if [ "$GPU" != "0" ]; then
+          GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
+          GPU_NODE_SELECTOR="nodeSelector:\n        node.opencloudhub.org/gpu: \"true\""
+        fi
+
+        # Create unique label for this workflow run
+        RUN_LABEL="wf-$(date +%s)-$$"
+
+        cat <<EOF | kubectl apply -f -
         apiVersion: ray.io/v1
         kind: RayJob
         metadata:
           generateName: {{inputs.parameters.model_name}}-training-
           namespace: ai
           labels:
+            workflow-run: "${RUN_LABEL}"
             model: "{{inputs.parameters.model_name}}"
         spec:
           entrypoint: {{inputs.parameters.training_entrypoint}} {{inputs.parameters.training_args}}
@@ -260,10 +276,7 @@ spec:
               serviceType: ClusterIP
               template:
                 spec:
-                  {{- if ne (toString (index . "gpu")) "0" }}
-                  nodeSelector:
-                    node.opencloudhub.org/gpu: "true"
-                  {{- end }}
+                  $(echo -e "$GPU_NODE_SELECTOR")
                   containers:
                   - name: ray-head
                     image: {{inputs.parameters.training_image}}
@@ -274,9 +287,7 @@ spec:
                       limits:
                         cpu: "{{inputs.parameters.cpu}}"
                         memory: "{{inputs.parameters.memory}}"
-                        {{- if ne (toString (index . "gpu")) "0" }}
-                        nvidia.com/gpu: "{{inputs.parameters.gpu}}"
-                        {{- end }}
+                        $([ "$GPU" != "0" ] && echo "$GPU_RESOURCES")
                     env:
                     - name: MLFLOW_TRACKING_URI
                       value: http://mlflow.ai.svc.cluster.local:5000
@@ -289,10 +300,7 @@ spec:
               groupName: worker
               template:
                 spec:
-                  {{- if ne (toString (index . "gpu")) "0" }}
-                  nodeSelector:
-                    node.opencloudhub.org/gpu: "true"
-                  {{- end }}
+                  $(echo -e "$GPU_NODE_SELECTOR")
                   containers:
                   - name: ray-worker
                     image: {{inputs.parameters.training_image}}
@@ -303,9 +311,7 @@ spec:
                       limits:
                         cpu: "{{inputs.parameters.cpu}}"
                         memory: "{{inputs.parameters.memory}}"
-                        {{- if ne (toString (index . "gpu")) "0" }}
-                        nvidia.com/gpu: "{{inputs.parameters.gpu}}"
-                        {{- end }}
+                        $([ "$GPU" != "0" ] && echo "$GPU_RESOURCES")
                     env:
                     - name: MLFLOW_TRACKING_URI
                       value: http://mlflow.ai.svc.cluster.local:5000
@@ -313,6 +319,21 @@ spec:
                       value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_REGISTERED_MODEL_NAME
                       value: {{inputs.parameters.model_name}}
+        EOF
+
+        # Wait a moment for the resource to be created
+        sleep 3
+
+        # Get the created job name using our unique label
+        JOB_NAME=$(kubectl get rayjobs -n ai -l workflow-run="${RUN_LABEL}" -o jsonpath='{.items[0].metadata.name}')
+
+        if [ -z "$JOB_NAME" ]; then
+          echo "ERROR: Failed to retrieve RayJob name"
+          exit 1
+        fi
+
+        echo "✅ Created RayJob: $JOB_NAME"
+        echo "$JOB_NAME" > /tmp/job-name.txt
 
     # outputs:
     # parameters:
