@@ -76,15 +76,8 @@ spec:
             value: "{{steps.map-compute.outputs.parameters.gpu}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
-    # # Phase 3: Wait for completion
-    # - - name: wait-training
-    #     template: wait-ray-job
-    #     arguments:
-    #       parameters:
-    #       - name: job_name
-    #         value: "{{steps.submit-training.outputs.parameters.job-name}}"
 
-    # # Phase 4: Compare and promote to staging
+    # # Phase 3: Compare and promote to staging
     # - - name: compare-promote
     #     template: compare-and-promote
     #     arguments:
@@ -100,7 +93,7 @@ spec:
     #       - name: mlflow_uri
     #         value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
-    # # Phase 5: Build staging image
+    # # Phase 4: Build staging image
     # - - name: build-staging
     #     template: build-staging-image
     #     arguments:
@@ -114,7 +107,7 @@ spec:
     #       - name: mlflow_uri
     #         value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
-    # # Phase 6: Test staging
+    # # Phase 5: Test staging
     # - - name: test-staging
     #     template: test-staging
     #     arguments:
@@ -122,13 +115,13 @@ spec:
     #       - name: image_tag
     #         value: "{{steps.build-staging.outputs.parameters.staging_image_tag}}"
 
-    # # Phase 7: Approval
+    # # Phase 6: Approval
     # - - name: approval
     #     suspend:
     #       duration: "48h"
     #     when: "{{workflow.parameters.approval_mode}} == manual"
 
-    # # Phase 8: Promote to production
+    # # Phase 7: Promote to production
     # - - name: promote-production
     #     template: promote-to-production
     #     arguments:
@@ -140,7 +133,7 @@ spec:
     #       - name: mlflow_uri
     #         value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
-    # # Phase 9: Retag image
+    # # Phase 8: Retag image
     # - - name: retag-production
     #     template: retag-image
     #     arguments:
@@ -328,77 +321,71 @@ spec:
                       value: {{inputs.parameters.model_name}}
         EOF
 
-        echo "⏳ Waiting for RayJob to be created..."
+        # ========================================
+        # Verify RayJob created
+        # ========================================
+        echo "⏳ Waiting for RayJob..."
         sleep 3
 
         JOB_NAME=$(kubectl get rayjobs -n ai -l workflow-run="${RUN_LABEL}" -o jsonpath='{.items[0].metadata.name}')
 
         if [ -z "$JOB_NAME" ]; then
-          echo "❌ ERROR: Failed to retrieve RayJob name"
+          echo "❌ Failed to get RayJob"
           exit 1
         fi
 
-        echo "✅ Created RayJob: $JOB_NAME"
+        echo "✅ RayJob: $JOB_NAME"
         echo "$JOB_NAME" > /tmp/job-name.txt
 
-        echo "⏳ Waiting for Ray job submission..."
-        sleep 5
+        # ========================================
+        # Wait for Ray cluster and stream logs
+        # ========================================
+        echo "⏳ Waiting for Ray cluster..."
+        sleep 10
 
-        RAY_JOB_ID=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobId}')
-        HEAD_SVC=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.rayClusterName}')-head-svc
+        CLUSTER_NAME=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.rayClusterName}')
 
-        if [ -z "$RAY_JOB_ID" ]; then
-          echo "⏳ Ray job not yet submitted, waiting longer..."
-          sleep 10
-          RAY_JOB_ID=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobId}')
-        fi
-
-        if [ -z "$RAY_JOB_ID" ]; then
-          echo "❌ ERROR: Failed to get Ray job ID after waiting"
-          echo "RayJob status:"
-          kubectl get rayjob -n ai $JOB_NAME -o yaml
+        if [ -z "$CLUSTER_NAME" ]; then
+          echo "❌ Ray cluster not ready"
           exit 1
         fi
 
+        echo "✅ Cluster: $CLUSTER_NAME"
         echo ""
-        echo "================================"
-        echo "📋 Ray Job ID: $RAY_JOB_ID"
-        echo "🎯 Model: {{inputs.parameters.model_name}}"
-        echo "🔬 Experiment: {{inputs.parameters.experiment_name}}"
-        echo "================================"
-        echo ""
-        echo "🔍 Streaming training logs..."
-        echo ""
-
-        export RAY_ADDRESS="http://${HEAD_SVC}.ai.svc.cluster.local:8265"
-        ray job logs -f $RAY_JOB_ID || true
-
-        echo ""
-        echo "================================"
-        echo "✅ Training completed"
+        echo "🔍 Streaming logs..."
         echo "================================"
 
-    # outputs:
-    # parameters:
-    # - name: job-name
-    #   valueFrom:
-    #     path: /tmp/job-name.txt
+        # Wait for head pod and stream logs
+        kubectl wait --for=condition=ready pod -n ai -l ray.io/cluster=$CLUSTER_NAME,ray.io/node-type=head --timeout=300s
+        HEAD_POD=$(kubectl get pods -n ai -l ray.io/cluster=$CLUSTER_NAME,ray.io/node-type=head -o jsonpath='{.items[0].metadata.name}')
 
-  # # Wait for RayJob
-  # - name: wait-ray-job
-  #   inputs:
-  #     parameters:
-  #     - name: job_name
-  #   script:
-  #     image: bitnami/kubectl:latest
-  #     command: [sh]
-  #     source: |
-  #       echo "⏳ Waiting for RayJob {{inputs.parameters.job_name}}..."
-  #       kubectl wait --for=condition=complete \
-  #         --timeout=7200s \
-  #         rayjob/{{inputs.parameters.job_name}} \
-  #         -n ai
-  #       echo "✅ Training complete!"
+        kubectl logs -n ai $HEAD_POD -c ray-head -f &
+        LOG_PID=$!
+
+        # ========================================
+        # Wait for completion
+        # ========================================
+        while true; do
+          STATUS=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobStatus}')
+
+          case "$STATUS" in
+            "SUCCEEDED")
+              sleep 3
+              kill $LOG_PID 2>/dev/null || true
+              echo ""
+              echo "✅ Training complete!"
+              exit 0
+              ;;
+            "FAILED"|"STOPPED")
+              kill $LOG_PID 2>/dev/null || true
+              echo ""
+              echo "❌ Training failed: $STATUS"
+              exit 1
+              ;;
+          esac
+
+          sleep 10
+        done
 
   # # Compare and promote to staging
   # - name: compare-and-promote
