@@ -239,11 +239,13 @@ spec:
       parameters:
       - name: job-name
         valueFrom:
-          path: /tmp/job-name.txt  # Changed from jsonPath
+          path: /tmp/job-name.txt
     script:
       image: bitnami/kubectl:latest
       command: [sh]
       source: |
+        set -e
+
         GPU="{{inputs.parameters.gpu}}"
 
         # Build GPU resources block if needed
@@ -251,13 +253,16 @@ spec:
         GPU_NODE_SELECTOR=""
         if [ "$GPU" != "0" ]; then
           GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
-          GPU_NODE_SELECTOR="nodeSelector:\n        node.opencloudhub.org/gpu: \"true\""
+          GPU_NODE_SELECTOR="nodeSelector:
+          node.opencloudhub.org/gpu: \"true\""
         fi
 
-        # Create unique label for this workflow run
-        RUN_LABEL="wf-$(date +%s)-$$"
+        # Create unique label for this workflow run (no $$ - use seconds + random)
+        RUN_LABEL="wf-$(date +%s)-${RANDOM}"
 
-        cat <<EOF | kubectl apply -f -
+        echo "Creating RayJob with label: workflow-run=${RUN_LABEL}"
+
+        cat <<EOF | kubectl create -f -
         apiVersion: ray.io/v1
         kind: RayJob
         metadata:
@@ -276,7 +281,7 @@ spec:
               serviceType: ClusterIP
               template:
                 spec:
-                  $(echo -e "$GPU_NODE_SELECTOR")
+                  ${GPU_NODE_SELECTOR}
                   containers:
                   - name: ray-head
                     image: {{inputs.parameters.training_image}}
@@ -287,7 +292,7 @@ spec:
                       limits:
                         cpu: "{{inputs.parameters.cpu}}"
                         memory: "{{inputs.parameters.memory}}"
-                        $([ "$GPU" != "0" ] && echo "$GPU_RESOURCES")
+                        ${GPU_RESOURCES}
                     env:
                     - name: MLFLOW_TRACKING_URI
                       value: http://mlflow.ai.svc.cluster.local:5000
@@ -300,7 +305,7 @@ spec:
               groupName: worker
               template:
                 spec:
-                  $(echo -e "$GPU_NODE_SELECTOR")
+                  ${GPU_NODE_SELECTOR}
                   containers:
                   - name: ray-worker
                     image: {{inputs.parameters.training_image}}
@@ -311,7 +316,7 @@ spec:
                       limits:
                         cpu: "{{inputs.parameters.cpu}}"
                         memory: "{{inputs.parameters.memory}}"
-                        $([ "$GPU" != "0" ] && echo "$GPU_RESOURCES")
+                        ${GPU_RESOURCES}
                     env:
                     - name: MLFLOW_TRACKING_URI
                       value: http://mlflow.ai.svc.cluster.local:5000
@@ -329,6 +334,7 @@ spec:
 
         if [ -z "$JOB_NAME" ]; then
           echo "ERROR: Failed to retrieve RayJob name"
+          kubectl get rayjobs -n ai -l workflow-run="${RUN_LABEL}"
           exit 1
         fi
 
