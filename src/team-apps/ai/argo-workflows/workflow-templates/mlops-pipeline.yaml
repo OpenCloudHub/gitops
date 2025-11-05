@@ -224,101 +224,107 @@ spec:
 
   # Submit RayJob
   - name: submit-ray-job
-  inputs:
-    parameters:
-    - name: model_name
-    - name: experiment_name
-    - name: training_image
-    - name: training_entrypoint
-    - name: training_args
-    - name: cpu
-    - name: memory
-    - name: replicas
-    - name: gpu
-  outputs:
-    parameters:
-    - name: job-name
-      valueFrom:
-        jsonPath: '{.metadata.name}'
-  script:
-    image: bitnami/kubectl:latest
-    command: [sh]
-    source: |
-      GPU="{{inputs.parameters.gpu}}"
+    inputs:
+      parameters:
+      - name: model_name
+      - name: experiment_name
+      - name: training_image
+      - name: training_entrypoint
+      - name: training_args
+      - name: cpu
+      - name: memory
+      - name: replicas
+      - name: gpu
+    outputs:
+      parameters:
+      - name: job-name
+        valueFrom:
+          jsonPath: '{.metadata.name}'
+    script:
+      image: bitnami/kubectl:latest
+      command: [sh]
+      source: |
+        GPU="{{inputs.parameters.gpu}}"
 
-      # Build GPU resources block if needed
-      GPU_RESOURCES=""
-      GPU_NODE_SELECTOR=""
-      if [ "$GPU" != "0" ]; then
-        GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
-        GPU_NODE_SELECTOR="nodeSelector:\n        node.opencloudhub.org/gpu: \"true\""
-      fi
+        # Build GPU resources block if needed
+        GPU_RESOURCES=""
+        GPU_NODE_SELECTOR=""
+        if [ "$GPU" != "0" ]; then
+          GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
+          GPU_NODE_SELECTOR="nodeSelector:\n        node.opencloudhub.org/gpu: \"true\""
+        fi
 
-      cat <<EOF | kubectl apply -f -
-      apiVersion: ray.io/v1
-      kind: RayJob
-      metadata:
-        generateName: {{inputs.parameters.model_name}}-training-
-        namespace: ai
-      spec:
-        entrypoint: {{inputs.parameters.training_entrypoint}} {{inputs.parameters.training_args}}
-        shutdownAfterJobFinishes: true
-        ttlSecondsAfterFinished: 300
-        rayClusterSpec:
-          rayVersion: "2.48.0"
-          headGroupSpec:
-            serviceType: ClusterIP
-            template:
-              spec:
-                $(echo -e "$GPU_NODE_SELECTOR")
-                containers:
-                - name: ray-head
-                  image: {{inputs.parameters.training_image}}
-                  resources:
-                    requests:
-                      cpu: "{{inputs.parameters.cpu}}"
-                      memory: "{{inputs.parameters.memory}}"
-                    limits:
-                      cpu: "{{inputs.parameters.cpu}}"
-                      memory: "{{inputs.parameters.memory}}"
-                      $([ "$GPU" != "0" ] && echo "$GPU_RESOURCES")
-                  env:
-                  - name: MLFLOW_TRACKING_URI
-                    value: http://mlflow.ai.svc.cluster.local:5000
-                  - name: MLFLOW_EXPERIMENT_NAME
-                    value: {{inputs.parameters.experiment_name}}
-                  - name: MLFLOW_REGISTERED_MODEL_NAME
-                    value: {{inputs.parameters.model_name}}
-          workerGroupSpecs:
-          - replicas: {{inputs.parameters.replicas}}
-            groupName: worker
-            template:
-              spec:
-                $(echo -e "$GPU_NODE_SELECTOR")
-                containers:
-                - name: ray-worker
-                  image: {{inputs.parameters.training_image}}
-                  resources:
-                    requests:
-                      cpu: "{{inputs.parameters.cpu}}"
-                      memory: "{{inputs.parameters.memory}}"
-                    limits:
-                      cpu: "{{inputs.parameters.cpu}}"
-                      memory: "{{inputs.parameters.memory}}"
-                      $([ "$GPU" != "0" ] && echo "$GPU_RESOURCES")
-                  env:
-                  - name: MLFLOW_TRACKING_URI
-                    value: http://mlflow.ai.svc.cluster.local:5000
-                  - name: MLFLOW_EXPERIMENT_NAME
-                    value: {{inputs.parameters.experiment_name}}
-                  - name: MLFLOW_REGISTERED_MODEL_NAME
-                    value: {{inputs.parameters.model_name}}
-      EOF
+        cat <<EOF | kubectl apply -f -
+        apiVersion: ray.io/v1
+        kind: RayJob
+        metadata:
+          generateName: {{inputs.parameters.model_name}}-training-
+          namespace: ai
+        spec:
+          entrypoint: {{inputs.parameters.training_entrypoint}} {{inputs.parameters.training_args}}
+          shutdownAfterJobFinishes: true
+          ttlSecondsAfterFinished: 300
+          rayClusterSpec:
+            rayVersion: "2.48.0"
+            headGroupSpec:
+              serviceType: ClusterIP
+              template:
+                spec:
+                  $(echo -e "$GPU_NODE_SELECTOR")
+                  containers:
+                  - name: ray-head
+                    image: {{inputs.parameters.training_image}}
+                    resources:
+                      requests:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                      limits:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                        $([ "$GPU" != "0" ] && echo "$GPU_RESOURCES")
+                    env:
+                    - name: MLFLOW_TRACKING_URI
+                      value: http://mlflow.ai.svc.cluster.local:5000
+                    - name: MLFLOW_EXPERIMENT_NAME
+                      value: {{inputs.parameters.experiment_name}}
+                    - name: MLFLOW_REGISTERED_MODEL_NAME
+                      value: {{inputs.parameters.model_name}}
+            workerGroupSpecs:
+            - replicas: {{inputs.parameters.replicas}}
+              groupName: worker
+              template:
+                spec:
+                  $(echo -e "$GPU_NODE_SELECTOR")
+                  containers:
+                  - name: ray-worker
+                    image: {{inputs.parameters.training_image}}
+                    resources:
+                      requests:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                      limits:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                        $([ "$GPU" != "0" ] && echo "$GPU_RESOURCES")
+                    env:
+                    - name: MLFLOW_TRACKING_URI
+                      value: http://mlflow.ai.svc.cluster.local:5000
+                    - name: MLFLOW_EXPERIMENT_NAME
+                      value: {{inputs.parameters.experiment_name}}
+                    - name: MLFLOW_REGISTERED_MODEL_NAME
+                      value: {{inputs.parameters.model_name}}
+        EOF
 
-      # Get the created job name
-      sleep 2
-      JOB_NAME=$(kubectl get rayjobs -n ai -l ray.io/cluster-name={{inputs.parameters.model_name}}-training --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}')
-      echo "$JOB_NAME" > /tmp/job-name.txt
+        # Get the created job name
+        sleep 2
+        JOB_NAME=$(kubectl get rayjobs -n ai -l ray.io/cluster-name={{inputs.parameters.model_name}}-training --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}')
+        echo "$JOB_NAME" > /tmp/job-name.txt
+
+    # outputs:
+    # parameters:
+    # - name: job-name
+    #   valueFrom:
+    #     path: /tmp/job-name.txt
 
   # # Wait for RayJob
   # - name: wait-ray-job
