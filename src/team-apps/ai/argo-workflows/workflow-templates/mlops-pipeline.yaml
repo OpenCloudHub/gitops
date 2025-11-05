@@ -294,7 +294,7 @@ spec:
                     - name: MLFLOW_EXPERIMENT_NAME
                       value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_REGISTERED_MODEL_NAME
-                      value: {{inputs.parameters.model_name}}
+                      value: "ci.{{inputs.parameters.model_name}}"
             workerGroupSpecs:
             - replicas: {{inputs.parameters.replicas}}
               groupName: worker
@@ -313,12 +313,12 @@ spec:
                         memory: "{{inputs.parameters.memory}}"
                         ${GPU_RESOURCES}
                     env:
-                    - name: MLFLOW_TRACKING_URI
-                      value: {{inputs.parameters.experiment_name}}
-                    - name: MLFLOW_EXPERIMENT_NAME
-                      value: {{inputs.parameters.experiment_name}}
-                    - name: MLFLOW_REGISTERED_MODEL_NAME
-                      value: {{inputs.parameters.model_name}}
+                      - name: MLFLOW_TRACKING_URI
+                        value: "{{inputs.parameters.mlflow_tracking_uri}}"
+                      - name: MLFLOW_EXPERIMENT_NAME
+                        value: "{{inputs.parameters.experiment_name}}"
+                      - name: MLFLOW_REGISTERED_MODEL_NAME
+                        value: "ci.{{inputs.parameters.model_name}}"
         EOF
 
         # ========================================
