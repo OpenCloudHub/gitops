@@ -157,7 +157,6 @@ spec:
 EOF
 ```
 
-c
 To see if it is working:
 
 ```bash

@@ -5,6 +5,3 @@ namespace: ai
 
 resources:
 - ml-complete-lifecycle.yaml
-- modules/training.yaml
-# - modules/comparison.yaml
-# - modules/production.yaml
