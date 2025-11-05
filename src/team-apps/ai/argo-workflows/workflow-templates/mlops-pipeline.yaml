@@ -90,7 +90,7 @@ spec:
             value: "{{workflow.parameters.higher_is_better}}"
           - name: threshold
             value: "{{workflow.parameters.comparison_threshold}}"
-          - name: mlflow_uri
+          - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
     # # Phase 4: Build staging image
@@ -404,7 +404,7 @@ spec:
       - name: metric
       - name: higher_is_better
       - name: threshold
-      - name: mlflow_uri
+      - name: mlflow_tracking_uri
     outputs:
       parameters:
       - name: ci_version
@@ -420,7 +420,7 @@ spec:
         from mlflow import MlflowClient
         import sys
 
-        client = MlflowClient("{{inputs.parameters.mlflow_uri}}")
+        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
         model_name = "{{inputs.parameters.model_name}}"
         metric_name = "{{inputs.parameters.metric}}"
         higher_is_better = "{{inputs.parameters.higher_is_better}}" == "true"
