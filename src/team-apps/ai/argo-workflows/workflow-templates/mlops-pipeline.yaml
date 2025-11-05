@@ -51,29 +51,29 @@ spec:
           - name: compute_type
             value: "{{workflow.parameters.compute_type}}"
 
-    # # Phase 2: Submit Ray job
-    # - - name: submit-training
-    #     template: submit-ray-job
-    #     arguments:
-    #       parameters:
-    #       - name: model_name
-    #         value: "{{workflow.parameters.model_name}}"
-    #       - name: experiment_name
-    #         value: "{{workflow.parameters.experiment_name}}"
-    #       - name: training_image
-    #         value: "{{workflow.parameters.training_image}}"
-    #       - name: training_entrypoint
-    #         value: "{{workflow.parameters.training_entrypoint}}"
-    #       - name: training_args
-    #         value: "{{workflow.parameters.training_args}}"
-    #       - name: cpu
-    #         value: "{{steps.map-compute.outputs.parameters.cpu}}"
-    #       - name: memory
-    #         value: "{{steps.map-compute.outputs.parameters.memory}}"
-    #       - name: replicas
-    #         value: "{{steps.map-compute.outputs.parameters.replicas}}"
-    #       - name: gpu
-    #         value: "{{steps.map-compute.outputs.parameters.gpu}}"
+    # Phase 2: Submit Ray job
+    - - name: submit-training
+        template: submit-ray-job
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: experiment_name
+            value: "{{workflow.parameters.experiment_name}}"
+          - name: training_image
+            value: "{{workflow.parameters.training_image}}"
+          - name: training_entrypoint
+            value: "{{workflow.parameters.training_entrypoint}}"
+          - name: training_args
+            value: "{{workflow.parameters.training_args}}"
+          - name: cpu
+            value: "{{steps.map-compute.outputs.parameters.cpu}}"
+          - name: memory
+            value: "{{steps.map-compute.outputs.parameters.memory}}"
+          - name: replicas
+            value: "{{steps.map-compute.outputs.parameters.replicas}}"
+          - name: gpu
+            value: "{{steps.map-compute.outputs.parameters.gpu}}"
 
     # # Phase 3: Wait for completion
     # - - name: wait-training
@@ -222,94 +222,96 @@ spec:
 
         echo "✅ Mapped {{inputs.parameters.compute_type}}"
 
-  # # Submit RayJob
-  # - name: submit-ray-job
-  #   inputs:
-  #     parameters:
-  #     - name: model_name
-  #     - name: experiment_name
-  #     - name: training_image
-  #     - name: training_entrypoint
-  #     - name: training_args
-  #     - name: cpu
-  #     - name: memory
-  #     - name: replicas
-  #     - name: gpu
-  #   outputs:
-  #     parameters:
-  #     - name: job-name
-  #       valueFrom:
-  #         jsonPath: '{.metadata.name}'
-  #   resource:
-  #     action: create
-  #     setOwnerReference: true
-  #     manifest: |
-  #       apiVersion: ray.io/v1
-  #       kind: RayJob
-  #       metadata:
-  #         generateName: {{inputs.parameters.model_name}}-training-
-  #         namespace: ai
-  #       spec:
-  #         entrypoint: {{inputs.parameters.training_entrypoint}} {{inputs.parameters.training_args}}
-  #         shutdownAfterJobFinishes: true
-  #         ttlSecondsAfterFinished: 300
-  #         rayClusterSpec:
-  #           rayVersion: "2.48.0"
-  #           headGroupSpec:
-  #             serviceType: ClusterIP
-  #             template:
-  #               spec:
-  #                 {{- if ne (toString (index . "inputs" "parameters" "gpu")) "0"}}
-  #                 nodeSelector:
-  #                   node.opencloudhub.org/gpu: "true"
-  #                 {{- end}}
-  #                 containers:
-  #                 - name: ray-head
-  #                   image: {{inputs.parameters.training_image}}
-  #                   resources:
-  #                     requests:
-  #                       cpu: "{{inputs.parameters.cpu}}"
-  #                       memory: "{{inputs.parameters.memory}}"
-  #                     limits:
-  #                       cpu: "{{inputs.parameters.cpu}}"
-  #                       memory: "{{inputs.parameters.memory}}"
-  #                       {{- if ne (toString (index . "inputs" "parameters" "gpu")) "0"}}
-  #                       nvidia.com/gpu: "{{inputs.parameters.gpu}}"
-  #                       {{- end}}
-  #                   env:
-  #                   - name: MLFLOW_TRACKING_URI
-  #                     value: http://mlflow.ai.svc.cluster.local:5000
-  #                   - name: MLFLOW_EXPERIMENT_NAME
-  #                     value: {{inputs.parameters.experiment_name}}
-  #                   - name: REGISTERED_MODEL_NAME
-  #                     value: {{inputs.parameters.model_name}}
-  #           workerGroupSpecs:
-  #           - replicas: {{inputs.parameters.replicas}}
-  #             groupName: worker
-  #             template:
-  #               spec:
-  #                 {{- if ne (toString (index . "inputs" "parameters" "gpu")) "0"}}
-  #                 nodeSelector:
-  #                   node.opencloudhub.org/gpu: "true"
-  #                 {{- end}}
-  #                 containers:
-  #                 - name: ray-worker
-  #                   image: {{inputs.parameters.training_image}}
-  #                   resources:
-  #                     requests:
-  #                       cpu: "{{inputs.parameters.cpu}}"
-  #                       memory: "{{inputs.parameters.memory}}"
-  #                     limits:
-  #                       cpu: "{{inputs.parameters.cpu}}"
-  #                       memory: "{{inputs.parameters.memory}}"
-  #                       {{- if ne (toString (index . "inputs" "parameters" "gpu")) "0"}}
-  #                       nvidia.com/gpu: "{{inputs.parameters.gpu}}"
-  #                       {{- end}}
-  #                   env:
-  #                   - name: MLFLOW_TRACKING_URI
-  #                     value: http://mlflow.ai.svc.cluster.local:5000
-  #                   - name: MLFLOW_EXPERIMENT_NAME
-  #                     value: {{inputs.parameters.experiment_name}}
+  # Submit RayJob
+  - name: submit-ray-job
+    inputs:
+      parameters:
+      - name: model_name
+      - name: experiment_name
+      - name: training_image
+      - name: training_entrypoint
+      - name: training_args
+      - name: cpu
+      - name: memory
+      - name: replicas
+      - name: gpu
+    outputs:
+      parameters:
+      - name: job-name
+        valueFrom:
+          jsonPath: '{.metadata.name}'
+    resource:
+      action: create
+      setOwnerReference: true
+      manifest: |
+        apiVersion: ray.io/v1
+        kind: RayJob
+        metadata:
+          generateName: {{inputs.parameters.model_name}}-training-
+          namespace: ai
+        spec:
+          entrypoint: {{inputs.parameters.training_entrypoint}} {{inputs.parameters.training_args}}
+          shutdownAfterJobFinishes: true
+          ttlSecondsAfterFinished: 300
+          rayClusterSpec:
+            rayVersion: "2.48.0"
+            headGroupSpec:
+              serviceType: ClusterIP
+              template:
+                spec:
+                  {{- if ne (toString (index . "inputs" "parameters" "gpu")) "0"}}
+                  nodeSelector:
+                    node.opencloudhub.org/gpu: "true"
+                  {{- end}}
+                  containers:
+                  - name: ray-head
+                    image: {{inputs.parameters.training_image}}
+                    resources:
+                      requests:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                      limits:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                        {{- if ne (toString (index . "inputs" "parameters" "gpu")) "0"}}
+                        nvidia.com/gpu: "{{inputs.parameters.gpu}}"
+                        {{- end}}
+                    env:
+                    - name: MLFLOW_TRACKING_URI
+                      value: http://mlflow.ai.svc.cluster.local:5000
+                    - name: MLFLOW_EXPERIMENT_NAME
+                      value: {{inputs.parameters.experiment_name}}
+                    - name: MLFLOW_REGISTERED_MODEL_NAME
+                      value: {{inputs.parameters.model_name}}
+            workerGroupSpecs:
+            - replicas: {{inputs.parameters.replicas}}
+              groupName: worker
+              template:
+                spec:
+                  {{- if ne (toString (index . "inputs" "parameters" "gpu")) "0"}}
+                  nodeSelector:
+                    node.opencloudhub.org/gpu: "true"
+                  {{- end}}
+                  containers:
+                  - name: ray-worker
+                    image: {{inputs.parameters.training_image}}
+                    resources:
+                      requests:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                      limits:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                        {{- if ne (toString (index . "inputs" "parameters" "gpu")) "0"}}
+                        nvidia.com/gpu: "{{inputs.parameters.gpu}}"
+                        {{- end}}
+                    env:
+                    - name: MLFLOW_TRACKING_URI
+                      value: http://mlflow.ai.svc.cluster.local:5000
+                    - name: MLFLOW_EXPERIMENT_NAME
+                      value: {{inputs.parameters.experiment_name}}
+                    - name: MLFLOW_REGISTERED_MODEL_NAME
+                      value: {{inputs.parameters.model_name}}
 
   # # Wait for RayJob
   # - name: wait-ray-job
