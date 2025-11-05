@@ -74,7 +74,8 @@ spec:
             value: "{{steps.map-compute.outputs.parameters.replicas}}"
           - name: gpu
             value: "{{steps.map-compute.outputs.parameters.gpu}}"
-
+          - name: mlflow_tracking_uri
+            value: "{{workflow.parameters.mlflow_tracking_uri}}"
     # # Phase 3: Wait for completion
     # - - name: wait-training
     #     template: wait-ray-job
@@ -235,6 +236,7 @@ spec:
       - name: memory
       - name: replicas
       - name: gpu
+      - name: mlflow_tracking_uri
     outputs:
       parameters:
       - name: job-name
@@ -295,7 +297,7 @@ spec:
                         ${GPU_RESOURCES}
                     env:
                     - name: MLFLOW_TRACKING_URI
-                      value: http://mlflow.ai.svc.cluster.local:5000
+                      value: {{inputs.parameters.mlflow_tracking_uri}}
                     - name: MLFLOW_EXPERIMENT_NAME
                       value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_REGISTERED_MODEL_NAME
@@ -319,27 +321,62 @@ spec:
                         ${GPU_RESOURCES}
                     env:
                     - name: MLFLOW_TRACKING_URI
-                      value: http://mlflow.ai.svc.cluster.local:5000
+                      value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_EXPERIMENT_NAME
                       value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_REGISTERED_MODEL_NAME
                       value: {{inputs.parameters.model_name}}
         EOF
 
-        # Wait a moment for the resource to be created
+        echo "⏳ Waiting for RayJob to be created..."
         sleep 3
 
-        # Get the created job name using our unique label
         JOB_NAME=$(kubectl get rayjobs -n ai -l workflow-run="${RUN_LABEL}" -o jsonpath='{.items[0].metadata.name}')
 
         if [ -z "$JOB_NAME" ]; then
-          echo "ERROR: Failed to retrieve RayJob name"
-          kubectl get rayjobs -n ai -l workflow-run="${RUN_LABEL}"
+          echo "❌ ERROR: Failed to retrieve RayJob name"
           exit 1
         fi
 
         echo "✅ Created RayJob: $JOB_NAME"
         echo "$JOB_NAME" > /tmp/job-name.txt
+
+        echo "⏳ Waiting for Ray job submission..."
+        sleep 5
+
+        RAY_JOB_ID=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobId}')
+        HEAD_SVC=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.rayClusterName}')-head-svc
+
+        if [ -z "$RAY_JOB_ID" ]; then
+          echo "⏳ Ray job not yet submitted, waiting longer..."
+          sleep 10
+          RAY_JOB_ID=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobId}')
+        fi
+
+        if [ -z "$RAY_JOB_ID" ]; then
+          echo "❌ ERROR: Failed to get Ray job ID after waiting"
+          echo "RayJob status:"
+          kubectl get rayjob -n ai $JOB_NAME -o yaml
+          exit 1
+        fi
+
+        echo ""
+        echo "================================"
+        echo "📋 Ray Job ID: $RAY_JOB_ID"
+        echo "🎯 Model: {{inputs.parameters.model_name}}"
+        echo "🔬 Experiment: {{inputs.parameters.experiment_name}}"
+        echo "================================"
+        echo ""
+        echo "🔍 Streaming training logs..."
+        echo ""
+
+        export RAY_ADDRESS="http://${HEAD_SVC}.ai.svc.cluster.local:8265"
+        ray job logs -f $RAY_JOB_ID || true
+
+        echo ""
+        echo "================================"
+        echo "✅ Training completed"
+        echo "================================"
 
     # outputs:
     # parameters:
