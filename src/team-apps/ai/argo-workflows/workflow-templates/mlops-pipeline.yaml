@@ -338,28 +338,29 @@ spec:
         echo "$JOB_NAME" > /tmp/job-name.txt
 
         # ========================================
-        # Wait for Ray cluster and stream logs
+        # Wait for job submitter pod and stream logs
         # ========================================
-        echo "⏳ Waiting for Ray cluster..."
+        echo "⏳ Waiting for job submitter..."
         sleep 10
 
-        CLUSTER_NAME=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.rayClusterName}')
+        # The job submitter pod has the rayjob name in it
+        kubectl wait --for=condition=ready pod -n ai -l ray.io/is-ray-node!=yes,batchv1.job-name=${JOB_NAME} --timeout=300s 2>/dev/null || true
 
-        if [ -z "$CLUSTER_NAME" ]; then
-          echo "❌ Ray cluster not ready"
-          exit 1
+        SUBMITTER_POD=$(kubectl get pods -n ai --selector=batchv1.job-name=${JOB_NAME} -o jsonpath='{.items[0].metadata.name}')
+
+        if [ -z "$SUBMITTER_POD" ]; then
+          echo "⚠️  Job submitter not found yet, waiting..."
+          sleep 10
+          SUBMITTER_POD=$(kubectl get pods -n ai --selector=batchv1.job-name=${JOB_NAME} -o jsonpath='{.items[0].metadata.name}')
         fi
 
-        echo "✅ Cluster: $CLUSTER_NAME"
+        echo "✅ Submitter pod: $SUBMITTER_POD"
         echo ""
-        echo "🔍 Streaming logs..."
+        echo "🔍 Streaming training logs..."
         echo "================================"
 
-        # Wait for head pod and stream logs
-        kubectl wait --for=condition=ready pod -n ai -l ray.io/cluster=$CLUSTER_NAME,ray.io/node-type=head --timeout=300s
-        HEAD_POD=$(kubectl get pods -n ai -l ray.io/cluster=$CLUSTER_NAME,ray.io/node-type=head -o jsonpath='{.items[0].metadata.name}')
-
-        kubectl logs -n ai $HEAD_POD -c ray-head -f &
+        # Stream logs from job submitter
+        kubectl logs -n ai $SUBMITTER_POD -f &
         LOG_PID=$!
 
         # ========================================
