@@ -77,21 +77,21 @@ spec:
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
-    # # Phase 3: Compare and promote to staging
-    # - - name: compare-promote
-    #     template: compare-and-promote
-    #     arguments:
-    #       parameters:
-    #       - name: model_name
-    #         value: "{{workflow.parameters.model_name}}"
-    #       - name: metric
-    #         value: "{{workflow.parameters.comparison_metric}}"
-    #       - name: higher_is_better
-    #         value: "{{workflow.parameters.higher_is_better}}"
-    #       - name: threshold
-    #         value: "{{workflow.parameters.comparison_threshold}}"
-    #       - name: mlflow_uri
-    #         value: "{{workflow.parameters.mlflow_tracking_uri}}"
+    # Phase 3: Compare and promote to staging
+    - - name: compare-promote
+        template: compare-and-promote
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: metric
+            value: "{{workflow.parameters.comparison_metric}}"
+          - name: higher_is_better
+            value: "{{workflow.parameters.higher_is_better}}"
+          - name: threshold
+            value: "{{workflow.parameters.comparison_threshold}}"
+          - name: mlflow_uri
+            value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
     # # Phase 4: Build staging image
     # - - name: build-staging
@@ -396,114 +396,114 @@ spec:
           sleep 10
         done
 
-  # # Compare and promote to staging
-  # - name: compare-and-promote
-  #   inputs:
-  #     parameters:
-  #     - name: model_name
-  #     - name: metric
-  #     - name: higher_is_better
-  #     - name: threshold
-  #     - name: mlflow_uri
-  #   outputs:
-  #     parameters:
-  #     - name: ci_version
-  #       valueFrom:
-  #         path: /tmp/ci_version.txt
-  #     - name: staging_version
-  #       valueFrom:
-  #         path: /tmp/staging_version.txt
-  #   script:
-  #     image: ghcr.io/mlflow/mlflow:v2.18.0
-  #     command: [python]
-  #     source: |
-  #       from mlflow import MlflowClient
-  #       import sys
+  # Compare and promote to staging
+  - name: compare-and-promote
+    inputs:
+      parameters:
+      - name: model_name
+      - name: metric
+      - name: higher_is_better
+      - name: threshold
+      - name: mlflow_uri
+    outputs:
+      parameters:
+      - name: ci_version
+        valueFrom:
+          path: /tmp/ci_version.txt
+      - name: staging_version
+        valueFrom:
+          path: /tmp/staging_version.txt
+    script:
+      image: ghcr.io/mlflow/mlflow:v2.18.0
+      command: [python]
+      source: |
+        from mlflow import MlflowClient
+        import sys
 
-  #       client = MlflowClient("{{inputs.parameters.mlflow_uri}}")
-  #       model_name = "{{inputs.parameters.model_name}}"
-  #       metric_name = "{{inputs.parameters.metric}}"
-  #       higher_is_better = "{{inputs.parameters.higher_is_better}}" == "true"
-  #       threshold = float("{{inputs.parameters.threshold}}")
+        client = MlflowClient("{{inputs.parameters.mlflow_uri}}")
+        model_name = "{{inputs.parameters.model_name}}"
+        metric_name = "{{inputs.parameters.metric}}"
+        higher_is_better = "{{inputs.parameters.higher_is_better}}" == "true"
+        threshold = float("{{inputs.parameters.threshold}}")
 
-  #       print(f"🔍 Comparing {model_name}")
-  #       print(f"   Metric: {metric_name} ({'higher' if higher_is_better else 'lower'} is better)")
-  #       print(f"   Threshold: {threshold}")
+        print(f"🔍 Comparing {model_name}")
+        print(f"   Metric: {metric_name} ({'higher' if higher_is_better else 'lower'} is better)")
+        print(f"   Threshold: {threshold}")
 
-  #       # Get latest CI version
-  #       print(f"\n📊 Getting latest CI model...")
-  #       ci_versions = client.search_model_versions(f"name='ci.{model_name}'")
-  #       if not ci_versions:
-  #           print(f"❌ No CI versions found for ci.{model_name}")
-  #           sys.exit(1)
+        # Get latest CI version
+        print(f"\n📊 Getting latest CI model...")
+        ci_versions = client.search_model_versions(f"name='ci.{model_name}'")
+        if not ci_versions:
+            print(f"❌ No CI versions found for ci.{model_name}")
+            sys.exit(1)
 
-  #       latest_ci = sorted(ci_versions, key=lambda x: x.creation_timestamp, reverse=True)[0]
-  #       ci_version = latest_ci.version
-  #       print(f"   Latest CI: v{ci_version}")
+        latest_ci = sorted(ci_versions, key=lambda x: x.creation_timestamp, reverse=True)[0]
+        ci_version = latest_ci.version
+        print(f"   Latest CI: v{ci_version}")
 
-  #       # Get CI metrics
-  #       ci_run = client.get_run(latest_ci.run_id)
-  #       if metric_name not in ci_run.data.metrics:
-  #           print(f"❌ Metric '{metric_name}' not found in CI model")
-  #           print(f"   Available: {list(ci_run.data.metrics.keys())}")
-  #           sys.exit(1)
+        # Get CI metrics
+        ci_run = client.get_run(latest_ci.run_id)
+        if metric_name not in ci_run.data.metrics:
+            print(f"❌ Metric '{metric_name}' not found in CI model")
+            print(f"   Available: {list(ci_run.data.metrics.keys())}")
+            sys.exit(1)
 
-  #       ci_value = ci_run.data.metrics[metric_name]
-  #       print(f"   CI {metric_name}: {ci_value}")
+        ci_value = ci_run.data.metrics[metric_name]
+        print(f"   CI {metric_name}: {ci_value}")
 
-  #       # Try to get champion
-  #       print(f"\n🏆 Looking for champion...")
-  #       should_promote = False
-  #       try:
-  #           champion = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
-  #           print(f"   Found champion: v{champion.version}")
+        # Try to get champion
+        print(f"\n🏆 Looking for champion...")
+        should_promote = False
+        try:
+            champion = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
+            print(f"   Found champion: v{champion.version}")
 
-  #           champ_run = client.get_run(champion.run_id)
-  #           if metric_name not in champ_run.data.metrics:
-  #               print(f"   Champion missing {metric_name}, promoting CI")
-  #               should_promote = True
-  #           else:
-  #               champ_value = champ_run.data.metrics[metric_name]
-  #               print(f"   Champion {metric_name}: {champ_value}")
+            champ_run = client.get_run(champion.run_id)
+            if metric_name not in champ_run.data.metrics:
+                print(f"   Champion missing {metric_name}, promoting CI")
+                should_promote = True
+            else:
+                champ_value = champ_run.data.metrics[metric_name]
+                print(f"   Champion {metric_name}: {champ_value}")
 
-  #               # Compare
-  #               if higher_is_better:
-  #                   improvement = ci_value - champ_value
-  #               else:
-  #                   improvement = champ_value - ci_value
+                # Compare
+                if higher_is_better:
+                    improvement = ci_value - champ_value
+                else:
+                    improvement = champ_value - ci_value
 
-  #               print(f"   Improvement: {improvement:.6f}")
+                print(f"   Improvement: {improvement:.6f}")
 
-  #               if improvement >= threshold:
-  #                   print(f"✅ CI is better! ({improvement:.6f} >= {threshold:.6f})")
-  #                   should_promote = True
-  #               else:
-  #                   print(f"❌ Not enough improvement ({improvement:.6f} < {threshold:.6f})")
-  #                   sys.exit(1)
-  #       except Exception as e:
-  #           print(f"   No champion found: {e}")
-  #           print("   Promoting first model!")
-  #           should_promote = True
+                if improvement >= threshold:
+                    print(f"✅ CI is better! ({improvement:.6f} >= {threshold:.6f})")
+                    should_promote = True
+                else:
+                    print(f"❌ Not enough improvement ({improvement:.6f} < {threshold:.6f})")
+                    sys.exit(1)
+        except Exception as e:
+            print(f"   No champion found: {e}")
+            print("   Promoting first model!")
+            should_promote = True
 
-  #       if not should_promote:
-  #           sys.exit(1)
+        if not should_promote:
+            sys.exit(1)
 
-  #       # Copy to staging
-  #       print(f"\n📦 Copying ci.{model_name}/v{ci_version} → staging.{model_name}")
-  #       staging_mv = client.copy_model_version(
-  #           f"models:/ci.{model_name}/{ci_version}",
-  #           f"staging.{model_name}"
-  #       )
+        # Copy to staging
+        print(f"\n📦 Copying ci.{model_name}/v{ci_version} → staging.{model_name}")
+        staging_mv = client.copy_model_version(
+            f"models:/ci.{model_name}/{ci_version}",
+            f"staging.{model_name}"
+        )
 
-  #       print(f"✅ Created staging.{model_name}/v{staging_mv.version}")
+        print(f"✅ Created staging.{model_name}/v{staging_mv.version}")
 
-  #       # Write outputs
-  #       with open("/tmp/ci_version.txt", "w") as f:
-  #           f.write(ci_version)
-  #       with open("/tmp/staging_version.txt", "w") as f:
-  #           f.write(staging_mv.version)
+        # Write outputs
+        with open("/tmp/ci_version.txt", "w") as f:
+            f.write(ci_version)
+        with open("/tmp/staging_version.txt", "w") as f:
+            f.write(staging_mv.version)
 
-  #       print("✅ Comparison complete!")
+        print("✅ Comparison complete!")
 
   # # Build staging image with BuildKit
   # - name: build-staging-image
