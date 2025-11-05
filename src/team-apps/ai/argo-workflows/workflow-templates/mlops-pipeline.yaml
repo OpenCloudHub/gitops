@@ -338,20 +338,28 @@ spec:
         echo "$JOB_NAME" > /tmp/job-name.txt
 
         # ========================================
-        # Wait for job submitter pod and stream logs
+        # Wait for job submitter pod
         # ========================================
-        echo "⏳ Waiting for job submitter..."
-        sleep 10
+        echo "⏳ Waiting for job submitter pod..."
 
-        # The job submitter pod has the rayjob name in it
-        kubectl wait --for=condition=ready pod -n ai -l ray.io/is-ray-node!=yes,batchv1.job-name=${JOB_NAME} --timeout=300s 2>/dev/null || true
+        MAX_WAIT=60
+        ELAPSED=0
+        SUBMITTER_POD=""
 
-        SUBMITTER_POD=$(kubectl get pods -n ai --selector=batchv1.job-name=${JOB_NAME} -o jsonpath='{.items[0].metadata.name}')
+        while [ $ELAPSED -lt $MAX_WAIT ]; do
+          SUBMITTER_POD=$(kubectl get pods -n ai -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
+
+          if [ -n "$SUBMITTER_POD" ]; then
+            break
+          fi
+
+          sleep 5
+          ELAPSED=$((ELAPSED + 5))
+        done
 
         if [ -z "$SUBMITTER_POD" ]; then
-          echo "⚠️  Job submitter not found yet, waiting..."
-          sleep 10
-          SUBMITTER_POD=$(kubectl get pods -n ai --selector=batchv1.job-name=${JOB_NAME} -o jsonpath='{.items[0].metadata.name}')
+          echo "❌ Job submitter pod not found after ${MAX_WAIT}s"
+          exit 1
         fi
 
         echo "✅ Submitter pod: $SUBMITTER_POD"
