@@ -38,7 +38,7 @@ spec:
     - name: mlflow_tracking_uri
       value: "http://mlflow.ai.svc.cluster.local:80"
     - name: docker_registry
-      value: "docker.io/yourusername"
+      value: "docker.io/opencloudhuborg"
 
   entrypoint: main
 
@@ -106,7 +106,7 @@ spec:
             value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
           - name: registry
             value: "{{workflow.parameters.docker_registry}}"
-          - repo_name:
+          - name: repo_name
             value: "{{workflow.parameters.repo_name}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
@@ -119,31 +119,31 @@ spec:
           - name: image_tag
             value: "{{steps.build-staging.outputs.parameters.staging_image_tag}}"
 
-    # # Phase 6: Approval
-    # - - name: approval
-    #     suspend:
-    #       duration: "48h"
-    #     when: "{{workflow.parameters.approval_mode}} == manual"
+    # Phase 6: Approval
+    - - name: approval
+        suspend:
+          duration: "48h"
+        when: "{{workflow.parameters.approval_mode}} == manual"
 
-    # # Phase 7: Promote to production
-    # - - name: promote-production
-    #     template: promote-to-production
-    #     arguments:
-    #       parameters:
-    #       - name: model_name
-    #         value: "{{workflow.parameters.model_name}}"
-    #       - name: staging_version
-    #         value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
-    #       - name: mlflow_uri
-    #         value: "{{workflow.parameters.mlflow_tracking_uri}}"
+    # Phase 7: Promote to production
+    - - name: promote-production
+        template: promote-to-production
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: staging_version
+            value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
+          - name: mlflow_uri
+            value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
-    # # Phase 8: Retag image
-    # - - name: retag-production
-    #     template: retag-image
-    #     arguments:
-    #       parameters:
-    #       - name: staging_image
-    #         value: "{{steps.build-staging.outputs.parameters.staging_image_tag}}"
+    # Phase 8: Retag image
+    - - name: retag-production
+        template: retag-image
+        arguments:
+          parameters:
+          - name: staging_image
+            value: "{{steps.build-staging.outputs.parameters.staging_image_tag}}"
 
   # ========================================================================
   # TEMPLATE DEFINITIONS
@@ -594,78 +594,78 @@ spec:
         echo "🧪 Testing: {{inputs.parameters.image_tag}}"
         echo "✅ Tests passed (dummy for POC)"
 
-  # # Promote to production
-  # - name: promote-to-production
-  #   inputs:
-  #     parameters:
-  #     - name: model_name
-  #     - name: staging_version
-  #     - name: mlflow_uri
-  #   outputs:
-  #     parameters:
-  #     - name: prod_version
-  #       valueFrom:
-  #         path: /tmp/prod_version.txt
-  #   script:
-  #     image: ghcr.io/mlflow/mlflow:v2.18.0
-  #     command: [python]
-  #     source: |
-  #       from mlflow import MlflowClient
+  # Promote to production
+  - name: promote-to-production
+    inputs:
+      parameters:
+      - name: model_name
+      - name: staging_version
+      - name: mlflow_uri
+    outputs:
+      parameters:
+      - name: prod_version
+        valueFrom:
+          path: /tmp/prod_version.txt
+    script:
+      image: ghcr.io/mlflow/mlflow:v2.18.0
+      command: [python]
+      source: |
+        from mlflow import MlflowClient
 
-  #       client = MlflowClient("{{inputs.parameters.mlflow_uri}}")
-  #       model_name = "{{inputs.parameters.model_name}}"
-  #       staging_version = "{{inputs.parameters.staging_version}}"
+        client = MlflowClient("{{inputs.parameters.mlflow_uri}}")
+        model_name = "{{inputs.parameters.model_name}}"
+        staging_version = "{{inputs.parameters.staging_version}}"
 
-  #       print(f"🚀 Promoting to production: {model_name}")
+        print(f"🚀 Promoting to production: {model_name}")
 
-  #       # Copy staging → prod
-  #       print(f"📦 Copying staging.{model_name}/v{staging_version} → prod.{model_name}")
-  #       prod_mv = client.copy_model_version(
-  #           f"models:/staging.{model_name}/{staging_version}",
-  #           f"prod.{model_name}"
-  #       )
+        # Copy staging → prod
+        print(f"📦 Copying staging.{model_name}/v{staging_version} → prod.{model_name}")
+        prod_mv = client.copy_model_version(
+            f"models:/staging.{model_name}/{staging_version}",
+            f"prod.{model_name}"
+        )
 
-  #       print(f"✅ Created prod.{model_name}/v{prod_mv.version}")
+        print(f"✅ Created prod.{model_name}/v{prod_mv.version}")
 
-  #       # Update aliases
-  #       try:
-  #           old_champ = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
-  #           print(f"   Moving old champion v{old_champ.version} → @previous")
-  #           client.set_registered_model_alias(f"prod.{model_name}", "previous", old_champ.version)
-  #       except:
-  #           print("   No previous champion to archive")
+        # Update aliases
+        try:
+            old_champ = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
+            print(f"   Moving old champion v{old_champ.version} → @previous")
+            client.set_registered_model_alias(f"prod.{model_name}", "previous", old_champ.version)
+        except:
+            print("   No previous champion to archive")
 
-  #       # Set new champion
-  #       client.set_registered_model_alias(f"prod.{model_name}", "champion", prod_mv.version)
-  #       print(f"✅ Set prod.{model_name}@champion → v{prod_mv.version}")
+        # Set new champion
+        client.set_registered_model_alias(f"prod.{model_name}", "champion", prod_mv.version)
+        print(f"✅ Set prod.{model_name}@champion → v{prod_mv.version}")
 
-  #       with open("/tmp/prod_version.txt", "w") as f:
-  #           f.write(prod_mv.version)
+        with open("/tmp/prod_version.txt", "w") as f:
+            f.write(prod_mv.version)
 
-  #       print("✅ Production promotion complete!")
+        print("✅ Production promotion complete!")
 
-  # # Retag image to production
-  # - name: retag-image
-  #   inputs:
-  #     parameters:
-  #     - name: staging_image
-  #   outputs:
-  #     parameters:
-  #     - name: prod_image
-  #       valueFrom:
-  #         path: /tmp/prod_image.txt
-  #   script:
-  #     image: gcr.io/go-containerregistry/crane:latest
-  #     command: [sh]
-  #     source: |
-  #       STAGING="{{inputs.parameters.staging_image}}"
-  #       PROD="${STAGING%-staging}"
+  # Retag image to production
+  - name: retag-image
+    inputs:
+      parameters:
+      - name: staging_image
+    outputs:
+      parameters:
+      - name: prod_image
+        valueFrom:
+          path: /tmp/prod_image.txt
+    script:
+      image: gcr.io/go-containerregistry/crane:latest
+      command: [sh]
+      source: |
+        STAGING="{{inputs.parameters.staging_image}}"
+        PROD="${STAGING%-staging}"
 
-  #       echo "🏷️  Retagging image:"
-  #       echo "   From: $STAGING"
-  #       echo "   To:   $PROD"
+        echo "🏷️  Retagging image:"
+        echo "   From: $STAGING"
+        echo "   To:   $PROD"
 
-  #       crane copy "$STAGING" "$PROD"
+        crane copy "$STAGING" "$PROD"
 
-  #       echo "$PROD" > /tmp/prod_image.txt
-  #       echo "✅ Production image ready!"
+        echo "$PROD" > /tmp/prod_image.txt
+        echo "✅ Production image ready!"

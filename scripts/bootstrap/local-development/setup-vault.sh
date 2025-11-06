@@ -111,8 +111,8 @@ vault_setup_load_env_vars() {
     "VAULT_ROOT_TOKEN"
     "GITOPS_REPO_URL"
     "ARGO_WORKFLOWS_GITHUB_SERVICE_ACCOUNT_TOKEN"
-    "DOCKER_REGISTRY_URL"
-    "DOCKER_REGISTRY_TOKEN"
+    "DOCKERHUB_USERNAME"
+    "DOCKERHUB_TOKEN"
     "KEYCLOAK_ADMIN_PASSWORD"
     "KEYCLOAK_SMTP_INTERNAL_HOST"
     "KEYCLOAK_SMTP_INTERNAL_PORT"
@@ -235,7 +235,7 @@ vault_setup_create_secrets() {
   vault_cmd kv put kv/platform/gitops/argo-workflows/github-service-account-token \
     token="$ARGO_WORKFLOWS_GITHUB_SERVICE_ACCOUNT_TOKEN"
 
-  vault kv put kv/platform/docker/registry \
+  vault_cmd kv put kv/platform/docker/registry \
     username="$DOCKERHUB_USERNAME" \
     password="$DOCKERHUB_TOKEN"
 
