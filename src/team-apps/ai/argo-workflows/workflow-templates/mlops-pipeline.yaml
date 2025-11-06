@@ -543,6 +543,8 @@ spec:
     - name: docker-config
       secret:
         secretName: dockerhub-secret
+    - name: work
+      emptyDir: {}  # Use emptyDir instead of PVC
     container:
       image: moby/buildkit:v0.15.0
       volumeMounts:
@@ -585,14 +587,7 @@ spec:
           --output type=image,name=$IMAGE_TAG,push=true
 
         echo "✅ Serving image built and pushed: $IMAGE_TAG"
-    volumeClaimTemplates:
-      - metadata:
-          name: work
-        spec:
-          accessModes: ["ReadWriteOnce"]
-          resources:
-            requests:
-              storage: 2Gi
+
 
   # Test staging
   - name: test-staging
