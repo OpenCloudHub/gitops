@@ -119,13 +119,35 @@ spec:
           - name: image_tag
             value: "{{steps.build-staging.outputs.parameters.staging_image_tag}}"
 
-    # Phase 6: Approval
+    # Phase 6: Approval gate with timeout
     - - name: approval
         suspend:
-          duration: "48h"
+          duration: "48h"  # Auto-resume after 48h with default "NO"
+        inputs:
+          parameters:
+          - name: approve
+            description: "Approve promotion to production?"
+            default: "NO"
+            enum:
+            - "YES"
+            - "NO"
+        outputs:
+          parameters:
+          - name: approve
+            valueFrom:
+              supplied: {}
         when: "{{workflow.parameters.approval_mode}} == manual"
 
-    # Phase 7: Promote to production
+    # Phase 7: Check approval and fail if not approved
+    - - name: check-approval
+        template: check-approval-status
+        arguments:
+          parameters:
+          - name: approval_decision
+            value: "{{steps.approval.outputs.parameters.approve}}"
+        when: "{{workflow.parameters.approval_mode}} == manual"
+
+    # Phase 8: Promote to production (only runs if approved OR automatic)
     - - name: promote-production
         template: promote-to-production
         arguments:
@@ -134,16 +156,20 @@ spec:
             value: "{{workflow.parameters.model_name}}"
           - name: staging_version
             value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
-          - name: mlflow_uri
+          - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
+        when: "{{workflow.parameters.approval_mode}} == automatic || ({{workflow.parameters.approval_mode}} == manual && '{{steps.approval.outputs.parameters.approve}}' == 'YES')"
 
-    # Phase 8: Retag image
+    # Phase 9: Retag image (only runs if we promoted)
     - - name: retag-production
         template: retag-image
         arguments:
           parameters:
           - name: staging_image
             value: "{{steps.build-staging.outputs.parameters.staging_image_tag}}"
+          - name: registry
+            value: "{{workflow.parameters.docker_registry}}"
+        when: "{{workflow.parameters.approval_mode}} == automatic || ({{workflow.parameters.approval_mode}} == manual && '{{steps.approval.outputs.parameters.approve}}' == 'YES')"
 
   # ========================================================================
   # TEMPLATE DEFINITIONS
@@ -594,6 +620,38 @@ spec:
         echo "🧪 Testing: {{inputs.parameters.image_tag}}"
         echo "✅ Tests passed (dummy for POC)"
 
+  - name: check-approval-status
+    inputs:
+      parameters:
+      - name: approval_decision
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        echo "================================"
+        echo "Checking approval decision..."
+        echo "Decision: {{inputs.parameters.approval_decision}}"
+        echo "================================"
+
+        if [ "{{inputs.parameters.approval_decision}}" != "YES" ]; then
+          echo ""
+          echo "❌ WORKFLOW FAILED: Approval denied or timed out"
+          echo ""
+          echo "The staging model was not approved for production."
+          echo "Possible reasons:"
+          echo "  - Manual rejection (user selected NO)"
+          echo "  - Timeout (no response within 48 hours)"
+          echo ""
+          echo "The workflow will now fail."
+          echo "================================"
+          exit 1
+        fi
+
+        echo ""
+        echo "✅ Approval granted - proceeding to production"
+        echo "================================"
+        exit 0
+
   # Promote to production
   - name: promote-to-production
     inputs:
@@ -649,23 +707,57 @@ spec:
     inputs:
       parameters:
       - name: staging_image
+      - name: registry
     outputs:
       parameters:
       - name: prod_image
         valueFrom:
           path: /tmp/prod_image.txt
-    script:
+      - name: prod_image_latest
+        valueFrom:
+          path: /tmp/prod_image_latest.txt
+    volumes:
+    - name: docker-config
+      secret:
+        secretName: dockerhub-secret
+    container:
       image: gcr.io/go-containerregistry/crane:latest
+      volumeMounts:
+      - name: docker-config
+        mountPath: /.docker
+        readOnly: true
+      env:
+      - name: DOCKER_CONFIG
+        value: /.docker
       command: [sh]
       source: |
+        set -e
+
         STAGING="{{inputs.parameters.staging_image}}"
-        PROD="${STAGING%-staging}"
+        # Remove -staging, add -prod
+        BASE="${STAGING%-staging}"
+        PROD_VERSIONED="${BASE}-prod"
 
-        echo "🏷️  Retagging image:"
-        echo "   From: $STAGING"
-        echo "   To:   $PROD"
+        # Extract model name for latest tag
+        # From: opencloudhuborg/wine-classifier-serving:model-v1-abc123-staging
+        # To:   opencloudhuborg/wine-classifier-serving:prod-latest
+        REGISTRY_AND_IMAGE="${STAGING%:*}"  # opencloudhuborg/wine-classifier-serving
+        PROD_LATEST="${REGISTRY_AND_IMAGE}:prod-latest"
 
-        crane copy "$STAGING" "$PROD"
+        echo "🏷️  Retagging image with multiple tags:"
+        echo "   From:     $STAGING"
+        echo "   To (ver): $PROD_VERSIONED"
+        echo "   To (lat): $PROD_LATEST"
 
-        echo "$PROD" > /tmp/prod_image.txt
-        echo "✅ Production image ready!"
+        # Copy to versioned prod tag
+        crane copy "$STAGING" "$PROD_VERSIONED"
+
+        # Also tag as prod-latest
+        crane copy "$STAGING" "$PROD_LATEST"
+
+        echo "$PROD_VERSIONED" > /tmp/prod_image.txt
+        echo "$PROD_LATEST" > /tmp/prod_image_latest.txt
+
+        echo "✅ Production images ready!"
+        echo "   Versioned: $PROD_VERSIONED"
+        echo "   Latest:    $PROD_LATEST"
