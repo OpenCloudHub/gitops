@@ -71,6 +71,8 @@
 
 # TODO: follow issues with fedora and nvkind: https://github.com/NVIDIA/nvkind/issues/57
 
+# TODO: make argo workflow run in different namespace than ai team to isolate rights and secrets etc
+
 <h2 id="getting-started">🚀 Getting Started</h2>
 
 1. Clone this repository and cd into the directory:

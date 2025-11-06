@@ -8,6 +8,8 @@ spec:
 
   arguments:
     parameters:
+    - name: repo_name
+      description: "Name of the GitHub repo to build the serving image from"
     - name: model_name
       description: "Model name (e.g., wine-classifier)"
     - name: experiment_name
@@ -93,27 +95,29 @@ spec:
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
-    # # Phase 4: Build staging image
-    # - - name: build-staging
-    #     template: build-staging-image
-    #     arguments:
-    #       parameters:
-    #       - name: model_name
-    #         value: "{{workflow.parameters.model_name}}"
-    #       - name: staging_version
-    #         value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
-    #       - name: registry
-    #         value: "{{workflow.parameters.docker_registry}}"
-    #       - name: mlflow_uri
-    #         value: "{{workflow.parameters.mlflow_tracking_uri}}"
+    # Phase 4: Build staging image
+    - - name: build-staging
+        template: build-staging-image
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: staging_version
+            value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
+          - name: registry
+            value: "{{workflow.parameters.docker_registry}}"
+          - repo_name:
+            value: "{{workflow.parameters.repo_name}}"
+          - name: mlflow_tracking_uri
+            value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
-    # # Phase 5: Test staging
-    # - - name: test-staging
-    #     template: test-staging
-    #     arguments:
-    #       parameters:
-    #       - name: image_tag
-    #         value: "{{steps.build-staging.outputs.parameters.staging_image_tag}}"
+    # Phase 5: Test staging
+    - - name: test-staging
+        template: test-staging
+        arguments:
+          parameters:
+          - name: image_tag
+            value: "{{steps.build-staging.outputs.parameters.staging_image_tag}}"
 
     # # Phase 6: Approval
     # - - name: approval
@@ -486,6 +490,7 @@ spec:
             should_promote = True
 
         if not should_promote:
+            # TODO could send notification here or like tag the staging image or something
             sys.exit(1)
 
         # Copy to staging
@@ -505,94 +510,89 @@ spec:
 
         print("✅ Comparison complete!")
 
-  # # Build staging image with BuildKit
-  # - name: build-staging-image
-  #   inputs:
-  #     parameters:
-  #     - name: model_name
-  #     - name: staging_version
-  #     - name: registry
-  #     - name: mlflow_uri
-  #     artifacts:
-  #     - name: repo
-  #       path: /work
-  #       git:
-  #         repo: https://github.com/opencloudhub/ai-ml-{{inputs.parameters.model_name}}.git
-  #         revision: main
-  #   outputs:
-  #     parameters:
-  #     - name: staging_image_tag
-  #       valueFrom:
-  #         path: /work/image_tag.txt
-  #     - name: git_sha
-  #       valueFrom:
-  #         path: /work/git_sha.txt
-  #   volumes:
-  #   - name: docker-config
-  #     secret:
-  #       secretName: docker-secret
-  #   container:
-  #     image: moby/buildkit:v0.9.3-rootless
-  #     readinessProbe:
-  #       exec:
-  #         command: [sh, -c, "buildctl debug workers"]
-  #     volumeMounts:
-  #     - name: work
-  #       mountPath: /work
-  #     - name: docker-config
-  #       mountPath: /.docker
-  #     workingDir: /work
-  #     env:
-  #     - name: BUILDKITD_FLAGS
-  #       value: --oci-worker-no-process-sandbox
-  #     - name: DOCKER_CONFIG
-  #       value: /.docker
-  #     command: [sh, -c]
-  #     args:
-  #     - |
-  #       set -e
+  # Build staging image with BuildKit
+  - name: build-staging-image
+    inputs:
+      parameters:
+      - name: model_name
+      - name: staging_version
+      - name: registry
+      - name: repo_name
+      - name: mlflow_tracking_uri
+    outputs:
+      parameters:
+      - name: staging_image_tag
+        valueFrom:
+          path: /tmp/image_tag.txt
+      - name: git_sha
+        valueFrom:
+          path: /tmp/git_sha.txt
+    volumes:
+    - name: docker-config
+      secret:
+        secretName: dockerhub-secret
+    container:
+      image: moby/buildkit:v0.15.0
+      volumeMounts:
+      - name: docker-config
+        mountPath: /.docker
+        readOnly: true
+      - name: work
+        mountPath: /work
+      workingDir: /work
+      env:
+      - name: DOCKER_CONFIG
+        value: /.docker
+      - name: BUILDKITD_FLAGS
+        value: --oci-worker-no-process-sandbox
+      command: [sh, -c]
+      args:
+      - |
+        set -e
 
-  #       # Get git SHA
-  #       GIT_SHA=$(git rev-parse --short HEAD)
-  #       IMAGE_TAG="{{inputs.parameters.registry}}/{{inputs.parameters.model_name}}-serving:model-v{{inputs.parameters.staging_version}}-${GIT_SHA}-staging"
+        # Clone repo
+        git clone https://github.com/opencloudhub/{{inputs.parameters.repo_name}}.git .
+        GIT_SHA=$(git rev-parse --short HEAD)
 
-  #       echo "$IMAGE_TAG" > image_tag.txt
-  #       echo "$GIT_SHA" > git_sha.txt
+        IMAGE_TAG="{{inputs.parameters.registry}}/{{inputs.parameters.model_name}}-serving:model-v{{inputs.parameters.staging_version}}-${GIT_SHA}-staging"
 
-  #       echo "🐳 Building: $IMAGE_TAG"
+        echo "$IMAGE_TAG" > /tmp/image_tag.txt
+        echo "$GIT_SHA" > /tmp/git_sha.txt
 
-  #       # Build with BuildKit
-  #       buildctl-daemonless.sh build \
-  #         --frontend dockerfile.v0 \
-  #         --local context=/work \
-  #         --local dockerfile=/work \
-  #         --opt filename=Dockerfile.serving \
-  #         --opt build-arg:MLFLOW_TRACKING_URI={{inputs.parameters.mlflow_uri}} \
-  #         --opt build-arg:MODEL_NAME=staging.{{inputs.parameters.model_name}} \
-  #         --opt build-arg:MODEL_VERSION={{inputs.parameters.staging_version}} \
-  #         --output type=image,name=$IMAGE_TAG,push=true
+        echo "🐳 Building serving image: $IMAGE_TAG"
 
-  #       echo "✅ Image built and pushed!"
-  #   volumeClaimTemplates:
-  #   - metadata:
-  #       name: work
-  #     spec:
-  #       accessModes: ["ReadWriteOnce"]
-  #       resources:
-  #         requests:
-  #           storage: 1Gi
+        # Build serving stage with model baked in
+        buildctl-daemonless.sh build \
+          --frontend dockerfile.v0 \
+          --local context=. \
+          --local dockerfile=. \
+          --opt target=serving \
+          --opt build-arg:MLFLOW_TRACKING_URI={{inputs.parameters.mlflow_tracking_uri}} \
+          --opt build-arg:MODEL_NAME=staging.{{inputs.parameters.model_name}} \
+          --opt build-arg:MODEL_VERSION={{inputs.parameters.staging_version}} \
+          --output type=image,name=$IMAGE_TAG,push=true
 
-  # # Test staging
-  # - name: test-staging
-  #   inputs:
-  #     parameters:
-  #     - name: image_tag
-  #   script:
-  #     image: alpine:latest
-  #     command: [sh]
-  #     source: |
-  #       echo "🧪 Testing: {{inputs.parameters.image_tag}}"
-  #       echo "✅ Tests passed (dummy for POC)"
+        echo "✅ Serving image built and pushed: $IMAGE_TAG"
+    volumeClaimTemplates:
+    - metadata:
+        name: work
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+
+  # Test staging
+  - name: test-staging
+    inputs:
+      parameters:
+      - name: image_tag
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        echo "🧪 Testing: {{inputs.parameters.image_tag}}"
+        echo "✅ Tests passed (dummy for POC)"
 
   # # Promote to production
   # - name: promote-to-production
