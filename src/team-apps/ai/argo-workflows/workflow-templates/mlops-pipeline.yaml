@@ -121,21 +121,7 @@ spec:
 
     # Phase 6: Approval gate with timeout
     - - name: approval
-        suspend:
-          duration: "48h"  # Auto-resume after 48h with default "NO"
-        inputs:
-          parameters:
-          - name: approve
-            description: "Approve promotion to production?"
-            default: "NO"
-            enum:
-            - "YES"
-            - "NO"
-        outputs:
-          parameters:
-          - name: approve
-            valueFrom:
-              supplied: {}
+        template: approval-gate
         when: "{{workflow.parameters.approval_mode}} == manual"
 
     # Phase 7: Check approval and fail if not approved
@@ -619,6 +605,24 @@ spec:
       source: |
         echo "🧪 Testing: {{inputs.parameters.image_tag}}"
         echo "✅ Tests passed (dummy for POC)"
+
+  # Template for approval gate
+  - name: approval-gate
+    suspend:
+      duration: "48h"
+    inputs:
+      parameters:
+      - name: approve
+        description: "Approve promotion to production?"
+        default: "NO"
+        enum:
+        - "YES"
+        - "NO"
+    outputs:
+      parameters:
+      - name: approve
+        valueFrom:
+          supplied: {}
 
   - name: check-approval-status
     inputs:
