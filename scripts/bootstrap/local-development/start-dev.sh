@@ -383,7 +383,6 @@ dev_setup_device_plugin() {
     }
 }
 
-
 dev_setup_update_hosts() {
     log_step "Updating /etc/hosts for local access"
 
@@ -394,26 +393,24 @@ dev_setup_update_hosts() {
         [[ -n "$GATEWAY_IP" ]] && break
         sleep 2
     done
+
     [[ -z "$GATEWAY_IP" ]] && { log_error "No gateway IP found"; exit 1; }
 
-    local needs_update=false
-    for entry in "${EXPOSED_SERVICES[@]}"; do
-        if ! grep -q "$entry" /etc/hosts 2>/dev/null; then
-            needs_update=true
-            break
-        fi
-    done
-
-    if [[ "$needs_update" == "true" ]]; then
-        log_info "Adding entries to /etc/hosts (requires sudo)..."
-        {
-            echo "# Added by opencloudhub-gitops start-dev.sh on $(date)"
-            printf '%s\n' "${EXPOSED_SERVICES[@]/#/$GATEWAY_IP }"
-        } | sudo tee -a /etc/hosts >/dev/null
-        log_success "Updated /etc/hosts"
-    else
-        log_info "/etc/hosts already contains required entries"
+    # Remove old opencloudhub entries
+    if grep -q "# Added by opencloudhub-gitops" /etc/hosts 2>/dev/null; then
+        log_info "Removing old /etc/hosts entries (requires sudo)..."
+        sudo sed -i '/# Added by opencloudhub-gitops/,/^$/d' /etc/hosts
     fi
+
+    # Add new entries
+    log_info "Adding new entries to /etc/hosts (requires sudo)..."
+    {
+        echo "# Added by opencloudhub-gitops start-dev.sh on $(date)"
+        printf '%s\n' "${EXPOSED_SERVICES[@]/#/$GATEWAY_IP }"
+        echo ""  # blank line for separation
+    } | sudo tee -a /etc/hosts >/dev/null
+
+    log_success "Updated /etc/hosts with IP: $GATEWAY_IP"
 }
 
 dev_setup_open_uis() {

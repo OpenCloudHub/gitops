@@ -586,13 +586,13 @@ spec:
 
         echo "✅ Serving image built and pushed: $IMAGE_TAG"
     volumeClaimTemplates:
-    - metadata:
-        name: work
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 2Gi
+      - metadata:
+          name: work
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
 
   # Test staging
   - name: test-staging
