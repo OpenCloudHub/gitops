@@ -544,9 +544,12 @@ spec:
       secret:
         secretName: dockerhub-secret
     - name: work
-      emptyDir: {}  # Use emptyDir instead of PVC
+      emptyDir: {}
     container:
-      image: moby/buildkit:v0.15.0
+      image: moby/buildkit:v0.9.3-rootless  # Use the exact version from Argo example
+      readinessProbe:
+        exec:
+          command: [sh, -c, "buildctl debug workers"]
       volumeMounts:
       - name: docker-config
         mountPath: /.docker
@@ -555,10 +558,10 @@ spec:
         mountPath: /work
       workingDir: /work
       env:
-      - name: DOCKER_CONFIG
-        value: /.docker
       - name: BUILDKITD_FLAGS
         value: --oci-worker-no-process-sandbox
+      - name: DOCKER_CONFIG
+        value: /.docker
       command: [sh, -c]
       args:
       - |
@@ -575,7 +578,7 @@ spec:
 
         echo "🐳 Building serving image: $IMAGE_TAG"
 
-        # Build serving stage with model baked in
+        # Use buildctl-daemonless.sh which handles rootless mode properly
         buildctl-daemonless.sh build \
           --frontend dockerfile.v0 \
           --local context=. \
