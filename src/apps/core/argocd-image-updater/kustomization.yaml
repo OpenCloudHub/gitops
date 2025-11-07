@@ -11,12 +11,13 @@ patches:
     kind: ConfigMap
     name: argocd-image-updater-config
   patch: |-
-    - op: add
-      path: /data/registries.conf
-      value: |
-        registries:
-        - name: Docker Hub
-          api_url: https://registry-1.docker.io
-          prefix: docker.io
-          credentials: pullsecret:argocd/dockerhub-secret
-          defaultns: library
+    - op: replace
+      path: /data
+      value:
+        registries.conf: |
+          registries:
+          - name: Docker Hub
+            api_url: https://registry-1.docker.io
+            prefix: docker.io
+            credentials: pullsecret:argocd/dockerhub-secret
+            defaultns: library
