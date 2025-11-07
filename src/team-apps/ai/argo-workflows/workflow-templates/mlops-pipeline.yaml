@@ -522,7 +522,7 @@ spec:
 
         print("✅ Comparison complete!")
 
-  # Build staging image with BuildKit
+  # Build staging image
   - name: build-staging-image
     inputs:
       parameters:
@@ -543,10 +543,13 @@ spec:
     - name: docker-config
       secret:
         secretName: dockerhub-secret
+        items:
+        - key: .dockerconfigjson
+          path: config.json
     - name: work
       emptyDir: {}
     container:
-      image: moby/buildkit:v0.9.3-rootless  # Use the exact version from Argo example
+      image: moby/buildkit:v0.9.3-rootless
       readinessProbe:
         exec:
           command: [sh, -c, "buildctl debug workers"]
@@ -578,7 +581,6 @@ spec:
 
         echo "🐳 Building serving image: $IMAGE_TAG"
 
-        # Use buildctl-daemonless.sh which handles rootless mode properly
         buildctl-daemonless.sh build \
           --frontend dockerfile.v0 \
           --local context=. \
