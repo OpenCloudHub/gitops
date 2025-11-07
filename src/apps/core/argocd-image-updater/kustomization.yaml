@@ -3,22 +3,19 @@ kind: Kustomization
 namespace: argocd
 
 resources:
-- https://github.com/argoproj-labs/argocd-image-updater/manifests/base
+- https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/manifests/install.yaml
 - external-secrets.yaml
-- registries-config.yaml
 
-# Optional: Configure update interval and other settings
-patches:
-- patch: |-
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: argocd-image-updater
-    spec:
-      template:
-        spec:
-          containers:
-          - name: argocd-image-updater
-            env:
-            - name: ARGOCD_IMAGE_UPDATER_INTERVAL
-              value: "5m"  # Check every 5 minutes
+- target:
+    kind: ConfigMap
+    name: argocd-image-updater-config
+  patch: |-
+    - op: add
+      path: /data/registries.conf
+      value: |
+        registries:
+        - name: Docker Hub
+          api_url: https://registry-1.docker.io
+          prefix: docker.io
+          credentials: pullsecret:argocd/dockerhub-secret
+          defaultns: library
