@@ -6,6 +6,7 @@ resources:
 - https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/manifests/install.yaml
 - external-secrets.yaml
 
+patches:
 - target:
     kind: ConfigMap
     name: argocd-image-updater-config
