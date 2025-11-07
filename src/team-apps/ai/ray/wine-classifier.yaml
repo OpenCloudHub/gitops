@@ -37,7 +37,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
           - name: ray-head
-            image: opencloudhuborg/wine-classifier-training:latest
+            image: opencloudhuborg/wine-classifier-serving:latest
             ports:
             - containerPort: 8000
               name: serve
