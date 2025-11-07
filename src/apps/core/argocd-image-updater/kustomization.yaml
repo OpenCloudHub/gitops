@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+resources:
+- https://github.com/argoproj-labs/argocd-image-updater/manifests/base
+- external-secrets.yaml
+- registries-config.yaml
+
+# Optional: Configure update interval and other settings
+patches:
+- patch: |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: argocd-image-updater
+    spec:
+      template:
+        spec:
+          containers:
+          - name: argocd-image-updater
+            env:
+            - name: ARGOCD_IMAGE_UPDATER_INTERVAL
+              value: "5m"  # Check every 5 minutes
