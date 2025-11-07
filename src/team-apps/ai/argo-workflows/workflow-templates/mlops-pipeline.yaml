@@ -588,7 +588,7 @@ spec:
           --local dockerfile=. \
           --opt target=serving \
           --opt build-arg:MLFLOW_TRACKING_URI={{inputs.parameters.mlflow_tracking_uri}} \
-          --opt build-arg:MODEL_NAME=staging.{{inputs.parameters.model_name}} \
+          --opt build-arg:MODEL_NAME={{inputs.parameters.model_name}} \
           --opt build-arg:MODEL_VERSION={{inputs.parameters.staging_version}} \
           --output type=image,name=$IMAGE_TAG,push=true
 
