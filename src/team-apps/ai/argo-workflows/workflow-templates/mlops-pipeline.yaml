@@ -733,19 +733,16 @@ spec:
       env:
       - name: DOCKER_CONFIG
         value: /.docker
-      command: [sh]
-      source: |
+      command: ["/busybox/sh", "-c"]
+      args:
+      - |
         set -e
 
         STAGING="{{inputs.parameters.staging_image}}"
-        # Remove -staging, add -prod
         BASE="${STAGING%-staging}"
         PROD_VERSIONED="${BASE}-prod"
 
-        # Extract model name for latest tag
-        # From: opencloudhuborg/wine-classifier-serving:model-v1-abc123-staging
-        # To:   opencloudhuborg/wine-classifier-serving:prod-latest
-        REGISTRY_AND_IMAGE="${STAGING%:*}"  # opencloudhuborg/wine-classifier-serving
+        REGISTRY_AND_IMAGE="${STAGING%:*}"
         PROD_LATEST="${REGISTRY_AND_IMAGE}:prod-latest"
 
         echo "🏷️  Retagging image with multiple tags:"
@@ -753,10 +750,7 @@ spec:
         echo "   To (ver): $PROD_VERSIONED"
         echo "   To (lat): $PROD_LATEST"
 
-        # Copy to versioned prod tag
         crane copy "$STAGING" "$PROD_VERSIONED"
-
-        # Also tag as prod-latest
         crane copy "$STAGING" "$PROD_LATEST"
 
         echo "$PROD_VERSIONED" > /tmp/prod_image.txt
