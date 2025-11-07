@@ -413,6 +413,7 @@ spec:
         done
 
   # Compare and promote to staging
+  # TODO: if fail give message to argo
   - name: compare-and-promote
     inputs:
       parameters:
@@ -724,38 +725,32 @@ spec:
     - name: docker-config
       secret:
         secretName: dockerhub-secret
-    container:
-      image: gcr.io/go-containerregistry/crane:latest
+        items:
+        - key: .dockerconfigjson
+          path: config.json
+    script:
+      image: alpine:latest
       volumeMounts:
       - name: docker-config
-        mountPath: /.docker
+        mountPath: /root/.docker
         readOnly: true
-      env:
-      - name: DOCKER_CONFIG
-        value: /.docker
-      command: ["/busybox/sh", "-c"]
-      args:
-      - |
+      command: [sh]
+      source: |
         set -e
 
+        apk add --no-cache crane
+
         STAGING="{{inputs.parameters.staging_image}}"
-        BASE="${STAGING%-staging}"
-        PROD_VERSIONED="${BASE}-prod"
+        PROD_VERSIONED="${STAGING%-staging}-prod"
+        PROD_LATEST="${STAGING%:*}:prod-latest"
 
-        REGISTRY_AND_IMAGE="${STAGING%:*}"
-        PROD_LATEST="${REGISTRY_AND_IMAGE}:prod-latest"
-
-        echo "🏷️  Retagging image with multiple tags:"
-        echo "   From:     $STAGING"
-        echo "   To (ver): $PROD_VERSIONED"
-        echo "   To (lat): $PROD_LATEST"
-
+        echo "🏷️ Copying: $STAGING → $PROD_VERSIONED"
         crane copy "$STAGING" "$PROD_VERSIONED"
+
+        echo "🏷️ Copying: $STAGING → $PROD_LATEST"
         crane copy "$STAGING" "$PROD_LATEST"
 
         echo "$PROD_VERSIONED" > /tmp/prod_image.txt
         echo "$PROD_LATEST" > /tmp/prod_image_latest.txt
 
-        echo "✅ Production images ready!"
-        echo "   Versioned: $PROD_VERSIONED"
-        echo "   Latest:    $PROD_LATEST"
+        echo "✅ Done!"
