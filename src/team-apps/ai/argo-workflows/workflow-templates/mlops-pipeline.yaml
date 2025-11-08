@@ -334,7 +334,7 @@ spec:
                     - name: MLFLOW_EXPERIMENT_NAME
                       value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_REGISTERED_MODEL_NAME
-                      value: "ci.{{inputs.parameters.model_name}}
+                      value: "ci.{{inputs.parameters.model_name}}"
                     - name: ARGO_WORKFLOW_NAME
                       value: "{{workflow.name}}"
                     - name: ARGO_WORKFLOW_UID
