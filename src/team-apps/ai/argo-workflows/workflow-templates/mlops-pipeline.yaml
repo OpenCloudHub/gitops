@@ -496,7 +496,7 @@ spec:
             sys.exit(1)
 
         if len(ci_versions) > 1:
-            print(f"⚠️  Found {len(ci_versions)} models with this workflow ID, using most recent")
+            print(f"⚠️  Found {len(ci_versions)} models with this workflow name, using most recent")
             ci_versions.sort(key=lambda x: x.creation_timestamp, reverse=True)
 
         ci_model = ci_versions[0]
@@ -581,6 +581,13 @@ spec:
                         "compared_against",
                         champion_info
                     )
+                    client.set_model_version_tag(
+                        f"ci.{model_name}",
+                        ci_version,
+                        "comparison_metric",
+                        f"Compared {comparison_metric} in and higher_is_better: {higher_is_better}"
+                    )
+
                     sys.exit(1)
         except Exception as e:
             print(f"   No champion found: {e}")
