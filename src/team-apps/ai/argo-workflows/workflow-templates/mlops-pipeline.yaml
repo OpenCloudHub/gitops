@@ -487,7 +487,7 @@ spec:
         # Get CI model from THIS workflow
         print(f"\n📊 Getting CI model from workflow {workflow_name}...")
         ci_versions = client.search_model_versions(
-            f"name='ci.{model_name}' and tags.argo_workflow_name='{workflow_name}'"
+            f"name='ci.{model_name}' and tag.argo_workflow_name='{workflow_name}'"
         )
 
         if not ci_versions:
