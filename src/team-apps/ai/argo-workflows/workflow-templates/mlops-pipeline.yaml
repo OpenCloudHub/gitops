@@ -6,7 +6,7 @@ metadata:
 spec:
   serviceAccountName: workflow-executor
 
-  # TODO: in mlflow code, dont check for latest version in ci, but the actual version that was created by our run. now also, i feel it would make sense to keep version stable somehow between mlflow environments, i just had the case where i had promoted a model and had version 4 build in the container image and was deployed in production, but in my prod stage in mlflow it was only model 3 there as champion which was confusing?
+  # TODO: in comparison and promote to staging, either we need to have tagged the model itself and not only the experiment, or we need to query for the ci model that came from the run with the argo name tag
   arguments:
     parameters:
     - name: repo_name
@@ -469,10 +469,13 @@ spec:
       command: [python]
       source: |
         from mlflow import MlflowClient
+        import mlflow
         from datetime import datetime
         import sys
 
         client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
+        mlflow.set_tracking_uri("{{inputs.parameters.mlflow_tracking_uri}}")
+
         model_name = "{{inputs.parameters.model_name}}"
         metric_name = "{{inputs.parameters.metric}}"
         higher_is_better = "{{inputs.parameters.higher_is_better}}" == "true"
@@ -484,51 +487,69 @@ spec:
         print(f"   Metric: {metric_name} ({'higher' if higher_is_better else 'lower'} is better)")
         print(f"   Threshold: {threshold}")
 
-        # Get CI model from THIS workflow
-        print(f"\n📊 Getting CI model from workflow {workflow_name}...")
+        # Step 1: Get the most recent run from this workflow
+        print(f"\n📊 Getting most recent run from workflow {workflow_name}...")
+        runs_df = mlflow.search_runs(
+            search_all_experiments=True,
+            filter_string=f"tags.argo_workflow_name = '{workflow_name}'",
+            max_results=1,
+            order_by=["start_time DESC"]
+        )
+
+        if runs_df.empty:
+            print(f"❌ No runs found with tag argo_workflow_name='{workflow_name}'")
+            print(f"   Make sure training code calls: set_mlflow_experiment_tags()")
+            sys.exit(1)
+
+        run_id = runs_df.iloc[0]['run_id']
+        print(f"   Found run: {run_id[:8]}...")
+
+        # Step 2: Get CI model from this run
+        print(f"\n📦 Looking for CI model from run {run_id[:8]}...")
         ci_versions = client.search_model_versions(
-            f"name='ci.{model_name}' and tag.argo_workflow_name='{workflow_name}'"
+            filter_string=f"name='ci.{model_name}' and run_id='{run_id}'"
         )
 
         if not ci_versions:
-            print(f"❌ No CI model found with tag argo_workflow_name='{workflow_name}'")
-            print(f"   Make sure training code logs: mlflow.set_tag('argo_workflow_name', os.getenv('ARGO_WORKFLOW_ID'))")
+            print(f"❌ No CI model found from run {run_id}")
+            print(f"   Make sure training code registers model with MLFLOW_REGISTERED_MODEL_NAME")
             sys.exit(1)
-
-        if len(ci_versions) > 1:
-            print(f"⚠️  Found {len(ci_versions)} models with this workflow name, using most recent")
-            ci_versions.sort(key=lambda x: x.creation_timestamp, reverse=True)
 
         ci_model = ci_versions[0]
         ci_version = ci_model.version
         ci_run_id = ci_model.run_id
-        print(f"   Found CI model: v{ci_version} (run: {ci_run_id})")
+        print(f"✅ Found CI model: v{ci_version}")
 
-        # Get CI metrics
+        # Step 3: Tag the CI model with workflow metadata
+        print(f"\n🏷️  Tagging CI model...")
+        ci_tags = {
+            "argo_workflow_name": workflow_name,
+            "argo_workflow_uid": "{{workflow.uid}}",
+            "git_repo": "ai-ml-sklearn",
+            "tagged_by": "ci_pipeline",
+            "tagged_at": datetime.utcnow().isoformat()
+        }
+
+        for key, value in ci_tags.items():
+            client.set_model_version_tag(f"ci.{model_name}", ci_version, key, value)
+            print(f"   ✓ {key}")
+
+        # Step 4: Get CI metrics
+        print(f"\n📊 Getting metrics from CI model...")
         ci_run = client.get_run(ci_run_id)
         if metric_name not in ci_run.data.metrics:
             print(f"❌ Metric '{metric_name}' not found in CI model")
             print(f"   Available: {list(ci_run.data.metrics.keys())}")
 
             # Tag as rejected
-            client.set_model_version_tag(
-                f"ci.{model_name}",
-                ci_version,
-                "promotion_status",
-                "rejected"
-            )
-            client.set_model_version_tag(
-                f"ci.{model_name}",
-                ci_version,
-                "rejection_reason",
-                f"Missing metric: {metric_name}"
-            )
+            client.set_model_version_tag(f"ci.{model_name}", ci_version, "promotion_status", "rejected")
+            client.set_model_version_tag(f"ci.{model_name}", ci_version, "rejection_reason", f"Missing metric: {metric_name}")
             sys.exit(1)
 
         ci_value = ci_run.data.metrics[metric_name]
         print(f"   CI {metric_name}: {ci_value}")
 
-        # Try to get champion
+        # Step 5: Try to get champion
         print(f"\n🏆 Looking for champion...")
         should_promote = False
         champion_info = None
@@ -563,31 +584,9 @@ spec:
                     print(f"❌ Not enough improvement ({improvement:.6f} < {threshold:.6f})")
 
                     # Tag as rejected
-                    client.set_model_version_tag(
-                        f"ci.{model_name}",
-                        ci_version,
-                        "promotion_status",
-                        "rejected"
-                    )
-                    client.set_model_version_tag(
-                        f"ci.{model_name}",
-                        ci_version,
-                        "rejection_reason",
-                        f"Insufficient improvement: {improvement:.6f} < {threshold:.6f}"
-                    )
-                    client.set_model_version_tag(
-                        f"ci.{model_name}",
-                        ci_version,
-                        "compared_against",
-                        champion_info
-                    )
-                    client.set_model_version_tag(
-                        f"ci.{model_name}",
-                        ci_version,
-                        "comparison_metric",
-                        f"Compared {comparison_metric} in and higher_is_better: {higher_is_better}"
-                    )
-
+                    client.set_model_version_tag(f"ci.{model_name}", ci_version, "promotion_status", "rejected")
+                    client.set_model_version_tag(f"ci.{model_name}", ci_version, "rejection_reason", f"Insufficient improvement: {improvement:.6f} < {threshold:.6f}")
+                    client.set_model_version_tag(f"ci.{model_name}", ci_version, "compared_against", champion_info)
                     sys.exit(1)
         except Exception as e:
             print(f"   No champion found: {e}")
@@ -599,7 +598,7 @@ spec:
         if not should_promote:
             sys.exit(1)
 
-        # Copy to staging
+        # Step 6: Copy to staging
         print(f"\n📦 Copying ci.{model_name}/v{ci_version} → staging.{model_name}")
         staging_mv = client.copy_model_version(
             f"models:/ci.{model_name}/{ci_version}",
@@ -608,11 +607,12 @@ spec:
 
         print(f"✅ Created staging.{model_name}/v{staging_mv.version}")
 
-        # Add comprehensive tags to staging model
+        # Step 7: Add comprehensive tags to staging model
         print("\n🏷️  Tagging staging model...")
-        tags = {
+        staging_tags = {
             "source_ci_version": str(ci_version),
             "argo_workflow_name": workflow_name,
+            "argo_workflow_uid": "{{workflow.uid}}",
             "comparison_metric": f"{metric_name}={ci_value:.6f}",
             "comparison_threshold": str(threshold),
             "compared_against_champion": champion_info,
@@ -621,7 +621,7 @@ spec:
             "promotion_status": "promoted_to_staging"
         }
 
-        for key, value in tags.items():
+        for key, value in staging_tags.items():
             client.set_model_version_tag(f"staging.{model_name}", staging_mv.version, key, value)
             print(f"   ✓ {key}: {value}")
 
