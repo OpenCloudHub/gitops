@@ -636,6 +636,7 @@ spec:
         print("✅ Comparison complete!")
 
   # Build staging image
+  # TODO: currently works only on trunk based repos or would need add branch info
   - name: build-staging-image
     inputs:
       parameters:

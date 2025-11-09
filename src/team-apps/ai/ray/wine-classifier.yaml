@@ -7,7 +7,7 @@ metadata:
   name: wine-classifier-service
   namespace: ai
   annotations:
-    argocd-image-updater.argoproj.io/image-list: serving=opencloudhuborg/wine-classifier-serving:prod-latest
+    argocd-image-updater.argoproj.io/image-list: ray-head=opencloudhuborg/wine-classifier-serving:prod-latest,ray-worker=opencloudhuborg/wine-classifier-serving:prod-latest
     argocd-image-updater.argoproj.io/serving.update-strategy: digest
     argocd-image-updater.argoproj.io/write-back-method: git
     serving-image-digest: "" # ArgoCD Image Updater will update this
@@ -61,8 +61,6 @@ spec:
                 cpu: "1"
                 memory: "2Gi"
             env:
-            # - name: MLFLOW_TRACKING_URI
-            #   value: "http://mlflow-tracking.ai.svc.cluster.local"
             - name: RAY_GRAFANA_HOST
               value: "http://grafana.observability.svc.cluster.local:80"
             - name: RAY_PROMETHEUS_HOST
@@ -81,7 +79,8 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
           - name: ray-worker
-            image: opencloudhuborg/wine-classifier-training:latest
+            image: opencloudhuborg/wine-classifier-serving:prod-latest
+            imagePullPolicy: Always
             resources:
               requests:
                 cpu: "500m"
@@ -89,9 +88,6 @@ spec:
               limits:
                 cpu: "1"
                 memory: "2Gi"
-            # env:
-            # - name: MLFLOW_TRACKING_URI
-            #   value: "http://mlflow-tracking.ai.svc.cluster.local"
 
 ---
 # HTTPRoute for model API (external access)
