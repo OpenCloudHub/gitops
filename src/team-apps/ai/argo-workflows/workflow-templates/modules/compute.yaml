@@ -1,0 +1,77 @@
+# modules/compute.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: compute-templates
+  namespace: ai
+spec:
+  templates:
+  - name: map-compute-config
+    inputs:
+      parameters:
+      - name: compute_type
+    outputs:
+      parameters:
+      - name: cpu
+        valueFrom:
+          path: /tmp/cpu.txt
+      - name: memory
+        valueFrom:
+          path: /tmp/memory.txt
+      - name: replicas
+        valueFrom:
+          path: /tmp/replicas.txt
+      - name: gpu
+        valueFrom:
+          path: /tmp/gpu.txt
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        #!/bin/sh
+        set -e
+
+        case "{{inputs.parameters.compute_type}}" in
+          cpu-small)
+            echo "2" > /tmp/cpu.txt
+            echo "4Gi" > /tmp/memory.txt
+            echo "1" > /tmp/replicas.txt
+            echo "0" > /tmp/gpu.txt
+            ;;
+          cpu-medium)
+            echo "4" > /tmp/cpu.txt
+            echo "8Gi" > /tmp/memory.txt
+            echo "1" > /tmp/replicas.txt
+            echo "0" > /tmp/gpu.txt
+            ;;
+          cpu-large)
+            echo "8" > /tmp/cpu.txt
+            echo "16Gi" > /tmp/memory.txt
+            echo "2" > /tmp/replicas.txt
+            echo "0" > /tmp/gpu.txt
+            ;;
+          gpu-small)
+            echo "4" > /tmp/cpu.txt
+            echo "16Gi" > /tmp/memory.txt
+            echo "1" > /tmp/replicas.txt
+            echo "1" > /tmp/gpu.txt
+            ;;
+          gpu-medium)
+            echo "8" > /tmp/cpu.txt
+            echo "32Gi" > /tmp/memory.txt
+            echo "1" > /tmp/replicas.txt
+            echo "2" > /tmp/gpu.txt
+            ;;
+          gpu-large)
+            echo "16" > /tmp/cpu.txt
+            echo "64Gi" > /tmp/memory.txt
+            echo "1" > /tmp/replicas.txt
+            echo "4" > /tmp/gpu.txt
+            ;;
+          *)
+            echo "Unknown compute type: {{inputs.parameters.compute_type}}"
+            exit 1
+            ;;
+        esac
+
+        echo "✅ Mapped {{inputs.parameters.compute_type}}"

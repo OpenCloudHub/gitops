@@ -1,0 +1,83 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: approval-templates
+  namespace: ai
+spec:
+  templates:
+  - name: approval-with-check
+    inputs:
+      parameters:
+      - name: approval_mode
+    outputs:
+      parameters:
+      - name: approved
+        valueFrom:
+          parameter: "{{steps.check.outputs.parameters.approved}}"
+    steps:
+    - - name: gate
+        template: approval-gate
+        when: "{{inputs.parameters.approval_mode}} == manual"
+
+    - - name: check
+        template: check-approval
+        arguments:
+          parameters:
+          - name: approval_mode
+            value: "{{inputs.parameters.approval_mode}}"
+          - name: approval_decision
+            value: "{{steps.gate.outputs.parameters.approve}}"
+
+  - name: approval-gate
+    suspend:
+      duration: "48h"
+    inputs:
+      parameters:
+      - name: approve
+        description: "Approve promotion to production?"
+        default: "NO"
+        enum:
+        - "YES"
+        - "NO"
+    outputs:
+      parameters:
+      - name: approve
+        valueFrom:
+          supplied: {}
+
+  - name: check-approval
+    inputs:
+      parameters:
+      - name: approval_mode
+      - name: approval_decision
+    outputs:
+      parameters:
+      - name: approved
+        valueFrom:
+          path: /tmp/approved.txt
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        MODE="{{inputs.parameters.approval_mode}}"
+        DECISION="{{inputs.parameters.approval_decision}}"
+
+        echo "Approval mode: $MODE"
+
+        if [ "$MODE" = "automatic" ]; then
+          echo "true" > /tmp/approved.txt
+          echo "✅ Automatic approval"
+          exit 0
+        fi
+
+        echo "Decision: $DECISION"
+
+        if [ "$DECISION" = "YES" ]; then
+          echo "true" > /tmp/approved.txt
+          echo "✅ Manually approved"
+          exit 0
+        fi
+
+        echo "false" > /tmp/approved.txt
+        echo "❌ Approval denied or timed out"
+        exit 1

@@ -1,0 +1,242 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: mlflow-templates
+  namespace: ai
+spec:
+  templates:
+  - name: compare-and-promote
+    inputs:
+      parameters:
+      - name: model_name
+      - name: metric
+      - name: higher_is_better
+      - name: threshold
+      - name: mlflow_tracking_uri
+    outputs:
+      parameters:
+      - name: ci_version
+        valueFrom:
+          path: /tmp/ci_version.txt
+      - name: staging_version
+        valueFrom:
+          path: /tmp/staging_version.txt
+      - name: ci_run_id
+        valueFrom:
+          path: /tmp/ci_run_id.txt
+    script:
+      image: ghcr.io/mlflow/mlflow:v2.18.0
+      command: [python]
+      source: |
+        from mlflow import MlflowClient
+        import mlflow
+        from datetime import datetime
+        import sys
+
+        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
+        mlflow.set_tracking_uri("{{inputs.parameters.mlflow_tracking_uri}}")
+
+        model_name = "{{inputs.parameters.model_name}}"
+        metric_name = "{{inputs.parameters.metric}}"
+        higher_is_better = "{{inputs.parameters.higher_is_better}}" == "true"
+        threshold = float("{{inputs.parameters.threshold}}")
+        workflow_name = "{{workflow.name}}"
+
+        print(f"🔍 Comparing {model_name}")
+        print(f"   Workflow: {workflow_name}")
+        print(f"   Metric: {metric_name} ({'higher' if higher_is_better else 'lower'} is better)")
+        print(f"   Threshold: {threshold}")
+
+        # Get the most recent run from this workflow
+        print(f"\n📊 Getting most recent run from workflow {workflow_name}...")
+        # TODO: maybe more robust?
+        runs_df = mlflow.search_runs(
+            search_all_experiments=True,
+            filter_string=f"tags.argo_workflow_name = '{workflow_name}'",
+            max_results=1,
+            order_by=["start_time DESC"]
+        )
+
+        if runs_df.empty:
+            print(f"❌ No runs found with tag argo_workflow_name='{workflow_name}'")
+            sys.exit(1)
+
+        run_id = runs_df.iloc[0]['run_id']
+        print(f"   Found run: {run_id[:8]}...")
+
+        # Get CI model from this run
+        print(f"\n📦 Looking for CI model from run {run_id[:8]}...")
+        ci_versions = client.search_model_versions(
+            filter_string=f"name='ci.{model_name}' and run_id='{run_id}'"
+        )
+
+        if not ci_versions:
+            print(f"❌ No CI model found from run {run_id}")
+            sys.exit(1)
+
+        ci_model = ci_versions[0]
+        ci_version = ci_model.version
+        ci_run_id = ci_model.run_id
+        print(f"✅ Found CI model: v{ci_version}")
+
+        # Tag the CI model
+        print(f"\n🏷️  Tagging CI model...")
+        ci_tags = {
+            "argo_workflow_name": workflow_name,
+            "argo_workflow_uid": "{{workflow.uid}}",
+            "tagged_by": "ci_pipeline",
+            "tagged_at": datetime.utcnow().isoformat()
+        }
+
+        for key, value in ci_tags.items():
+            client.set_model_version_tag(f"ci.{model_name}", ci_version, key, value)
+
+        # Get CI metrics
+        print(f"\n📊 Getting metrics from CI model...")
+        ci_run = client.get_run(ci_run_id)
+        if metric_name not in ci_run.data.metrics:
+            print(f"❌ Metric '{metric_name}' not found")
+            client.set_model_version_tag(f"ci.{model_name}", ci_version, "promotion_status", "rejected")
+            sys.exit(1)
+
+        ci_value = ci_run.data.metrics[metric_name]
+        print(f"   CI {metric_name}: {ci_value}")
+
+        # Try to get champion
+        print(f"\n🏆 Looking for champion...")
+        should_promote = False
+        champion_info = None
+        improvement = None
+
+        try:
+            champion = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
+            print(f"   Found champion: v{champion.version}")
+            champion_info = f"prod.{model_name} v{champion.version}"
+
+            champ_run = client.get_run(champion.run_id)
+            if metric_name not in champ_run.data.metrics:
+                print(f"   Champion missing {metric_name}, promoting CI")
+                should_promote = True
+                improvement = "N/A (champion missing metric)"
+            else:
+                champ_value = champ_run.data.metrics[metric_name]
+                print(f"   Champion {metric_name}: {champ_value}")
+
+                if higher_is_better:
+                    improvement = ci_value - champ_value
+                else:
+                    improvement = champ_value - ci_value
+
+                print(f"   Improvement: {improvement:.6f}")
+
+                if improvement >= threshold:
+                    print(f"✅ CI is better!")
+                    should_promote = True
+                else:
+                    print(f"❌ Not enough improvement")
+                    client.set_model_version_tag(f"ci.{model_name}", ci_version, "promotion_status", "rejected")
+                    sys.exit(1)
+        except Exception as e:
+            print(f"   No champion found: {e}")
+            print("   Promoting first model!")
+            should_promote = True
+            champion_info = "none (first model)"
+            improvement = "N/A (first model)"
+
+        if not should_promote:
+            sys.exit(1)
+
+        # Copy to staging
+        print(f"\n📦 Copying ci.{model_name}/v{ci_version} → staging.{model_name}")
+        staging_mv = client.copy_model_version(
+            f"models:/ci.{model_name}/{ci_version}",
+            f"staging.{model_name}"
+        )
+
+        print(f"✅ Created staging.{model_name}/v{staging_mv.version}")
+
+        # Write outputs
+        with open("/tmp/ci_version.txt", "w") as f:
+            f.write(str(ci_version))
+        with open("/tmp/staging_version.txt", "w") as f:
+            f.write(str(staging_mv.version))
+        with open("/tmp/ci_run_id.txt", "w") as f:
+            f.write(ci_run_id)
+
+  - name: promote-to-production
+    inputs:
+      parameters:
+      - name: model_name
+      - name: staging_version
+      - name: mlflow_tracking_uri
+    outputs:
+      parameters:
+      - name: prod_version
+        valueFrom:
+          path: /tmp/prod_version.txt
+    script:
+      image: ghcr.io/mlflow/mlflow:v2.18.0
+      command: [python]
+      source: |
+        from mlflow import MlflowClient
+
+        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
+        model_name = "{{inputs.parameters.model_name}}"
+        staging_version = "{{inputs.parameters.staging_version}}"
+
+        print(f"🚀 Promoting to production: {model_name}")
+
+        prod_mv = client.copy_model_version(
+            f"models:/staging.{model_name}/{staging_version}",
+            f"prod.{model_name}"
+        )
+
+        print(f"✅ Created prod.{model_name}/v{prod_mv.version}")
+
+        try:
+            old_champ = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
+            print(f"   Moving old champion v{old_champ.version} → @previous")
+            client.set_registered_model_alias(f"prod.{model_name}", "previous", old_champ.version)
+        except:
+            print("   No previous champion")
+
+        client.set_registered_model_alias(f"prod.{model_name}", "champion", prod_mv.version)
+        print(f"✅ Set prod.{model_name}@champion → v{prod_mv.version}")
+
+        with open("/tmp/prod_version.txt", "w") as f:
+            f.write(prod_mv.version)
+
+  - name: tag-deployment-ready
+    inputs:
+      parameters:
+      - name: model_name
+      - name: prod_version
+      - name: staging_version
+      - name: ci_version
+      - name: approval_mode
+      - name: mlflow_tracking_uri
+    script:
+      image: ghcr.io/mlflow/mlflow:v2.18.0
+      command: [python]
+      source: |
+        from mlflow import MlflowClient
+        from datetime import datetime
+
+        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
+        model_name = "{{inputs.parameters.model_name}}"
+        prod_version = "{{inputs.parameters.prod_version}}"
+
+        tags = {
+            "source_staging_version": "{{inputs.parameters.staging_version}}",
+            "source_ci_version": "{{inputs.parameters.ci_version}}",
+            "argo_workflow_name": "{{workflow.name}}",
+            "argo_workflow_uid": "{{workflow.uid}}"
+            "deployment_ready": "true",
+            "deployment_timestamp": datetime.utcnow().isoformat(),
+            "approval_mode": "{{inputs.parameters.approval_mode}}",
+        }
+
+        for key, value in tags.items():
+            client.set_model_version_tag(f"prod.{model_name}", prod_version, key, value)
+
+        print("✅ Deployment info tagged!")

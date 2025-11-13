@@ -1,176 +1,184 @@
+# modules/training.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: mlops-training
+  name: training-templates
   namespace: ai
 spec:
   serviceAccountName: workflow-executor
 
   templates:
-  - name: training-phase
+  - name: submit-ray-job
     inputs:
       parameters:
       - name: model_name
       - name: experiment_name
-      - name: compute_type
       - name: training_image
       - name: training_entrypoint
       - name: training_args
-
+      - name: cpu
+      - name: memory
+      - name: replicas
+      - name: gpu
+      - name: mlflow_tracking_uri
     outputs:
       parameters:
-      - name: model_version
+      - name: job-name
         valueFrom:
-          path: /tmp/model_version.txt
-      - name: run_id
-        valueFrom:
-          path: /tmp/run_id.txt
-
+          path: /tmp/job-name.txt
     script:
-      image: python:3.11-slim
-      command: [bash]
+      image: bitnami/kubectl:latest
+      command: [sh]
       source: |
         set -e
 
-        # Install dependencies
-        pip install --quiet mlflow kubernetes
+        GPU="{{inputs.parameters.gpu}}"
 
-        python <<'EOF'
-        import os
-        import time
-        import json
-        from kubernetes import client, config
-        from mlflow import MlflowClient
+        GPU_RESOURCES=""
+        GPU_NODE_SELECTOR=""
+        if [ "$GPU" != "0" ]; then
+          GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
+          GPU_NODE_SELECTOR="nodeSelector:
+          node.opencloudhub.org/gpu: \"true\""
+        fi
 
-        # Parameters
-        model_name = "{{inputs.parameters.model_name}}"
-        experiment_name = "{{inputs.parameters.experiment_name}}"
-        compute_type = "{{inputs.parameters.compute_type}}"
-        training_image = "{{inputs.parameters.training_image}}"
-        training_entrypoint = "{{inputs.parameters.training_entrypoint}}"
-        training_args = "{{inputs.parameters.training_args}}"
+        RUN_LABEL="wf-$(date +%s)-${RANDOM}"
 
-        # Map compute_type to Ray resources
-        compute_configs = {
-            "cpu-small": {"cpu": 2, "memory": "4Gi"},
-            "cpu-medium": {"cpu": 4, "memory": "8Gi"},
-            "cpu-large": {"cpu": 8, "memory": "16Gi"},
-            "gpu-small": {"cpu": 4, "memory": "16Gi", "gpu": 1},
-            "gpu-medium": {"cpu": 8, "memory": "32Gi", "gpu": 2},
-            "gpu-large": {"cpu": 16, "memory": "64Gi", "gpu": 4}
-        }
-        resources = compute_configs[compute_type]
+        echo "Creating RayJob with label: workflow-run=${RUN_LABEL}"
 
-        # Create RayJob
-        config.load_incluster_config()
-        custom_api = client.CustomObjectsApi()
-
-        ray_job = {
-            "apiVersion": "ray.io/v1",
-            "kind": "RayJob",
-            "metadata": {
-                "generateName": f"{model_name}-training-",
-                "namespace": "ai"
-            },
-            "spec": {
-                "entrypoint": training_entrypoint + (" " + training_args if training_args else ""),
-                "runtimeEnvYAML": json.dumps({
-                    "env_vars": {
-                        "MLFLOW_TRACKING_URI": "http://mlflow.mlops.svc.cluster.local:5000",
-                        "MLFLOW_EXPERIMENT_NAME": experiment_name,
-                        "MODEL_NAME": model_name
-                    }
-                }),
-                "rayClusterSpec": {
-                    "rayVersion": "2.48.0",
-                    "headGroupSpec": {
-                        "rayStartParams": {},
-                        "template": {
-                            "spec": {
-                                "containers": [{
-                                    "name": "ray-head",
-                                    "image": training_image,
-                                    "resources": {
-                                        "requests": {
-                                            "cpu": str(resources["cpu"]),
-                                            "memory": resources["memory"]
-                                        },
-                                        "limits": {
-                                            "cpu": str(resources["cpu"]),
-                                            "memory": resources["memory"]
-                                        }
-                                    }
-                                }]
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        # Add GPU if needed
-        if "gpu" in resources:
-            ray_job["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0]["resources"]["limits"]["nvidia.com/gpu"] = str(resources["gpu"])
-
-        print(f"Submitting RayJob for {model_name}...")
-        created_job = custom_api.create_namespaced_custom_object(
-            group="ray.io",
-            version="v1",
-            namespace="ai",
-            plural="rayjobs",
-            body=ray_job
-        )
-
-        job_name = created_job["metadata"]["name"]
-        print(f"RayJob created: {job_name}")
-
-        # Wait for completion
-        print("Waiting for RayJob to complete...")
-        timeout = 7200  # 2 hours
-        start_time = time.time()
-
-        while time.time() - start_time < timeout:
-            job = custom_api.get_namespaced_custom_object(
-                group="ray.io",
-                version="v1",
-                namespace="ai",
-                plural="rayjobs",
-                name=job_name
-            )
-
-            status = job.get("status", {}).get("jobStatus")
-            print(f"Current status: {status}")
-
-            if status == "SUCCEEDED":
-                print("RayJob completed successfully!")
-                break
-            elif status == "FAILED":
-                raise Exception(f"RayJob failed: {job.get('status', {}).get('message', 'Unknown error')}")
-
-            time.sleep(30)
-        else:
-            raise Exception(f"RayJob timed out after {timeout} seconds")
-
-        # Query MLflow for latest model version
-        print(f"Querying MLflow for latest model in ci.{model_name}...")
-        mlflow_client = MlflowClient("http://mlflow.mlops.svc.cluster.local:5000")
-
-        versions = mlflow_client.search_model_versions(f"name='ci.{model_name}'")
-        if not versions:
-            raise Exception(f"No model versions found for ci.{model_name}")
-
-        latest = sorted(versions, key=lambda x: x.creation_timestamp, reverse=True)[0]
-        model_version = latest.version
-        run_id = latest.run_id
-
-        print(f"Latest model version: {model_version}")
-        print(f"Run ID: {run_id}")
-
-        # Write outputs
-        with open("/tmp/model_version.txt", "w") as f:
-            f.write(str(model_version))
-
-        with open("/tmp/run_id.txt", "w") as f:
-            f.write(run_id)
-
+        cat <<EOF | kubectl create -f -
+        apiVersion: ray.io/v1
+        kind: RayJob
+        metadata:
+          generateName: {{inputs.parameters.model_name}}-training-
+          namespace: ai
+          labels:
+            workflow-run: "${RUN_LABEL}"
+            model: "{{inputs.parameters.model_name}}"
+        spec:
+          entrypoint: {{inputs.parameters.training_entrypoint}} {{inputs.parameters.training_args}}
+          shutdownAfterJobFinishes: true
+          ttlSecondsAfterFinished: 300
+          rayClusterSpec:
+            rayVersion: "2.48.0"
+            headGroupSpec:
+              serviceType: ClusterIP
+              template:
+                spec:
+                  ${GPU_NODE_SELECTOR}
+                  containers:
+                  - name: ray-head
+                    image: {{inputs.parameters.training_image}}
+                    resources:
+                      requests:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                      limits:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                        ${GPU_RESOURCES}
+                    env:
+                    - name: MLFLOW_TRACKING_URI
+                      value: {{inputs.parameters.mlflow_tracking_uri}}
+                    - name: MLFLOW_EXPERIMENT_NAME
+                      value: {{inputs.parameters.experiment_name}}
+                    - name: MLFLOW_REGISTERED_MODEL_NAME
+                      value: "ci.{{inputs.parameters.model_name}}"
+                    - name: ARGO_WORKFLOW_UID
+                      value: "{{workflow.uid}}"
+            workerGroupSpecs:
+            - replicas: {{inputs.parameters.replicas}}
+              groupName: worker
+              template:
+                spec:
+                  ${GPU_NODE_SELECTOR}
+                  containers:
+                  - name: ray-worker
+                    image: {{inputs.parameters.training_image}}
+                    resources:
+                      requests:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                      limits:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                        ${GPU_RESOURCES}
+                    env:
+                      - name: MLFLOW_TRACKING_URI
+                        value: "{{inputs.parameters.mlflow_tracking_uri}}"
+                      - name: MLFLOW_EXPERIMENT_NAME
+                        value: "{{inputs.parameters.experiment_name}}"
+                      - name: MLFLOW_REGISTERED_MODEL_NAME
+                        value: "ci.{{inputs.parameters.model_name}}"
+                      - name: ARGO_WORKFLOW_UID
+                        value: "{{workflow.uid}}"
         EOF
+
+        echo "⏳ Waiting for RayJob..."
+        sleep 3
+
+        JOB_NAME=$(kubectl get rayjobs -n ai -l workflow-run="${RUN_LABEL}" -o jsonpath='{.items[0].metadata.name}')
+
+        if [ -z "$JOB_NAME" ]; then
+          echo "❌ Failed to get RayJob"
+          exit 1
+        fi
+
+        echo "✅ RayJob: $JOB_NAME"
+        echo "$JOB_NAME" > /tmp/job-name.txt
+
+        echo "⏳ Waiting for job to be submitted..."
+
+        MAX_WAIT=1200
+        ELAPSED=0
+
+        while [ $ELAPSED -lt $MAX_WAIT ]; do
+          JOB_DEPLOYMENT_STATUS=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}')
+
+          if [ "$JOB_DEPLOYMENT_STATUS" = "Running" ] || [ "$JOB_DEPLOYMENT_STATUS" = "Complete" ]; then
+            echo "✅ Job submitted successfully"
+            break
+          fi
+
+          sleep 5
+          ELAPSED=$((ELAPSED + 5))
+        done
+
+        if [ $ELAPSED -ge $MAX_WAIT ]; then
+          echo "❌ Job submission timeout after ${MAX_WAIT}s"
+          kubectl describe rayjob -n ai $JOB_NAME
+          exit 1
+        fi
+
+        # Then find the submitter pod
+        SUBMITTER_POD=$(kubectl get pods -n ai -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
+
+        echo "✅ Submitter pod: $SUBMITTER_POD"
+        echo ""
+        echo "🔍 Streaming training logs..."
+        echo "================================"
+
+        kubectl logs -n ai $SUBMITTER_POD -f &
+        LOG_PID=$!
+
+        while true; do
+          STATUS=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobStatus}')
+
+          case "$STATUS" in
+            "SUCCEEDED")
+              sleep 3
+              kill $LOG_PID 2>/dev/null || true
+              echo ""
+              echo "✅ Training complete!"
+              exit 0
+              ;;
+            "FAILED"|"STOPPED")
+              kill $LOG_PID 2>/dev/null || true
+              echo ""
+              echo "❌ Training failed: $STATUS"
+              exit 1
+              ;;
+          esac
+
+          sleep 10
+        done

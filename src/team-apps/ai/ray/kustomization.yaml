@@ -5,6 +5,7 @@ namespace: ai
 resources:
   - wine-classifier.yaml
   - pod-monitors.yaml
+  - fashion-mnist-classifier.yaml
 
 helmCharts:
   - name: kuberay-operator

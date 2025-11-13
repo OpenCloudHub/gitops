@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: deployment-templates
+  namespace: ai
+spec:
+  serviceAccountName: workflow-executor
+
+  templates:
+  - name: reload-ray-serve
+    inputs:
+      parameters:
+      - name: model_name
+      - name: prod_version
+      - name: ray_service_name
+      - name: ray_service_namespace
+    script:
+      image: bitnami/kubectl:latest
+      command: [sh]
+      source: |
+        set -e
+
+        MODEL_NAME="{{inputs.parameters.model_name}}"
+        PROD_VERSION="{{inputs.parameters.prod_version}}"
+        SERVICE_NAME="{{inputs.parameters.ray_service_name}}"
+        NAMESPACE="{{inputs.parameters.ray_service_namespace}}"
+
+        echo "🔄 Triggering Ray Serve reload for: ${SERVICE_NAME}"
+        echo "   Model: prod.${MODEL_NAME}@champion"
+        echo "   Version: v${PROD_VERSION}"
+
+        # Add/update annotation to trigger rollout
+        # Since your app always loads @champion, we just need to trigger a pod restart
+        TIMESTAMP=$(date +%s)
+
+        kubectl annotate rayservice "${SERVICE_NAME}" \
+          -n "${NAMESPACE}" \
+          --overwrite \
+          mlflow-model-version="${PROD_VERSION}" \
+          mlflow-champion-update="${TIMESTAMP}"
+
+        echo "✅ Annotation updated - Ray Serve will reload @champion model"
+        echo ""
+        echo "Monitor deployment:"
+        echo "  kubectl get rayservice ${SERVICE_NAME} -n ${NAMESPACE} -w"
+        echo ""
+        echo "Check logs:"
+        echo "  kubectl logs -n ${NAMESPACE} -l ray.io/node-type=head -c ray-head --tail=50"

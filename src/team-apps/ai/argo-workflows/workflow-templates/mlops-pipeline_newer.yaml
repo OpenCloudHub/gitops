@@ -1,0 +1,931 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: mlops-pipeline
+  namespace: ai
+spec:
+  serviceAccountName: workflow-executor
+
+  # TODO: in comparison and promote to staging, either we need to have tagged the model itself and not only the experiment, or we need to query for the ci model that came from the run with the argo name tag
+  arguments:
+    parameters:
+    - name: repo_name
+      description: "Name of the GitHub repo to build the serving image from"
+    - name: model_name
+      description: "Model name (e.g., wine-classifier)"
+    - name: experiment_name
+      description: "MLflow experiment name"
+    - name: compute_type
+      enum: [cpu-small, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
+      description: "Compute configuration"
+    - name: approval_mode
+      value: "manual"
+      enum: [manual, automatic]
+    - name: comparison_metric
+      value: "accuracy"
+      description: "Metric to compare"
+    - name: higher_is_better
+      value: "true"
+      description: "Whether higher metric values are better (true/false)"
+    - name: comparison_threshold
+      value: "0.05"
+      description: "Minimum improvement threshold"
+    - name: training_image
+      description: "Container image with training code"
+    - name: training_entrypoint
+      value: "python src/training/train.py"
+    - name: training_args
+      value: ""
+    - name: mlflow_tracking_uri
+      value: "http://mlflow.ai.svc.cluster.local:80"
+    - name: docker_registry
+      value: "docker.io/opencloudhuborg"
+
+  entrypoint: main
+
+  templates:
+  - name: main
+    steps:
+    # Phase 1: Map compute config
+    - - name: map-compute
+        template: map-compute-config
+        arguments:
+          parameters:
+          - name: compute_type
+            value: "{{workflow.parameters.compute_type}}"
+
+    # Phase 2: Submit Ray job
+    - - name: submit-training
+        template: submit-ray-job
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: experiment_name
+            value: "{{workflow.parameters.experiment_name}}"
+          - name: training_image
+            value: "{{workflow.parameters.training_image}}"
+          - name: training_entrypoint
+            value: "{{workflow.parameters.training_entrypoint}}"
+          - name: training_args
+            value: "{{workflow.parameters.training_args}}"
+          - name: cpu
+            value: "{{steps.map-compute.outputs.parameters.cpu}}"
+          - name: memory
+            value: "{{steps.map-compute.outputs.parameters.memory}}"
+          - name: replicas
+            value: "{{steps.map-compute.outputs.parameters.replicas}}"
+          - name: gpu
+            value: "{{steps.map-compute.outputs.parameters.gpu}}"
+          - name: mlflow_tracking_uri
+            value: "{{workflow.parameters.mlflow_tracking_uri}}"
+
+    # Phase 3: Compare and promote to staging
+    - - name: compare-promote
+        template: compare-and-promote
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: metric
+            value: "{{workflow.parameters.comparison_metric}}"
+          - name: higher_is_better
+            value: "{{workflow.parameters.higher_is_better}}"
+          - name: threshold
+            value: "{{workflow.parameters.comparison_threshold}}"
+          - name: mlflow_tracking_uri
+            value: "{{workflow.parameters.mlflow_tracking_uri}}"
+
+    # Phase 4: Build staging image
+    - - name: build-staging
+        template: build-staging-image
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: staging_version
+            value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
+          - name: registry
+            value: "{{workflow.parameters.docker_registry}}"
+          - name: repo_name
+            value: "{{workflow.parameters.repo_name}}"
+          - name: mlflow_tracking_uri
+            value: "{{workflow.parameters.mlflow_tracking_uri}}"
+
+    # Phase 5: Test staging
+    - - name: test-staging
+        template: test-staging
+        arguments:
+          parameters:
+          - name: image_tag
+            value: "{{steps.build-staging.outputs.parameters.staging_image_tag}}"
+
+    # Phase 6: Approval gate with timeout
+    - - name: approval
+        template: approval-gate
+        when: "{{workflow.parameters.approval_mode}} == manual"
+
+    # Phase 7: Check approval and fail if not approved
+    - - name: check-approval
+        template: check-approval-status
+        arguments:
+          parameters:
+          - name: approval_decision
+            value: "{{steps.approval.outputs.parameters.approve}}"
+        when: "{{workflow.parameters.approval_mode}} == manual"
+
+    # Phase 8: Promote to production (only runs if approved OR automatic)
+    - - name: promote-production
+        template: promote-to-production
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: staging_version
+            value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
+          - name: mlflow_tracking_uri
+            value: "{{workflow.parameters.mlflow_tracking_uri}}"
+        when: "{{workflow.parameters.approval_mode}} == automatic || ({{workflow.parameters.approval_mode}} == manual && '{{steps.approval.outputs.parameters.approve}}' == 'YES')"
+
+    # Phase 9: Retag image (only runs if we promoted)
+    - - name: retag-production
+        template: retag-image
+        arguments:
+          parameters:
+          - name: staging_image
+            value: "{{steps.build-staging.outputs.parameters.staging_image_tag}}"
+          - name: registry
+            value: "{{workflow.parameters.docker_registry}}"
+        when: "{{workflow.parameters.approval_mode}} == automatic || ({{workflow.parameters.approval_mode}} == manual && '{{steps.approval.outputs.parameters.approve}}' == 'YES')"
+
+    # Phase 10: Tag production model with deployment info
+    - - name: tag-deployment-info
+        template: tag-deployment-ready
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: prod_version
+            value: "{{steps.promote-production.outputs.parameters.prod_version}}"
+          - name: staging_version
+            value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
+          - name: ci_version
+            value: "{{steps.compare-promote.outputs.parameters.ci_version}}"
+          - name: prod_image_versioned
+            value: "{{steps.retag-production.outputs.parameters.prod_image}}"
+          - name: prod_image_latest
+            value: "{{steps.retag-production.outputs.parameters.prod_image_latest}}"
+          - name: approval_mode
+            value: "{{workflow.parameters.approval_mode}}"
+          - name: mlflow_tracking_uri
+            value: "{{workflow.parameters.mlflow_tracking_uri}}"
+        when: "{{workflow.parameters.approval_mode}} == automatic || ({{workflow.parameters.approval_mode}} == manual && '{{steps.approval.outputs.parameters.approve}}' == 'YES')"
+
+  # ========================================================================
+  # TEMPLATE DEFINITIONS
+  # ========================================================================
+
+  # Map compute type to resources
+  - name: map-compute-config
+    inputs:
+      parameters:
+      - name: compute_type
+    outputs:
+      parameters:
+      - name: cpu
+        valueFrom:
+          path: /tmp/cpu.txt
+      - name: memory
+        valueFrom:
+          path: /tmp/memory.txt
+      - name: replicas
+        valueFrom:
+          path: /tmp/replicas.txt
+      - name: gpu
+        valueFrom:
+          path: /tmp/gpu.txt
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        #!/bin/sh
+        set -e
+
+        case "{{inputs.parameters.compute_type}}" in
+          cpu-small)
+            echo "2" > /tmp/cpu.txt
+            echo "4Gi" > /tmp/memory.txt
+            echo "1" > /tmp/replicas.txt
+            echo "0" > /tmp/gpu.txt
+            ;;
+          cpu-medium)
+            echo "4" > /tmp/cpu.txt
+            echo "8Gi" > /tmp/memory.txt
+            echo "1" > /tmp/replicas.txt
+            echo "0" > /tmp/gpu.txt
+            ;;
+          cpu-large)
+            echo "8" > /tmp/cpu.txt
+            echo "16Gi" > /tmp/memory.txt
+            echo "2" > /tmp/replicas.txt
+            echo "0" > /tmp/gpu.txt
+            ;;
+          gpu-small)
+            echo "4" > /tmp/cpu.txt
+            echo "16Gi" > /tmp/memory.txt
+            echo "1" > /tmp/replicas.txt
+            echo "1" > /tmp/gpu.txt
+            ;;
+          gpu-medium)
+            echo "8" > /tmp/cpu.txt
+            echo "32Gi" > /tmp/memory.txt
+            echo "1" > /tmp/replicas.txt
+            echo "2" > /tmp/gpu.txt
+            ;;
+          gpu-large)
+            echo "16" > /tmp/cpu.txt
+            echo "64Gi" > /tmp/memory.txt
+            echo "1" > /tmp/replicas.txt
+            echo "4" > /tmp/gpu.txt
+            ;;
+          *)
+            echo "Unknown compute type: {{inputs.parameters.compute_type}}"
+            exit 1
+            ;;
+        esac
+
+        echo "✅ Mapped {{inputs.parameters.compute_type}}"
+
+  # Submit RayJob
+  - name: submit-ray-job
+    inputs:
+      parameters:
+      - name: model_name
+      - name: experiment_name
+      - name: training_image
+      - name: training_entrypoint
+      - name: training_args
+      - name: cpu
+      - name: memory
+      - name: replicas
+      - name: gpu
+      - name: mlflow_tracking_uri
+    outputs:
+      parameters:
+      - name: job-name
+        valueFrom:
+          path: /tmp/job-name.txt
+    script:
+      image: bitnami/kubectl:latest
+      command: [sh]
+      source: |
+        set -e
+
+        GPU="{{inputs.parameters.gpu}}"
+
+        # Build GPU resources block if needed
+        GPU_RESOURCES=""
+        GPU_NODE_SELECTOR=""
+        if [ "$GPU" != "0" ]; then
+          GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
+          GPU_NODE_SELECTOR="nodeSelector:
+          node.opencloudhub.org/gpu: \"true\""
+        fi
+
+        # Create unique label for this workflow run (no $$ - use seconds + random)
+        RUN_LABEL="wf-$(date +%s)-${RANDOM}"
+
+        echo "Creating RayJob with label: workflow-run=${RUN_LABEL}"
+
+        cat <<EOF | kubectl create -f -
+        apiVersion: ray.io/v1
+        kind: RayJob
+        metadata:
+          generateName: {{inputs.parameters.model_name}}-training-
+          namespace: ai
+          labels:
+            workflow-run: "${RUN_LABEL}"
+            model: "{{inputs.parameters.model_name}}"
+        spec:
+          entrypoint: {{inputs.parameters.training_entrypoint}} {{inputs.parameters.training_args}}
+          shutdownAfterJobFinishes: true
+          ttlSecondsAfterFinished: 300
+          rayClusterSpec:
+            rayVersion: "2.48.0"
+            headGroupSpec:
+              serviceType: ClusterIP
+              template:
+                spec:
+                  ${GPU_NODE_SELECTOR}
+                  containers:
+                  - name: ray-head
+                    image: {{inputs.parameters.training_image}}
+                    resources:
+                      requests:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                      limits:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                        ${GPU_RESOURCES}
+                    env:
+                    - name: MLFLOW_TRACKING_URI
+                      value: {{inputs.parameters.mlflow_tracking_uri}}
+                    - name: MLFLOW_EXPERIMENT_NAME
+                      value: {{inputs.parameters.experiment_name}}
+                    - name: MLFLOW_REGISTERED_MODEL_NAME
+                      value: "ci.{{inputs.parameters.model_name}}"
+                    - name: ARGO_WORKFLOW_NAME
+                      value: "{{workflow.name}}"
+                    - name: ARGO_WORKFLOW_UID
+                      value: "{{workflow.uid}}"
+            workerGroupSpecs:
+            - replicas: {{inputs.parameters.replicas}}
+              groupName: worker
+              template:
+                spec:
+                  ${GPU_NODE_SELECTOR}
+                  containers:
+                  - name: ray-worker
+                    image: {{inputs.parameters.training_image}}
+                    resources:
+                      requests:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                      limits:
+                        cpu: "{{inputs.parameters.cpu}}"
+                        memory: "{{inputs.parameters.memory}}"
+                        ${GPU_RESOURCES}
+                    env:
+                      - name: MLFLOW_TRACKING_URI
+                        value: "{{inputs.parameters.mlflow_tracking_uri}}"
+                      - name: MLFLOW_EXPERIMENT_NAME
+                        value: "{{inputs.parameters.experiment_name}}"
+                      - name: MLFLOW_REGISTERED_MODEL_NAME
+                        value: "ci.{{inputs.parameters.model_name}}"
+                      - name: ARGO_WORKFLOW_NAME
+                        value: "{{workflow.name}}"
+                      - name: ARGO_WORKFLOW_UID
+                        value: "{{workflow.uid}}"
+        EOF
+
+        # ========================================
+        # Verify RayJob created
+        # ========================================
+        echo "⏳ Waiting for RayJob..."
+        sleep 3
+
+        JOB_NAME=$(kubectl get rayjobs -n ai -l workflow-run="${RUN_LABEL}" -o jsonpath='{.items[0].metadata.name}')
+
+        if [ -z "$JOB_NAME" ]; then
+          echo "❌ Failed to get RayJob"
+          exit 1
+        fi
+
+        echo "✅ RayJob: $JOB_NAME"
+        echo "$JOB_NAME" > /tmp/job-name.txt
+
+        # ========================================
+        # Wait for job submitter pod
+        # ========================================
+        echo "⏳ Waiting for job submitter pod..."
+
+        MAX_WAIT=60
+        ELAPSED=0
+        SUBMITTER_POD=""
+
+        while [ $ELAPSED -lt $MAX_WAIT ]; do
+          SUBMITTER_POD=$(kubectl get pods -n ai -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
+
+          if [ -n "$SUBMITTER_POD" ]; then
+            break
+          fi
+
+          sleep 5
+          ELAPSED=$((ELAPSED + 5))
+        done
+
+        if [ -z "$SUBMITTER_POD" ]; then
+          echo "❌ Job submitter pod not found after ${MAX_WAIT}s"
+          exit 1
+        fi
+
+        echo "✅ Submitter pod: $SUBMITTER_POD"
+        echo ""
+        echo "🔍 Streaming training logs..."
+        echo "================================"
+
+        # Stream logs from job submitter
+        kubectl logs -n ai $SUBMITTER_POD -f &
+        LOG_PID=$!
+
+        # ========================================
+        # Wait for completion
+        # ========================================
+        while true; do
+          STATUS=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobStatus}')
+
+          case "$STATUS" in
+            "SUCCEEDED")
+              sleep 3
+              kill $LOG_PID 2>/dev/null || true
+              echo ""
+              echo "✅ Training complete!"
+              exit 0
+              ;;
+            "FAILED"|"STOPPED")
+              kill $LOG_PID 2>/dev/null || true
+              echo ""
+              echo "❌ Training failed: $STATUS"
+              exit 1
+              ;;
+          esac
+
+          sleep 10
+        done
+
+  # Compare and promote to staging
+  - name: compare-and-promote
+    inputs:
+      parameters:
+      - name: model_name
+      - name: metric
+      - name: higher_is_better
+      - name: threshold
+      - name: mlflow_tracking_uri
+    outputs:
+      parameters:
+      - name: ci_version
+        valueFrom:
+          path: /tmp/ci_version.txt
+      - name: staging_version
+        valueFrom:
+          path: /tmp/staging_version.txt
+      - name: ci_run_id
+        valueFrom:
+          path: /tmp/ci_run_id.txt
+    script:
+      image: ghcr.io/mlflow/mlflow:v2.18.0
+      command: [python]
+      source: |
+        from mlflow import MlflowClient
+        import mlflow
+        from datetime import datetime
+        import sys
+
+        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
+        mlflow.set_tracking_uri("{{inputs.parameters.mlflow_tracking_uri}}")
+
+        model_name = "{{inputs.parameters.model_name}}"
+        metric_name = "{{inputs.parameters.metric}}"
+        higher_is_better = "{{inputs.parameters.higher_is_better}}" == "true"
+        threshold = float("{{inputs.parameters.threshold}}")
+        workflow_name = "{{workflow.name}}"
+
+        print(f"🔍 Comparing {model_name}")
+        print(f"   Workflow: {workflow_name}")
+        print(f"   Metric: {metric_name} ({'higher' if higher_is_better else 'lower'} is better)")
+        print(f"   Threshold: {threshold}")
+
+        # Step 1: Get the most recent run from this workflow
+        print(f"\n📊 Getting most recent run from workflow {workflow_name}...")
+        runs_df = mlflow.search_runs(
+            search_all_experiments=True,
+            filter_string=f"tags.argo_workflow_name = '{workflow_name}'",
+            max_results=1,
+            order_by=["start_time DESC"]
+        )
+
+        if runs_df.empty:
+            print(f"❌ No runs found with tag argo_workflow_name='{workflow_name}'")
+            print(f"   Make sure training code calls: set_mlflow_experiment_tags()")
+            sys.exit(1)
+
+        run_id = runs_df.iloc[0]['run_id']
+        print(f"   Found run: {run_id[:8]}...")
+
+        # Step 2: Get CI model from this run
+        print(f"\n📦 Looking for CI model from run {run_id[:8]}...")
+        ci_versions = client.search_model_versions(
+            filter_string=f"name='ci.{model_name}' and run_id='{run_id}'"
+        )
+
+        if not ci_versions:
+            print(f"❌ No CI model found from run {run_id}")
+            print(f"   Make sure training code registers model with MLFLOW_REGISTERED_MODEL_NAME")
+            sys.exit(1)
+
+        ci_model = ci_versions[0]
+        ci_version = ci_model.version
+        ci_run_id = ci_model.run_id
+        print(f"✅ Found CI model: v{ci_version}")
+
+        # Step 3: Tag the CI model with workflow metadata
+        print(f"\n🏷️  Tagging CI model...")
+        ci_tags = {
+            "argo_workflow_name": workflow_name,
+            "argo_workflow_uid": "{{workflow.uid}}",
+            "git_repo": "ai-ml-sklearn",
+            "tagged_by": "ci_pipeline",
+            "tagged_at": datetime.utcnow().isoformat()
+        }
+
+        for key, value in ci_tags.items():
+            client.set_model_version_tag(f"ci.{model_name}", ci_version, key, value)
+            print(f"   ✓ {key}")
+
+        # Step 4: Get CI metrics
+        print(f"\n📊 Getting metrics from CI model...")
+        ci_run = client.get_run(ci_run_id)
+        if metric_name not in ci_run.data.metrics:
+            print(f"❌ Metric '{metric_name}' not found in CI model")
+            print(f"   Available: {list(ci_run.data.metrics.keys())}")
+
+            # Tag as rejected
+            client.set_model_version_tag(f"ci.{model_name}", ci_version, "promotion_status", "rejected")
+            client.set_model_version_tag(f"ci.{model_name}", ci_version, "rejection_reason", f"Missing metric: {metric_name}")
+            sys.exit(1)
+
+        ci_value = ci_run.data.metrics[metric_name]
+        print(f"   CI {metric_name}: {ci_value}")
+
+        # Step 5: Try to get champion
+        print(f"\n🏆 Looking for champion...")
+        should_promote = False
+        champion_info = None
+        improvement = None
+
+        try:
+            champion = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
+            print(f"   Found champion: v{champion.version}")
+            champion_info = f"prod.{model_name} v{champion.version}"
+
+            champ_run = client.get_run(champion.run_id)
+            if metric_name not in champ_run.data.metrics:
+                print(f"   Champion missing {metric_name}, promoting CI")
+                should_promote = True
+                improvement = "N/A (champion missing metric)"
+            else:
+                champ_value = champ_run.data.metrics[metric_name]
+                print(f"   Champion {metric_name}: {champ_value}")
+
+                # Compare
+                if higher_is_better:
+                    improvement = ci_value - champ_value
+                else:
+                    improvement = champ_value - ci_value
+
+                print(f"   Improvement: {improvement:.6f}")
+
+                if improvement >= threshold:
+                    print(f"✅ CI is better! ({improvement:.6f} >= {threshold:.6f})")
+                    should_promote = True
+                else:
+                    print(f"❌ Not enough improvement ({improvement:.6f} < {threshold:.6f})")
+
+                    # Tag as rejected
+                    client.set_model_version_tag(f"ci.{model_name}", ci_version, "promotion_status", "rejected")
+                    client.set_model_version_tag(f"ci.{model_name}", ci_version, "rejection_reason", f"Insufficient improvement: {improvement:.6f} < {threshold:.6f}")
+                    client.set_model_version_tag(f"ci.{model_name}", ci_version, "compared_against", champion_info)
+                    sys.exit(1)
+        except Exception as e:
+            print(f"   No champion found: {e}")
+            print("   Promoting first model!")
+            should_promote = True
+            champion_info = "none (first model)"
+            improvement = "N/A (first model)"
+
+        if not should_promote:
+            sys.exit(1)
+
+        # Step 6: Copy to staging
+        print(f"\n📦 Copying ci.{model_name}/v{ci_version} → staging.{model_name}")
+        staging_mv = client.copy_model_version(
+            f"models:/ci.{model_name}/{ci_version}",
+            f"staging.{model_name}"
+        )
+
+        print(f"✅ Created staging.{model_name}/v{staging_mv.version}")
+
+        # Step 7: Add comprehensive tags to staging model
+        print("\n🏷️  Tagging staging model...")
+        staging_tags = {
+            "source_ci_version": str(ci_version),
+            "argo_workflow_name": workflow_name,
+            "argo_workflow_uid": "{{workflow.uid}}",
+            "comparison_metric": f"{metric_name}={ci_value:.6f}",
+            "comparison_threshold": str(threshold),
+            "compared_against_champion": champion_info,
+            "improvement": str(improvement) if isinstance(improvement, (int, float)) else improvement,
+            "promoted_at": datetime.utcnow().isoformat(),
+            "promotion_status": "promoted_to_staging"
+        }
+
+        for key, value in staging_tags.items():
+            client.set_model_version_tag(f"staging.{model_name}", staging_mv.version, key, value)
+            print(f"   ✓ {key}: {value}")
+
+        # Write outputs
+        with open("/tmp/ci_version.txt", "w") as f:
+            f.write(str(ci_version))
+        with open("/tmp/staging_version.txt", "w") as f:
+            f.write(str(staging_mv.version))
+        with open("/tmp/ci_run_id.txt", "w") as f:
+            f.write(ci_run_id)
+
+        print("✅ Comparison complete!")
+
+  # Build staging image
+  # TODO: currently works only on trunk based repos or would need add branch info
+  - name: build-staging-image
+    inputs:
+      parameters:
+      - name: model_name
+      - name: staging_version
+      - name: registry
+      - name: repo_name
+      - name: mlflow_tracking_uri
+    outputs:
+      parameters:
+      - name: staging_image_tag
+        valueFrom:
+          path: /tmp/image_tag.txt
+      - name: git_sha
+        valueFrom:
+          path: /tmp/git_sha.txt
+    volumes:
+    - name: docker-config
+      secret:
+        secretName: dockerhub-secret
+        items:
+        - key: .dockerconfigjson
+          path: config.json
+    - name: work
+      emptyDir: {}
+    container:
+      image: moby/buildkit:v0.9.3-rootless
+      readinessProbe:
+        exec:
+          command: [sh, -c, "buildctl debug workers"]
+      volumeMounts:
+      - name: docker-config
+        mountPath: /.docker
+        readOnly: true
+      - name: work
+        mountPath: /work
+      workingDir: /work
+      env:
+      - name: BUILDKITD_FLAGS
+        value: --oci-worker-no-process-sandbox
+      - name: DOCKER_CONFIG
+        value: /.docker
+      command: [sh, -c]
+      args:
+      - |
+        set -e
+
+        # Clone repo
+        git clone https://github.com/opencloudhub/{{inputs.parameters.repo_name}}.git .
+        GIT_SHA=$(git rev-parse --short HEAD)
+
+        IMAGE_TAG="{{inputs.parameters.registry}}/{{inputs.parameters.model_name}}-serving:model-v{{inputs.parameters.staging_version}}-${GIT_SHA}-staging"
+
+        echo "$IMAGE_TAG" > /tmp/image_tag.txt
+        echo "$GIT_SHA" > /tmp/git_sha.txt
+
+        echo "🐳 Building serving image: $IMAGE_TAG"
+
+        buildctl-daemonless.sh build \
+          --frontend dockerfile.v0 \
+          --local context=. \
+          --local dockerfile=. \
+          --opt target=serving \
+          --opt build-arg:MLFLOW_TRACKING_URI={{inputs.parameters.mlflow_tracking_uri}} \
+          --opt build-arg:MODEL_NAME={{inputs.parameters.model_name}} \
+          --opt build-arg:MODEL_VERSION={{inputs.parameters.staging_version}} \
+          --output type=image,name=$IMAGE_TAG,push=true
+
+        echo "✅ Serving image built and pushed: $IMAGE_TAG"
+
+
+  # Test staging(Dummy here, should do smoke tests referencing maybe signature of model + general security checks and image scans)
+  - name: test-staging
+    inputs:
+      parameters:
+      - name: image_tag
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        echo "🧪 Testing: {{inputs.parameters.image_tag}}"
+        echo "✅ Tests passed (dummy for POC)"
+
+  # Template for approval gate
+  - name: approval-gate
+    suspend:
+      duration: "48h"
+    inputs:
+      parameters:
+      - name: approve
+        description: "Approve promotion to production?"
+        default: "NO"
+        enum:
+        - "YES"
+        - "NO"
+    outputs:
+      parameters:
+      - name: approve
+        valueFrom:
+          supplied: {}
+
+  - name: check-approval-status
+    inputs:
+      parameters:
+      - name: approval_decision
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        echo "================================"
+        echo "Checking approval decision..."
+        echo "Decision: {{inputs.parameters.approval_decision}}"
+        echo "================================"
+
+        if [ "{{inputs.parameters.approval_decision}}" != "YES" ]; then
+          echo ""
+          echo "❌ WORKFLOW FAILED: Approval denied or timed out"
+          echo ""
+          echo "The staging model was not approved for production."
+          echo "Possible reasons:"
+          echo "  - Manual rejection (user selected NO)"
+          echo "  - Timeout (no response within 48 hours)"
+          echo ""
+          echo "The workflow will now fail."
+          echo "================================"
+          exit 1
+        fi
+
+        echo ""
+        echo "✅ Approval granted - proceeding to production"
+        echo "================================"
+        exit 0
+
+  # Promote to production
+  - name: promote-to-production
+    inputs:
+      parameters:
+      - name: model_name
+      - name: staging_version
+      - name: mlflow_tracking_uri
+    outputs:
+      parameters:
+      - name: prod_version
+        valueFrom:
+          path: /tmp/prod_version.txt
+    script:
+      image: ghcr.io/mlflow/mlflow:v2.18.0
+      command: [python]
+      source: |
+        from mlflow import MlflowClient
+
+        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
+        model_name = "{{inputs.parameters.model_name}}"
+        staging_version = "{{inputs.parameters.staging_version}}"
+
+        print(f"🚀 Promoting to production: {model_name}")
+
+        # Copy staging → prod
+        print(f"📦 Copying staging.{model_name}/v{staging_version} → prod.{model_name}")
+        prod_mv = client.copy_model_version(
+            f"models:/staging.{model_name}/{staging_version}",
+            f"prod.{model_name}"
+        )
+
+        print(f"✅ Created prod.{model_name}/v{prod_mv.version}")
+
+        # Update aliases
+        try:
+            old_champ = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
+            print(f"   Moving old champion v{old_champ.version} → @previous")
+            client.set_registered_model_alias(f"prod.{model_name}", "previous", old_champ.version)
+        except:
+            print("   No previous champion to archive")
+
+        # Set new champion
+        client.set_registered_model_alias(f"prod.{model_name}", "champion", prod_mv.version)
+        print(f"✅ Set prod.{model_name}@champion → v{prod_mv.version}")
+
+        with open("/tmp/prod_version.txt", "w") as f:
+            f.write(prod_mv.version)
+
+        print("✅ Production promotion complete!")
+
+  # Retag image to production
+  - name: retag-image
+    inputs:
+      parameters:
+      - name: staging_image
+      - name: registry
+    outputs:
+      parameters:
+      - name: prod_image
+        valueFrom:
+          path: /tmp/prod_image.txt
+      - name: prod_image_latest
+        valueFrom:
+          path: /tmp/prod_image_latest.txt
+    volumes:
+    - name: docker-config
+      secret:
+        secretName: dockerhub-secret
+        items:
+        - key: .dockerconfigjson
+          path: config.json
+    script:
+      image: alpine:latest
+      volumeMounts:
+      - name: docker-config
+        mountPath: /root/.docker
+        readOnly: true
+      command: [sh]
+      source: |
+        set -e
+
+        apk add --no-cache crane
+
+        STAGING="{{inputs.parameters.staging_image}}"
+        PROD_VERSIONED="${STAGING%-staging}-prod"
+        PROD_LATEST="${STAGING%:*}:prod-latest"
+
+        echo "🏷️ Copying: $STAGING → $PROD_VERSIONED"
+        crane copy "$STAGING" "$PROD_VERSIONED"
+
+        echo "🏷️ Copying: $STAGING → $PROD_LATEST"
+        crane copy "$STAGING" "$PROD_LATEST"
+
+        echo "$PROD_VERSIONED" > /tmp/prod_image.txt
+        echo "$PROD_LATEST" > /tmp/prod_image_latest.txt
+
+        echo "✅ Done!"
+
+  # Tag production model with deployment info
+  - name: tag-deployment-ready
+    inputs:
+      parameters:
+      - name: model_name
+      - name: prod_version
+      - name: staging_version
+      - name: ci_version
+      - name: prod_image_versioned
+      - name: prod_image_latest
+      - name: approval_mode
+      - name: mlflow_tracking_uri
+    script:
+      image: ghcr.io/mlflow/mlflow:v2.18.0
+      command: [python]
+      source: |
+        from mlflow import MlflowClient
+        from datetime import datetime
+
+        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
+        model_name = "{{inputs.parameters.model_name}}"
+        prod_version = "{{inputs.parameters.prod_version}}"
+        staging_version = "{{inputs.parameters.staging_version}}"
+        ci_version = "{{inputs.parameters.ci_version}}"
+        workflow_name = "{{workflow.name}}"
+        approval_mode = "{{inputs.parameters.approval_mode}}"
+
+        print("Tagging production model with deployment info...")
+
+        tags = {
+            "source_staging_version": staging_version,
+            "source_ci_version": ci_version,
+            "argo_workflow_name": workflow_name,
+            "docker_image_versioned": "{{inputs.parameters.prod_image_versioned}}",
+            "docker_image_latest": "{{inputs.parameters.prod_image_latest}}",
+            "deployment_ready": "true",
+            "deployment_timestamp": datetime.utcnow().isoformat(),
+            "approval_mode": approval_mode
+        }
+
+        for key, value in tags.items():
+            client.set_model_version_tag(f"prod.{model_name}", prod_version, key, value)
+            print(f"Tagged: {key}")
+
+        print("Updating champion description...")
+
+        try:
+            prev_champion = client.get_model_version_by_alias(f"prod.{model_name}", "previous")
+            prev_info = f"Previous: v{prev_champion.version}"
+        except:
+            prev_info = "Previous: none"
+
+        description = "Production Champion Model\\n\\nDeployment Info:\\n- Docker Image (versioned): {{inputs.parameters.prod_image_versioned}}\\n- Docker Image (latest): {{inputs.parameters.prod_image_latest}}\\n- Deployed At: " + datetime.utcnow().isoformat() + "\\n- Approval Mode: " + approval_mode + "\\n\\nModel Lineage:\\n- Production Version: v" + prod_version + "\\n- Staging Version: v" + staging_version + "\\n- CI Version: v" + ci_version + "\\n- Argo Workflow: " + workflow_name + "\\n\\nChampion History:\\n- " + prev_info
+
+        client.update_model_version(
+            name=f"prod.{model_name}",
+            version=prod_version,
+            description=description
+        )
+
+        print("Deployment info tagged successfully!")

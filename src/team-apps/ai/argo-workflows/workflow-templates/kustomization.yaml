@@ -5,3 +5,8 @@ namespace: ai
 
 resources:
 - ml-complete-lifecycle.yaml
+- modules/compute.yaml
+- modules/training.yaml
+- modules/mlflow.yaml
+- modules/approval.yaml
+- modules/deployment.yaml

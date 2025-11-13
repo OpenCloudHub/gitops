@@ -371,5 +371,6 @@ get_exposed_services() {
     echo "mlflow.ai.internal.${base}"
     echo "argo.ai.internal.${base}"
     echo "wine-classifier.ai.internal.${base}"
+    echo "fashion-mnist-classifier.ai.internal.${base}"
     echo "api.${base}"
 }
