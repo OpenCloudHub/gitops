@@ -4,7 +4,7 @@ kind: Kustomization
 namespace: ai
 
 resources:
-- ml-ops-pipeline.yaml
+- mlops-pipeline.yaml
 - modules/compute.yaml
 - modules/training.yaml
 - modules/mlflow.yaml
