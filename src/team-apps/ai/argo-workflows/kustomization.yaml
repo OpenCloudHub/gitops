@@ -7,7 +7,7 @@ resources:
 - https://github.com/argoproj/argo-workflows/releases/download/v3.7.3/namespace-install.yaml
 - http-route.yaml
 - external-secrets.yaml
-- workflow-templates/kustomization.yaml
+- workflow-templates
 
 patches:
 - target:
