@@ -28,7 +28,7 @@ spec:
               model_uri: models:/prod.fashion-mnist-classifier/1
             ray_actor_options:
               num_cpus: 1
-              memory: 1073741824  # 1GB for the deployment actor
+              memory: 2147483648  # 2GB
   rayClusterConfig:
     rayVersion: '2.48.0'
     headGroupSpec:
