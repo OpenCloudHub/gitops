@@ -73,6 +73,18 @@ spec:
               value: "http://prometheus-server.observability.svc.cluster.local:80"
             - name: RAY_GRAFANA_IFRAME_HOST
               value: "https://grafana.observability.internal.opencloudhub.org"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-tenant-secret
+                  key: accesskey
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-tenant-secret
+                  key: secretkey
+            - name: AWS_ENDPOINT_URL
+              value: "https://minio-api.storage.internal.opencloudhub.org"
 
     workerGroupSpecs:
     - groupName: serving-workers
@@ -97,6 +109,18 @@ spec:
             env:
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow.ai.svc.cluster.local:80"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-tenant-secret
+                  key: accesskey
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-tenant-secret
+                  key: secretkey
+            - name: AWS_ENDPOINT_URL
+              value: "https://minio-api.storage.internal.opencloudhub.org"
 
 ---
 # HTTPRoute for model API (external access)
