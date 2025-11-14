@@ -45,24 +45,24 @@ spec:
           - name: ray-head
             image: opencloudhuborg/wine-classifier:latest
             imagePullPolicy: Always
-            # Add this readiness probe
             readinessProbe:
               httpGet:
                 path: /-/healthz
                 port: 8000
-              initialDelaySeconds: 60  # Give Ray Serve time to start
-              periodSeconds: 5
-              timeoutSeconds: 3
-              successThreshold: 2      # Must pass twice to be marked ready
-              failureThreshold: 6      # Allow some failures during startup
+              initialDelaySeconds: 120
+              periodSeconds: 10
+              timeoutSeconds: 5
+              successThreshold: 1
+              failureThreshold: 12  # Allow 2 minutes of failures
+            # Remove liveness probe or make it very lenient
             livenessProbe:
               httpGet:
                 path: /-/healthz
                 port: 8000
-              initialDelaySeconds: 120  # Give plenty of time for first startup
-              periodSeconds: 10
-              timeoutSeconds: 5
-              failureThreshold: 3
+              initialDelaySeconds: 300  # 5 minutes
+              periodSeconds: 30
+              timeoutSeconds: 10
+              failureThreshold: 5       # Allow 2.5 more minutes of failures
             ports:
             - containerPort: 8000
               name: serve
