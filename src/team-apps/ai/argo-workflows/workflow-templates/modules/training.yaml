@@ -66,9 +66,17 @@ spec:
               template:
                 spec:
                   ${GPU_NODE_SELECTOR}
+                  volumes:
+                  - name: dvc-config
+                    secret:
+                      secretName: dvc-config
                   containers:
                   - name: ray-head
                     image: {{inputs.parameters.training_image}}
+                    volumeMounts:
+                    - name: dvc-config
+                      mountPath: /root/.dvc
+                      readOnly: true
                     resources:
                       requests:
                         cpu: "{{inputs.parameters.cpu}}"
@@ -108,9 +116,17 @@ spec:
               template:
                 spec:
                   ${GPU_NODE_SELECTOR}
+                  volumes:
+                  - name: dvc-config
+                    secret:
+                      secretName: dvc-config
                   containers:
                   - name: ray-worker
                     image: {{inputs.parameters.training_image}}
+                    volumeMounts:
+                    - name: dvc-config
+                      mountPath: /root/.dvc
+                      readOnly: true
                     resources:
                       requests:
                         cpu: "{{inputs.parameters.cpu}}"
