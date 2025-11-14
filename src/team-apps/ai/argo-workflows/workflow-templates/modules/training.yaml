@@ -45,7 +45,19 @@ spec:
 
         RUN_LABEL="wf-$(date +%s)-${RANDOM}"
 
+        # Combine training args with data version
+        TRAINING_ARGS="{{inputs.parameters.training_args}}"
+        DVC_VERSION="{{inputs.parameters.dvc_data_version}}"
+
+        # Add --data-version if not empty
+        if [ -n "$DVC_VERSION" ]; then
+          FULL_ARGS="${TRAINING_ARGS} --data-version ${DVC_VERSION}"
+        else
+          FULL_ARGS="${TRAINING_ARGS}"
+        fi
+
         echo "Creating RayJob with label: workflow-run=${RUN_LABEL}"
+        echo "Training command: {{inputs.parameters.training_entrypoint}} ${FULL_ARGS}"
 
         cat <<EOF | kubectl create -f -
         apiVersion: ray.io/v1
@@ -57,7 +69,7 @@ spec:
             workflow-run: "${RUN_LABEL}"
             model: "{{inputs.parameters.model_name}}"
         spec:
-          entrypoint: {{inputs.parameters.training_entrypoint}} {{inputs.parameters.training_args}}
+          entrypoint: {{inputs.parameters.training_entrypoint}} ${FULL_ARGS}
           shutdownAfterJobFinishes: true
           ttlSecondsAfterFinished: 300
           rayClusterSpec:
@@ -85,6 +97,8 @@ spec:
                       value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_REGISTERED_MODEL_NAME
                       value: "ci.{{inputs.parameters.model_name}}"
+                    - name: DVC_DATA_VERSION
+                      value: {{inputs.parameters.dvc_data_version}}
                     - name: DOCKER_IMAGE_TAG
                       value: {{inputs.parameters.training_image}}
                     - name: ARGO_WORKFLOW_UID
@@ -125,6 +139,8 @@ spec:
                       value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_REGISTERED_MODEL_NAME
                       value: "ci.{{inputs.parameters.model_name}}"
+                    - name: DVC_DATA_VERSION
+                      value: {{inputs.parameters.dvc_data_version}}
                     - name: DOCKER_IMAGE_TAG
                       value: {{inputs.parameters.training_image}}
                     - name: ARGO_WORKFLOW_UID
