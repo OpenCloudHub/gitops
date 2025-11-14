@@ -18,7 +18,7 @@ spec:
   deploymentUnhealthySecondThreshold: 300
   serveConfigV2: |
     applications:
-      - name: fashion-mnist_classifier_app
+      - name: fashion-mnist-classifier-api
         import_path: src.serve:app_builder
         route_prefix: /models/fashion-mnist-classifier
         deployments:
