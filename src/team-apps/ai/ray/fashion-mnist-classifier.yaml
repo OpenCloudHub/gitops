@@ -7,7 +7,7 @@ metadata:
   name: fashion-mnist-classifier-service
   namespace: ai
   annotations:
-    argocd-image-updater.argoproj.io/image-list: ray-head=opencloudhuborg/fashion-mnist-classifier:prod-latest,ray-worker=opencloudhuborg/fashion-mnist-classifier:prod-latest
+    argocd-image-updater.argoproj.io/image-list: ray-head=opencloudhuborg/fashion-mnist-classifier:latest,ray-worker=opencloudhuborg/fashion-mnist-classifier:latest
     argocd-image-updater.argoproj.io/serving.update-strategy: digest
     argocd-image-updater.argoproj.io/write-back-method: git
     serving-image-digest: "" # ArgoCD Image Updater will update this
@@ -43,7 +43,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
           - name: ray-head
-            image: opencloudhuborg/fashion-mnist-classifier:prod-latest
+            image: opencloudhuborg/fashion-mnist-classifier:latest
             imagePullPolicy: Always
             ports:
             - containerPort: 8000
@@ -81,7 +81,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
           - name: ray-worker
-            image: opencloudhuborg/fashion-mnist-classifier:prod-latest
+            image: opencloudhuborg/fashion-mnist-classifier:latest
             imagePullPolicy: Always
             resources:
               requests:
