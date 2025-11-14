@@ -89,6 +89,7 @@ spec:
       replicas: 1
       minReplicas: 1
       maxReplicas: 2
+      numOfHosts: 1
       template:
         spec:
           nodeSelector:
@@ -97,6 +98,18 @@ spec:
           - name: ray-worker
             image: opencloudhuborg/wine-classifier:latest
             imagePullPolicy: Always
+            # Override the readiness probe - workers don't run Serve
+            readinessProbe:
+              exec:
+                command:
+                - bash
+                - -c
+                - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
+              initialDelaySeconds: 10
+              periodSeconds: 5
+              timeoutSeconds: 2
+              successThreshold: 1
+              failureThreshold: 3
             resources:
               requests:
                 cpu: "500m"
