@@ -15,12 +15,12 @@ spec:
       - name: ray_service_namespace
         value: "ai"
     script:
-      image: mikefarah/yq:4
+      image: alpine:latest
       command: [sh]
       source: |
         set -e
 
-        # Install curl
+        # Install tools
         apk add --no-cache curl jq
 
         MODEL_NAME="{{inputs.parameters.model_name}}"
@@ -36,6 +36,9 @@ spec:
         echo "📥 Fetching current deployed config..."
         curl -s "${RAY_DASHBOARD}/api/serve/applications/" > /tmp/current.json
 
+        echo "Current config:"
+        cat /tmp/current.json | jq '.'
+
         # Update model_uri in the config
         NEW_MODEL_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
@@ -44,8 +47,10 @@ spec:
           '.applications[0].deployments[0].user_config.model_uri = $uri' \
           > /tmp/updated.json
 
+        echo ""
         echo "🚀 Redeploying with updated model_uri..."
-        cat /tmp/updated.json
+        echo "Updated config:"
+        cat /tmp/updated.json | jq '.'
 
         RESPONSE=$(curl -X PUT "${RAY_DASHBOARD}/api/serve/applications/" \
           -H "Content-Type: application/json" \
