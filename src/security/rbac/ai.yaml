@@ -28,6 +28,13 @@ rules:
   - watch
   - delete
 - apiGroups:
+  - ray.io
+  resources:
+  - rayservices
+  verbs:
+  - get
+  - patch
+- apiGroups:
   - ""
   resources:
   - pods
