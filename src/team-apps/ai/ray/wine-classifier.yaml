@@ -24,6 +24,8 @@ spec:
         deployments:
           - name: WineClassifier
             num_replicas: 1
+            user_config:
+              model_uri: models:/prod.wine-classifier/1
             ray_actor_options:
               num_cpus: 0.5
   rayClusterConfig:
@@ -41,7 +43,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
           - name: ray-head
-            image: opencloudhuborg/wine-classifier-serving:prod-latest
+            image: opencloudhuborg/wine-classifier:latest
             imagePullPolicy: Always
             ports:
             - containerPort: 8000
@@ -61,12 +63,26 @@ spec:
                 cpu: "1"
                 memory: "2Gi"
             env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow.ai.svc.cluster.local:80"
             - name: RAY_GRAFANA_HOST
               value: "http://grafana.observability.svc.cluster.local:80"
             - name: RAY_PROMETHEUS_HOST
               value: "http://prometheus-server.observability.svc.cluster.local:80"
             - name: RAY_GRAFANA_IFRAME_HOST
               value: "https://grafana.observability.internal.opencloudhub.org"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-tenant-secret
+                  key: accesskey
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-tenant-secret
+                  key: secretkey
+            - name: AWS_ENDPOINT_URL
+              value: "https://minio-api.storage.internal.opencloudhub.org"
 
     workerGroupSpecs:
     - groupName: serving-workers
@@ -79,7 +95,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
           - name: ray-worker
-            image: opencloudhuborg/wine-classifier-serving:prod-latest
+            image: opencloudhuborg/wine-classifier:latest
             imagePullPolicy: Always
             resources:
               requests:
@@ -88,6 +104,21 @@ spec:
               limits:
                 cpu: "1"
                 memory: "2Gi"
+            env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow.ai.svc.cluster.local:80"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-tenant-secret
+                  key: accesskey
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-tenant-secret
+                  key: secretkey
+            - name: AWS_ENDPOINT_URL
+              value: "https://minio-api.storage.internal.opencloudhub.org"
 
 ---
 # HTTPRoute for model API (external access)
