@@ -47,7 +47,7 @@ spec:
 
         echo "Creating RayJob with label: workflow-run=${RUN_LABEL}"
 
-                cat <<EOF | kubectl create -f -
+        cat <<EOF | kubectl create -f -
         apiVersion: ray.io/v1
         kind: RayJob
         metadata:
@@ -69,14 +69,14 @@ spec:
                   ${GPU_NODE_SELECTOR}
                   volumes:
                   - name: dvc-config
-                    configMap:
-                      name: dvc-config
+                    secret:
+                      secretName: dvc-config
                   containers:
                   - name: ray-head
                     image: {{inputs.parameters.training_image}}
                     volumeMounts:
                     - name: dvc-config
-                      mountPath: /etc/xdg/dvc
+                      mountPath: /root/.config/dvc
                       readOnly: true
                     resources:
                       requests:
@@ -111,14 +111,14 @@ spec:
                   ${GPU_NODE_SELECTOR}
                   volumes:
                   - name: dvc-config
-                    configMap:
-                      name: dvc-config
+                    secret:
+                      secretName: dvc-config
                   containers:
                   - name: ray-worker
                     image: {{inputs.parameters.training_image}}
                     volumeMounts:
                     - name: dvc-config
-                      mountPath: /etc/xdg/dvc
+                      mountPath: /root/.config/dvc
                       readOnly: true
                     resources:
                       requests:
@@ -186,7 +186,7 @@ spec:
         # Then find the submitter pod
         SUBMITTER_POD=$(kubectl get pods -n ai -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
 
-                echo "✅ Submitter pod: $SUBMITTER_POD"
+        echo "✅ Submitter pod: $SUBMITTER_POD"
         echo ""
         echo "🔍 Streaming training logs..."
         echo "================================"
