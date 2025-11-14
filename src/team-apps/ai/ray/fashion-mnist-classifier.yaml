@@ -47,6 +47,11 @@ spec:
           - name: ray-head
             image: opencloudhuborg/fashion-mnist-classifier:latest
             imagePullPolicy: Always
+            # Add this readiness probe
+            readinessProbe:
+              httpGet:
+                path: /-/healthz
+                port: 8000
             ports:
             - containerPort: 8000
               name: serve
