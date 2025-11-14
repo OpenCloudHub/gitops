@@ -15,56 +15,50 @@ spec:
       - name: ray_service_namespace
         value: "ai"
     script:
-      image: alpine/curl:latest
+      image: mikefarah/yq:4
       command: [sh]
       source: |
         set -e
+
+        # Install curl
+        apk add --no-cache curl jq
 
         MODEL_NAME="{{inputs.parameters.model_name}}"
         PROD_VERSION="{{inputs.parameters.prod_version}}"
         NAMESPACE="{{inputs.parameters.ray_service_namespace}}"
         SERVICE_NAME="${MODEL_NAME}-service"
-        APP_NAME="${MODEL_NAME}-api"
 
-        echo "🔄 Updating ${APP_NAME}"
-        echo "   Model URI: models:/prod.${MODEL_NAME}/${PROD_VERSION}"
+        echo "🔄 Updating model to version ${PROD_VERSION}"
 
-        # Ray dashboard URL
         RAY_DASHBOARD="http://${SERVICE_NAME}-head-svc.${NAMESPACE}.svc.cluster.local:8265"
 
-        # Build the config
-        cat > /tmp/config.json << 'HEREDOC'
-        {
-          "applications": [
-            {
-              "name": "APP_NAME_PLACEHOLDER",
-              "config_or_import_path": {
-                "user_config": {
-                  "model_uri": "MODEL_URI_PLACEHOLDER"
-                }
-              }
-            }
-          ]
-        }
-        HEREDOC
+        # Get current deployed config
+        echo "📥 Fetching current deployed config..."
+        curl -s "${RAY_DASHBOARD}/api/serve/applications/" > /tmp/current.json
 
-        sed -i "s|APP_NAME_PLACEHOLDER|${APP_NAME}|g" /tmp/config.json
-        sed -i "s|MODEL_URI_PLACEHOLDER|models:/prod.${MODEL_NAME}/${PROD_VERSION}|g" /tmp/config.json
+        # Update model_uri in the config
+        NEW_MODEL_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
-        echo "🚀 Deploying updated config..."
+        cat /tmp/current.json | jq \
+          --arg uri "$NEW_MODEL_URI" \
+          '.applications[0].deployments[0].user_config.model_uri = $uri' \
+          > /tmp/updated.json
+
+        echo "🚀 Redeploying with updated model_uri..."
+        cat /tmp/updated.json
+
         RESPONSE=$(curl -X PUT "${RAY_DASHBOARD}/api/serve/applications/" \
           -H "Content-Type: application/json" \
-          -d @/tmp/config.json \
+          -d @/tmp/updated.json \
           -w "\n%{http_code}" -s)
 
         HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
         BODY=$(echo "$RESPONSE" | head -n-1)
 
         if [ "$HTTP_CODE" = "200" ]; then
-          echo "✅ Model URI updated to version ${PROD_VERSION}!"
-          echo "   Your reconfigure() method will be called"
+          echo "✅ Model reloaded to version ${PROD_VERSION}!"
         else
-          echo "❌ Failed to update (HTTP ${HTTP_CODE})"
+          echo "❌ Failed (HTTP ${HTTP_CODE})"
           echo "$BODY"
           exit 1
         fi
