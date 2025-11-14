@@ -41,7 +41,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
           - name: ray-head
-            image: opencloudhuborg/wine-classifier-serving:prod-latest
+            image: opencloudhuborg/wine-classifier-serving:latest
             imagePullPolicy: Always
             ports:
             - containerPort: 8000
@@ -79,7 +79,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
           - name: ray-worker
-            image: opencloudhuborg/wine-classifier-serving:prod-latest
+            image: opencloudhuborg/wine-classifier-serving:latest
             imagePullPolicy: Always
             resources:
               requests:
