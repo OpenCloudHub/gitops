@@ -40,25 +40,25 @@ spec:
         metric_name = "{{inputs.parameters.metric}}"
         higher_is_better = "{{inputs.parameters.higher_is_better}}" == "true"
         threshold = float("{{inputs.parameters.threshold}}")
-        workflow_name = "{{workflow.name}}"
+        workflow_uid = "{{workflow.uid}}"
 
         print(f"🔍 Comparing {model_name}")
-        print(f"   Workflow: {workflow_name}")
+        print(f"   Workflow: {workflow_uid}")
         print(f"   Metric: {metric_name} ({'higher' if higher_is_better else 'lower'} is better)")
         print(f"   Threshold: {threshold}")
 
         # Get the most recent run from this workflow
-        print(f"\n📊 Getting most recent run from workflow {workflow_name}...")
+        print(f"\n📊 Getting most recent run from workflow {workflow_uid}...")
         # TODO: maybe more robust?
         runs_df = mlflow.search_runs(
             search_all_experiments=True,
-            filter_string=f"tags.argo_workflow_name = '{workflow_name}'",
+            filter_string=f"tags.argo_workflow_uid = '{workflow_uid}'",
             max_results=1,
             order_by=["start_time DESC"]
         )
 
         if runs_df.empty:
-            print(f"❌ No runs found with tag argo_workflow_name='{workflow_name}'")
+            print(f"❌ No runs found with tag argo_workflow_uid='{workflow_uid}'")
             sys.exit(1)
 
         run_id = runs_df.iloc[0]['run_id']
@@ -82,7 +82,6 @@ spec:
         # Tag the CI model
         print(f"\n🏷️  Tagging CI model...")
         ci_tags = {
-            "argo_workflow_name": workflow_name,
             "argo_workflow_uid": "{{workflow.uid}}",
             "tagged_by": "ci_pipeline",
             "tagged_at": datetime.utcnow().isoformat()
