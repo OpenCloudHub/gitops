@@ -67,16 +67,12 @@ spec:
               template:
                 spec:
                   ${GPU_NODE_SELECTOR}
-                  volumeMounts:
-                  - name: dvc-config
-                    mountPath: /etc/xdg/dvc
-                    readOnly: true
                   containers:
                   - name: ray-head
                     image: {{inputs.parameters.training_image}}
                     volumeMounts:
                     - name: dvc-config
-                      mountPath: /root/.dvc
+                      mountPath: /etc/xdg/dvc
                       readOnly: true
                     resources:
                       requests:
@@ -109,16 +105,12 @@ spec:
               template:
                 spec:
                   ${GPU_NODE_SELECTOR}
-                  volumeMounts:
-                  - name: dvc-config
-                    mountPath: /etc/xdg/dvc
-                    readOnly: true
                   containers:
                   - name: ray-worker
                     image: {{inputs.parameters.training_image}}
                     volumeMounts:
                     - name: dvc-config
-                      mountPath: /root/.dvc
+                      mountPath: /etc/xdg/dvc
                       readOnly: true
                     resources:
                       requests:
