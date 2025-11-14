@@ -47,7 +47,7 @@ spec:
 
         echo "Creating RayJob with label: workflow-run=${RUN_LABEL}"
 
-        cat <<EOF | kubectl create -f -
+                cat <<EOF | kubectl create -f -
         apiVersion: ray.io/v1
         kind: RayJob
         metadata:
@@ -67,6 +67,10 @@ spec:
               template:
                 spec:
                   ${GPU_NODE_SELECTOR}
+                  volumes:
+                  - name: dvc-config
+                    configMap:
+                      name: dvc-config
                   containers:
                   - name: ray-head
                     image: {{inputs.parameters.training_image}}
@@ -105,6 +109,10 @@ spec:
               template:
                 spec:
                   ${GPU_NODE_SELECTOR}
+                  volumes:
+                  - name: dvc-config
+                    configMap:
+                      name: dvc-config
                   containers:
                   - name: ray-worker
                     image: {{inputs.parameters.training_image}}
@@ -178,32 +186,53 @@ spec:
         # Then find the submitter pod
         SUBMITTER_POD=$(kubectl get pods -n ai -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
 
-        echo "✅ Submitter pod: $SUBMITTER_POD"
+                echo "✅ Submitter pod: $SUBMITTER_POD"
         echo ""
         echo "🔍 Streaming training logs..."
         echo "================================"
 
-        kubectl logs -n ai $SUBMITTER_POD -f &
+        # Wait for the submitter pod to be ready
+        kubectl wait --for=condition=Ready pod/$SUBMITTER_POD -n ai --timeout=300s || true
+
+        # Stream logs in the background
+        kubectl logs -n ai $SUBMITTER_POD -f 2>/dev/null &
         LOG_PID=$!
 
+        # Wait for RayJob to complete
         while true; do
-          STATUS=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobStatus}')
+          STATUS=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null)
+
+          # Handle empty status (job not yet started)
+          if [ -z "$STATUS" ]; then
+            echo "⏳ Waiting for job to start..."
+            sleep 10
+            continue
+          fi
 
           case "$STATUS" in
             "SUCCEEDED")
-              sleep 3
+              sleep 5  # Give logs time to catch up
               kill $LOG_PID 2>/dev/null || true
+              wait $LOG_PID 2>/dev/null || true
               echo ""
               echo "✅ Training complete!"
               exit 0
               ;;
             "FAILED"|"STOPPED")
               kill $LOG_PID 2>/dev/null || true
+              wait $LOG_PID 2>/dev/null || true
               echo ""
               echo "❌ Training failed: $STATUS"
+              kubectl describe rayjob -n ai $JOB_NAME
               exit 1
               ;;
+            "PENDING"|"RUNNING")
+              # Job is still running, continue waiting
+              sleep 10
+              ;;
+            *)
+              echo "⏳ Job status: $STATUS"
+              sleep 10
+              ;;
           esac
-
-          sleep 10
         done
