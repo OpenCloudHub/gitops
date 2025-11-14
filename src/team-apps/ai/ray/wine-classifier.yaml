@@ -19,7 +19,7 @@ spec:
   serveConfigV2: |
     applications:
       - name: wine-classifier-api
-        import_path: src.serving.wine_classifier:deployment
+        import_path: src.serve:app_builder
         route_prefix: /models/wine-classifier
         deployments:
           - name: WineClassifier
