@@ -52,6 +52,19 @@ spec:
               httpGet:
                 path: /-/healthz
                 port: 8000
+              initialDelaySeconds: 60  # Give Ray Serve time to start
+              periodSeconds: 5
+              timeoutSeconds: 3
+              successThreshold: 2      # Must pass twice to be marked ready
+              failureThreshold: 6      # Allow some failures during startup
+            livenessProbe:
+              httpGet:
+                path: /-/healthz
+                port: 8000
+              initialDelaySeconds: 120  # Give plenty of time for first startup
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 3
             ports:
             - containerPort: 8000
               name: serve
