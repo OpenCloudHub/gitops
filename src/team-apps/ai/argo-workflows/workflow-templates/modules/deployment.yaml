@@ -12,28 +12,28 @@ spec:
       parameters:
       - name: model_name
       - name: prod_version
-      - name: ray_service_name
       - name: ray_service_namespace
-    resource:
-      action: patch
-      mergeStrategy: merge
-      manifest: |
-        apiVersion: ray.io/v1
-        kind: RayService
-        metadata:
-          name: {{inputs.parameters.ray_service_name}}
-          namespace: {{inputs.parameters.ray_service_namespace}}
-        spec:
-          serveConfigV2: |
-            applications:
-              - name: fashion-mnist_classifier_app
-                import_path: src.serve:app_builder
-                route_prefix: /models/fashion-mnist-classifier
-                deployments:
-                  - name: FashionMNISTClassifier
-                    num_replicas: 1
-                    user_config:
-                      model_uri: models:/prod.{{inputs.parameters.model_name}}/{{inputs.parameters.prod_version}}
-                    ray_actor_options:
-                      num_cpus: 1
-                      memory: 1073741824
+        value: "ai"
+    script:
+      image: bitnami/kubectl:latest
+      command: [sh]
+      source: |
+        set -e
+
+        MODEL_NAME="{{inputs.parameters.model_name}}"
+        PROD_VERSION="{{inputs.parameters.prod_version}}"
+        NAMESPACE="{{inputs.parameters.ray_service_namespace}}"
+        SERVICE_NAME="${MODEL_NAME}-service"
+
+        echo "🔄 Updating ${SERVICE_NAME} to version ${PROD_VERSION}"
+
+        # Get current config
+        CURRENT_CONFIG=$(kubectl get rayservice "${SERVICE_NAME}" -n "${NAMESPACE}" -o jsonpath='{.spec.serveConfigV2}')
+
+        # Update only the model_uri line
+        NEW_CONFIG=$(echo "${CURRENT_CONFIG}" | sed -E "s|(model_uri: models:/prod\.${MODEL_NAME}/)([0-9]+)|\1${PROD_VERSION}|")
+
+        # Patch
+        kubectl patch rayservice "${SERVICE_NAME}" -n "${NAMESPACE}" --type=merge -p "{\"spec\":{\"serveConfigV2\":$(echo "${NEW_CONFIG}" | jq -Rs .)}}"
+
+        echo "✅ Model URI updated to: models:/prod.${MODEL_NAME}/${PROD_VERSION}"
