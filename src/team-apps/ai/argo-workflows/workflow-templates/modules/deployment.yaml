@@ -27,6 +27,7 @@ spec:
         PROD_VERSION="{{inputs.parameters.prod_version}}"
         NAMESPACE="{{inputs.parameters.ray_service_namespace}}"
         SERVICE_NAME="${MODEL_NAME}-service"
+        APP_NAME="${MODEL_NAME}-api"
 
         echo "🔄 Updating model to version ${PROD_VERSION}"
 
@@ -36,25 +37,35 @@ spec:
         echo "📥 Fetching current deployed config..."
         curl -s "${RAY_DASHBOARD}/api/serve/applications/" > /tmp/current.json
 
-        echo "Current config:"
-        cat /tmp/current.json | jq '.'
+        # Extract the deployed_app_config for our application
+        APP_CONFIG=$(cat /tmp/current.json | jq ".applications[\"${APP_NAME}\"].deployed_app_config")
+
+        if [ "$APP_CONFIG" = "null" ]; then
+          echo "❌ Application ${APP_NAME} not found"
+          exit 1
+        fi
 
         # Update model_uri in the config
         NEW_MODEL_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
-        cat /tmp/current.json | jq \
+        echo "$APP_CONFIG" | jq \
           --arg uri "$NEW_MODEL_URI" \
-          '.applications[0].deployments[0].user_config.model_uri = $uri' \
-          > /tmp/updated.json
+          '.deployments[0].user_config.model_uri = $uri' \
+          > /tmp/updated_app.json
+
+        # Wrap it in the applications array format for the API
+        jq -n \
+          --argjson app "$(cat /tmp/updated_app.json)" \
+          '{applications: [$app]}' \
+          > /tmp/payload.json
 
         echo ""
         echo "🚀 Redeploying with updated model_uri..."
-        echo "Updated config:"
-        cat /tmp/updated.json | jq '.'
+        cat /tmp/payload.json | jq '.'
 
         RESPONSE=$(curl -X PUT "${RAY_DASHBOARD}/api/serve/applications/" \
           -H "Content-Type: application/json" \
-          -d @/tmp/updated.json \
+          -d @/tmp/payload.json \
           -w "\n%{http_code}" -s)
 
         HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
@@ -62,6 +73,7 @@ spec:
 
         if [ "$HTTP_CODE" = "200" ]; then
           echo "✅ Model reloaded to version ${PROD_VERSION}!"
+          echo "   Your reconfigure() method will be called"
         else
           echo "❌ Failed (HTTP ${HTTP_CODE})"
           echo "$BODY"
