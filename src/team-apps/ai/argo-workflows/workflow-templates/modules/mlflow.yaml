@@ -229,7 +229,7 @@ spec:
             "source_staging_version": "{{inputs.parameters.staging_version}}",
             "source_ci_version": "{{inputs.parameters.ci_version}}",
             "argo_workflow_name": "{{workflow.name}}",
-            "argo_workflow_uid": "{{workflow.uid}}"
+            "argo_workflow_uid": "{{workflow.uid}}",
             "deployment_ready": "true",
             "deployment_timestamp": datetime.utcnow().isoformat(),
             "approval_mode": "{{inputs.parameters.approval_mode}}",
