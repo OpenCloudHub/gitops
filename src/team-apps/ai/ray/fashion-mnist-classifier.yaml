@@ -63,6 +63,8 @@ spec:
                 cpu: "1"
                 memory: "2Gi"
             env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow.ai.svc.cluster.local:80"
             - name: RAY_GRAFANA_HOST
               value: "http://grafana.observability.svc.cluster.local:80"
             - name: RAY_PROMETHEUS_HOST
@@ -90,6 +92,9 @@ spec:
               limits:
                 cpu: "1"
                 memory: "2Gi"
+            env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow.ai.svc.cluster.local:80"
 
 ---
 # HTTPRoute for model API (external access)
