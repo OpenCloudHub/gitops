@@ -84,8 +84,24 @@ spec:
                       value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_REGISTERED_MODEL_NAME
                       value: "ci.{{inputs.parameters.model_name}}"
+                    - name: DOCKER_IMAGE_TAG
+                      value: {{inputs.parameters.training_image}}
                     - name: ARGO_WORKFLOW_UID
                       value: "{{workflow.uid}}"
+                    - name: AWS_ACCESS_KEY_ID
+                      valueFrom:
+                        secretKeyRef:
+                          name: minio-tenant-secret
+                          key: accesskey
+                    - name: AWS_SECRET_ACCESS_KEY
+                      valueFrom:
+                        secretKeyRef:
+                          name: minio-tenant-secret
+                          key: secretkey
+                    - name: AWS_ENDPOINT_URL
+                      value: "https://minio-api.storage.internal.opencloudhub.org"
+                    - name: AWS_CA_BUNDLE
+                      value: ""
             workerGroupSpecs:
             - replicas: {{inputs.parameters.replicas}}
               groupName: worker

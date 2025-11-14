@@ -372,5 +372,6 @@ get_exposed_services() {
     echo "argo.ai.internal.${base}"
     echo "wine-classifier.ai.internal.${base}"
     echo "fashion-mnist-classifier.ai.internal.${base}"
+    echo "minio-api.storage.internal.${base}"
     echo "api.${base}"
 }
