@@ -15,7 +15,7 @@ spec:
       - name: ray_service_namespace
         value: "ai"
     script:
-      image: bitnami/kubectl:latest
+      image: alpine/curl:latest
       command: [sh]
       source: |
         set -e
@@ -25,15 +25,60 @@ spec:
         NAMESPACE="{{inputs.parameters.ray_service_namespace}}"
         SERVICE_NAME="${MODEL_NAME}-service"
 
-        echo "🔄 Updating ${SERVICE_NAME} to version ${PROD_VERSION}"
+        echo "🔄 Updating model via Ray Serve API"
+        echo "   Model URI: models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
-        # Get current config
-        CURRENT_CONFIG=$(kubectl get rayservice "${SERVICE_NAME}" -n "${NAMESPACE}" -o jsonpath='{.spec.serveConfigV2}')
+        # Ray dashboard URL
+        RAY_DASHBOARD="http://${SERVICE_NAME}-head-svc.${NAMESPACE}.svc.cluster.local:8265"
 
-        # Update only the model_uri line
-        NEW_CONFIG=$(echo "${CURRENT_CONFIG}" | sed -E "s|(model_uri: models:/prod\.${MODEL_NAME}/)([0-9]+)|\1${PROD_VERSION}|")
+        # Get current application list
+        echo "📥 Fetching current application config..."
+        CURRENT_APPS=$(curl -s "${RAY_DASHBOARD}/api/serve/applications/")
 
-        # Patch
-        kubectl patch rayservice "${SERVICE_NAME}" -n "${NAMESPACE}" --type=merge -p "{\"spec\":{\"serveConfigV2\":$(echo "${NEW_CONFIG}" | jq -Rs .)}}"
+        # Extract the application name (first app in the list)
+        APP_NAME=$(echo "${CURRENT_APPS}" | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
 
-        echo "✅ Model URI updated to: models:/prod.${MODEL_NAME}/${PROD_VERSION}"
+        if [ -z "$APP_NAME" ]; then
+          echo "❌ No application found"
+          exit 1
+        fi
+
+        echo "📦 Found application: ${APP_NAME}"
+
+        # Build the update payload - only update user_config
+        cat > /tmp/config.json << 'HEREDOC'
+        {
+          "applications": [
+            {
+              "name": "APP_NAME_PLACEHOLDER",
+              "config_or_import_path": {
+                "user_config": {
+                  "model_uri": "MODEL_URI_PLACEHOLDER"
+                }
+              }
+            }
+          ]
+        }
+        HEREDOC
+
+        # Replace placeholders
+        sed -i "s|APP_NAME_PLACEHOLDER|${APP_NAME}|g" /tmp/config.json
+        sed -i "s|MODEL_URI_PLACEHOLDER|models:/prod.${MODEL_NAME}/${PROD_VERSION}|g" /tmp/config.json
+
+        echo "🚀 Deploying updated config..."
+        RESPONSE=$(curl -X PUT "${RAY_DASHBOARD}/api/serve/applications/" \
+          -H "Content-Type: application/json" \
+          -d @/tmp/config.json \
+          -w "\n%{http_code}" -s)
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        BODY=$(echo "$RESPONSE" | head -n-1)
+
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "✅ Model URI updated successfully!"
+          echo "   Your reconfigure() method will be called with new model_uri"
+        else
+          echo "❌ Failed to update (HTTP ${HTTP_CODE})"
+          echo "$BODY"
+          exit 1
+        fi
