@@ -67,17 +67,9 @@ spec:
               template:
                 spec:
                   ${GPU_NODE_SELECTOR}
-                  volumes:
-                  - name: dvc-config
-                    secret:
-                      secretName: dvc-config
                   containers:
                   - name: ray-head
                     image: {{inputs.parameters.training_image}}
-                    volumeMounts:
-                    - name: dvc-config
-                      mountPath: /root/.config/dvc
-                      readOnly: true
                     resources:
                       requests:
                         cpu: "{{inputs.parameters.cpu}}"
@@ -99,6 +91,16 @@ spec:
                       value: {{inputs.parameters.training_image}}
                     - name: ARGO_WORKFLOW_UID
                       value: "{{workflow.uid}}"
+                    - name: AWS_ACCESS_KEY_ID
+                      valueFrom:
+                        secretKeyRef:
+                          name: minio-tenant-secret
+                          key: accesskey
+                    - name: AWS_SECRET_ACCESS_KEY
+                      valueFrom:
+                        secretKeyRef:
+                          name: minio-tenant-secret
+                          key: secretkey
                     - name: AWS_ENDPOINT_URL
                       value: "https://minio-api.storage.internal.opencloudhub.org"
                     - name: AWS_CA_BUNDLE
@@ -109,17 +111,9 @@ spec:
               template:
                 spec:
                   ${GPU_NODE_SELECTOR}
-                  volumes:
-                  - name: dvc-config
-                    secret:
-                      secretName: dvc-config
                   containers:
                   - name: ray-worker
                     image: {{inputs.parameters.training_image}}
-                    volumeMounts:
-                    - name: dvc-config
-                      mountPath: /root/.config/dvc
-                      readOnly: true
                     resources:
                       requests:
                         cpu: "{{inputs.parameters.cpu}}"
@@ -141,6 +135,16 @@ spec:
                       value: {{inputs.parameters.training_image}}
                     - name: ARGO_WORKFLOW_UID
                       value: "{{workflow.uid}}"
+                    - name: AWS_ACCESS_KEY_ID
+                      valueFrom:
+                        secretKeyRef:
+                          name: minio-tenant-secret
+                          key: accesskey
+                    - name: AWS_SECRET_ACCESS_KEY
+                      valueFrom:
+                        secretKeyRef:
+                          name: minio-tenant-secret
+                          key: secretkey
                     - name: AWS_ENDPOINT_URL
                       value: "https://minio-api.storage.internal.opencloudhub.org"
                     - name: AWS_CA_BUNDLE
