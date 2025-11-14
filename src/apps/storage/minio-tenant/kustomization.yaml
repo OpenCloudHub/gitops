@@ -34,6 +34,7 @@ helmCharts:
           - name: loki-ruler
           - name: loki-admin
           - name: tempo-traces
+          - name: dvcstore
         configSecret:
           name: minio-tenant-secret
           existingSecret: true
