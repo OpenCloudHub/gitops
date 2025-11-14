@@ -221,7 +221,8 @@ spec:
         from mlflow import MlflowClient
         from datetime import datetime
 
-        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
+        tracking_uri = "{{inputs.parameters.mlflow_tracking_uri}}"
+        client = MlflowClient(tracking_uri)
         model_name = "{{inputs.parameters.model_name}}"
         prod_version = "{{inputs.parameters.prod_version}}"
 
