@@ -3,7 +3,7 @@ kind: Kustomization
 namespace: argocd
 
 resources:
-- https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/manifests/install.yaml
+- https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/config/install.yaml
 - external-secrets.yaml
 
 patches:
