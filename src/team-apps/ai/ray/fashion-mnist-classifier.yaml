@@ -43,7 +43,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
           - name: ray-head
-            image: opencloudhuborg/fashion-mnist-classifier-serving:prod-latest
+            image: opencloudhuborg/fashion-mnist-classifier:prod-latest
             imagePullPolicy: Always
             ports:
             - containerPort: 8000
@@ -81,7 +81,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
           - name: ray-worker
-            image: opencloudhuborg/fashion-mnist-classifier-serving:prod-latest
+            image: opencloudhuborg/fashion-mnist-classifier:prod-latest
             imagePullPolicy: Always
             resources:
               requests:
