@@ -22,7 +22,7 @@ spec:
         import_path: src.serve:app_builder
         route_prefix: /models/fashion-mnist-classifier
         deployments:
-          - name: FashionMnistClassifier
+          - name: FashionMNISTClassifier
             num_replicas: 1
             user_config:
               model_uri: models:/prod.fashion-mnist-classifier/1
