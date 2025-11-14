@@ -13,6 +13,8 @@ spec:
       description: "Model name (e.g., wine-classifier)"
     - name: experiment_name
       description: "MLflow experiment name"
+    - name: dvc_data_version
+      description: "Data version to use for training"
     - name: compute_type
       enum: [cpu-small, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
       description: "Compute configuration"
@@ -80,6 +82,8 @@ spec:
             value: "{{steps.map-compute.outputs.parameters.gpu}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
+          - name: dvc_data_version
+            value: "{{workflow.parameters.dvc_data_version}}"
 
     # Phase 3: Compare and promote to staging
     - - name: compare-promote
