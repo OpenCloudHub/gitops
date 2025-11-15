@@ -22,6 +22,10 @@ patches:
       kind: ConfigMap
       name: argocd-cm
     path: argo-cm.yaml
+  - target:
+      kind: Deployment
+      name: argocd-server
+    path: argocd-server-deployment.yaml
 
 images:
   - name: quay.io/argoproj/argocd
