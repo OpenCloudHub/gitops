@@ -19,8 +19,6 @@ spec:
       command: [sh]
       source: |
         set -e
-
-        # Install tools
         apk add --no-cache curl jq
 
         MODEL_NAME="{{inputs.parameters.model_name}}"
@@ -29,38 +27,87 @@ spec:
         SERVICE_NAME="${MODEL_NAME}-service"
         APP_NAME="${MODEL_NAME}-api"
 
-        echo "🔄 Updating model to version ${PROD_VERSION}"
+        echo "🔄 Deploying model version ${PROD_VERSION}"
 
         RAY_DASHBOARD="http://${SERVICE_NAME}-head-svc.${NAMESPACE}.svc.cluster.local:8265"
+        NEW_MODEL_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
-        # Get current deployed config
-        echo "📥 Fetching current deployed config..."
-        curl -s "${RAY_DASHBOARD}/api/serve/applications/" > /tmp/current.json
-
-        # Extract the deployed_app_config for our application
-        APP_CONFIG=$(cat /tmp/current.json | jq ".applications[\"${APP_NAME}\"].deployed_app_config")
-
-        if [ "$APP_CONFIG" = "null" ]; then
-          echo "❌ Application ${APP_NAME} not found"
+        # Check if Ray Serve is available
+        if ! curl -sf "${RAY_DASHBOARD}/api/serve/applications/" > /dev/null 2>&1; then
+          echo "❌ Ray Serve not available at ${RAY_DASHBOARD}"
+          echo "   Service may not be running yet"
           exit 1
         fi
 
-        # Update model_uri in the config
-        NEW_MODEL_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
+        # Get current deployed config
+        echo "📥 Checking current deployment status..."
+        curl -s "${RAY_DASHBOARD}/api/serve/applications/" > /tmp/current.json
 
-        echo "$APP_CONFIG" | jq \
-          --arg uri "$NEW_MODEL_URI" \
-          '.deployments[0].user_config.model_uri = $uri' \
-          > /tmp/updated_app.json
+        APP_STATUS=$(cat /tmp/current.json | jq -r ".applications[\"${APP_NAME}\"].status // \"NOT_FOUND\"")
 
-        # Wrap it in the applications array format for the API
-        jq -n \
-          --argjson app "$(cat /tmp/updated_app.json)" \
-          '{applications: [$app]}' \
-          > /tmp/payload.json
+        if [ "$APP_STATUS" = "NOT_FOUND" ]; then
+          echo "🆕 First deployment - creating application config..."
+
+          # Determine deployment class name based on model
+          DEPLOYMENT_CLASS="WineClassifier"
+          NUM_CPUS="0.5"
+
+          if echo "$MODEL_NAME" | grep -q "fashion-mnist"; then
+            DEPLOYMENT_CLASS="FashionMNISTClassifier"
+            NUM_CPUS="1"
+          fi
+
+          # Create full application config for first deployment
+          jq -n \
+            --arg name "$APP_NAME" \
+            --arg import_path "src.serve:app_builder" \
+            --arg route_prefix "/models/${MODEL_NAME}" \
+            --arg deployment_name "$DEPLOYMENT_CLASS" \
+            --arg model_uri "$NEW_MODEL_URI" \
+            --arg num_cpus "$NUM_CPUS" \
+            '{
+              applications: [{
+                name: $name,
+                import_path: $import_path,
+                route_prefix: $route_prefix,
+                deployments: [{
+                  name: $deployment_name,
+                  num_replicas: 1,
+                  user_config: {
+                    model_uri: $model_uri
+                  },
+                  ray_actor_options: {
+                    num_cpus: ($num_cpus | tonumber)
+                  }
+                }]
+              }]
+            }' > /tmp/payload.json
+        else
+          echo "🔄 Updating existing deployment..."
+
+          # Get deployed config
+          APP_CONFIG=$(cat /tmp/current.json | jq ".applications[\"${APP_NAME}\"].deployed_app_config")
+
+          if [ "$APP_CONFIG" = "null" ]; then
+            echo "❌ Application exists but has no deployed_app_config"
+            exit 1
+          fi
+
+          # Update model_uri in the config
+          echo "$APP_CONFIG" | jq \
+            --arg uri "$NEW_MODEL_URI" \
+            '.deployments[0].user_config.model_uri = $uri' \
+            > /tmp/updated_app.json
+
+          # Wrap in applications array
+          jq -n \
+            --argjson app "$(cat /tmp/updated_app.json)" \
+            '{applications: [$app]}' \
+            > /tmp/payload.json
+        fi
 
         echo ""
-        echo "🚀 Redeploying with updated model_uri..."
+        echo "🚀 Deploying configuration..."
         cat /tmp/payload.json | jq '.'
 
         RESPONSE=$(curl -X PUT "${RAY_DASHBOARD}/api/serve/applications/" \
@@ -72,8 +119,13 @@ spec:
         BODY=$(echo "$RESPONSE" | head -n-1)
 
         if [ "$HTTP_CODE" = "200" ]; then
-          echo "✅ Model reloaded to version ${PROD_VERSION}!"
-          echo "   Your reconfigure() method will be called"
+          echo "✅ Model deployed to version ${PROD_VERSION}!"
+          echo "   Model URI: ${NEW_MODEL_URI}"
+          if [ "$APP_STATUS" = "NOT_FOUND" ]; then
+            echo "   Initial deployment - application created"
+          else
+            echo "   reconfigure() method will be called with new model"
+          fi
         else
           echo "❌ Failed (HTTP ${HTTP_CODE})"
           echo "$BODY"
