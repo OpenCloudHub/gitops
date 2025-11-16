@@ -6,11 +6,6 @@ kind: RayService
 metadata:
   name: wine-classifier-service
   namespace: ai
-  annotations:
-    argocd-image-updater.argoproj.io/image-list: ray-head=opencloudhuborg/wine-classifier:latest,ray-worker=opencloudhuborg/wine-classifier:latest
-    argocd-image-updater.argoproj.io/serving.update-strategy: digest
-    argocd-image-updater.argoproj.io/write-back-method: git
-    serving-image-digest: "" # ArgoCD Image Updater will update this
   labels:
     app.kubernetes.io/name: wine-classifier
 spec:
@@ -33,9 +28,6 @@ spec:
         dashboard-host: '0.0.0.0'
         metrics-export-port: '8080'
       template:
-        metadata:
-          annotations:
-            serving-image-digest: "{{ .metadata.annotations.serving-image-digest }}"
         spec:
           nodeSelector:
             node.opencloudhub.org/application: "true"

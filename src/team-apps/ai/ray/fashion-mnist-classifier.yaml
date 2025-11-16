@@ -6,11 +6,6 @@ kind: RayService
 metadata:
   name: fashion-mnist-classifier-service
   namespace: ai
-  annotations:
-    argocd-image-updater.argoproj.io/image-list: ray-head=opencloudhuborg/fashion-mnist-classifier:latest,ray-worker=opencloudhuborg/fashion-mnist-classifier:latest
-    argocd-image-updater.argoproj.io/serving.update-strategy: digest
-    argocd-image-updater.argoproj.io/write-back-method: git
-    serving-image-digest: "" # ArgoCD Image Updater will update this
   labels:
     app.kubernetes.io/name: fashion-mnist-classifier
 spec:
@@ -24,22 +19,17 @@ spec:
         deployments:
           - name: FashionMNISTClassifier
             num_replicas: 1
-            # user_config:
-            #   model_uri: models:/prod.fashion-mnist-classifier/1
             ray_actor_options:
               num_cpus: 1
-              memory: 2147483648  # 2GB
+              memory: 3221225472  # 3GB
   rayClusterConfig:
     rayVersion: '2.48.0'
     headGroupSpec:
       rayStartParams:
         dashboard-host: '0.0.0.0'
         metrics-export-port: '8080'
-        object-store-memory: '536870912'  # 512MB for object store
+        object-store-memory: '1073741824'  # 1GB for object store
       template:
-        metadata:
-          annotations:
-            serving-image-digest: "{{ .metadata.annotations.serving-image-digest }}"
         spec:
           nodeSelector:
             node.opencloudhub.org/application: "true"
@@ -47,20 +37,28 @@ spec:
           - name: ray-head
             image: opencloudhuborg/fashion-mnist-classifier:latest
             imagePullPolicy: Always
+            startupProbe:
+              httpGet:
+                path: /api/gcs_healthz
+                port: 8265
+              initialDelaySeconds: 10
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 18  # 3 minutes total
             readinessProbe:
               httpGet:
-                path: /api/gcs_healthz  # Check Ray GCS, not Serve
-                port: 8265              # Dashboard port, not Serve port
-              initialDelaySeconds: 30
+                path: /api/gcs_healthz
+                port: 8265
+              initialDelaySeconds: 5
               periodSeconds: 5
               timeoutSeconds: 3
               successThreshold: 1
-              failureThreshold: 6
+              failureThreshold: 3
             livenessProbe:
               httpGet:
-                path: /api/gcs_healthz  # Same for liveness
+                path: /api/gcs_healthz
                 port: 8265
-              initialDelaySeconds: 120
+              initialDelaySeconds: 180
               periodSeconds: 30
               timeoutSeconds: 10
               failureThreshold: 5
@@ -76,11 +74,11 @@ spec:
               protocol: TCP
             resources:
               requests:
-                cpu: "1"
-                memory: "3Gi"
-              limits:
-                cpu: "2"
+                cpu: "1500m"
                 memory: "4Gi"
+              limits:
+                cpu: "3"
+                memory: "6Gi"
             env:
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow.ai.svc.cluster.local:80"
@@ -131,11 +129,11 @@ spec:
               failureThreshold: 3
             resources:
               requests:
-                cpu: "1"
-                memory: "2Gi"
-              limits:
-                cpu: "2"
+                cpu: "1500m"
                 memory: "3Gi"
+              limits:
+                cpu: "3"
+                memory: "5Gi"
             env:
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow.ai.svc.cluster.local:80"
