@@ -44,10 +44,33 @@ spec:
       command: [python]
       source: |
         from mlflow import MlflowClient
+        from mlflow.exceptions import MlflowException
         import mlflow
         from datetime import datetime
         import sys
         import json
+
+        def write_failure_outputs(reason, report):
+            """Write all required output files for failure cases"""
+            report["promoted"] = False
+            report["reason"] = reason
+
+            with open("/tmp/promoted.txt", "w") as f:
+                f.write("false")
+            with open("/tmp/reason.txt", "w") as f:
+                f.write(reason)
+            with open("/tmp/comparison-report.json", "w") as f:
+                json.dump(report, f, indent=2)
+            with open("/tmp/comparison-summary.md", "w") as f:
+                f.write(f"# ❌ Comparison Failed\n\n**Reason:** {reason}\n")
+
+            # Write empty placeholders for required outputs
+            with open("/tmp/ci_version.txt", "w") as f:
+                f.write("")
+            with open("/tmp/staging_version.txt", "w") as f:
+                f.write("")
+            with open("/tmp/ci_run_id.txt", "w") as f:
+                f.write("")
 
         client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
         mlflow.set_tracking_uri("{{inputs.parameters.mlflow_tracking_uri}}")
@@ -72,9 +95,7 @@ spec:
             "metric_name": metric_name,
             "higher_is_better": higher_is_better,
             "threshold": threshold,
-            "timestamp": datetime.utcnow().isoformat(),
-            "promoted": False,
-            "reason": "Unknown"
+            "timestamp": datetime.utcnow().isoformat()
         }
 
         # Get the most recent run from this workflow
@@ -89,15 +110,7 @@ spec:
         if runs_df.empty:
             reason = f"No runs found with tag argo_workflow_uid='{workflow_uid}'"
             print(f"❌ {reason}")
-            report["reason"] = reason
-            with open("/tmp/comparison-report.json", "w") as f:
-                json.dump(report, f, indent=2)
-            with open("/tmp/reason.txt", "w") as f:
-                f.write(reason)
-            with open("/tmp/promoted.txt", "w") as f:
-                f.write("false")
-            with open("/tmp/comparison-summary.md", "w") as f:
-                f.write(f"# ❌ Comparison Failed\n\n**Reason:** {reason}\n")
+            write_failure_outputs(reason, report)
             sys.exit(1)
 
         run_id = runs_df.iloc[0]['run_id']
@@ -113,15 +126,7 @@ spec:
         if not ci_versions:
             reason = f"No CI model found from run {run_id}"
             print(f"❌ {reason}")
-            report["reason"] = reason
-            with open("/tmp/comparison-report.json", "w") as f:
-                json.dump(report, f, indent=2)
-            with open("/tmp/reason.txt", "w") as f:
-                f.write(reason)
-            with open("/tmp/promoted.txt", "w") as f:
-                f.write("false")
-            with open("/tmp/comparison-summary.md", "w") as f:
-                f.write(f"# ❌ Comparison Failed\n\n**Reason:** {reason}\n")
+            write_failure_outputs(reason, report)
             sys.exit(1)
 
         ci_model = ci_versions[0]
@@ -152,15 +157,7 @@ spec:
             print(f"❌ {reason}")
             client.set_model_version_tag(f"ci.{model_name}", ci_version, "promotion_status", "rejected")
             client.set_model_version_tag(f"ci.{model_name}", ci_version, "rejection_reason", reason)
-            report["reason"] = reason
-            with open("/tmp/comparison-report.json", "w") as f:
-                json.dump(report, f, indent=2)
-            with open("/tmp/reason.txt", "w") as f:
-                f.write(reason)
-            with open("/tmp/promoted.txt", "w") as f:
-                f.write("false")
-            with open("/tmp/comparison-summary.md", "w") as f:
-                f.write(f"# ❌ Comparison Failed\n\n**Reason:** {reason}\n")
+            write_failure_outputs(reason, report)
             sys.exit(1)
 
         ci_value = ci_run.data.metrics[metric_name]
@@ -170,16 +167,14 @@ spec:
         # Try to get champion
         print(f"\n🏆 Looking for champion...")
         should_promote = False
-        champion_info = None
-        improvement = None
         champion_version = None
         champion_value = None
+        improvement = None
 
         try:
             champion = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
             champion_version = champion.version
             print(f"   Found champion: v{champion_version}")
-            champion_info = f"prod.{model_name} v{champion_version}"
             report["champion_version"] = str(champion_version)
             report["champion_model_uri"] = f"models:/prod.{model_name}/{champion_version}"
 
@@ -217,16 +212,23 @@ spec:
                     print(f"❌ {reason}")
                     client.set_model_version_tag(f"ci.{model_name}", ci_version, "promotion_status", "rejected")
                     client.set_model_version_tag(f"ci.{model_name}", ci_version, "rejection_reason", reason)
-                    report["reason"] = reason
-                    report["promoted"] = False
 
-                    # Write outputs for failed comparison
-                    with open("/tmp/comparison-report.json", "w") as f:
-                        json.dump(report, f, indent=2)
-                    with open("/tmp/reason.txt", "w") as f:
-                        f.write(reason)
+                    report["promoted"] = False
+                    report["reason"] = reason
+
+                    # Write all outputs including required empty ones
                     with open("/tmp/promoted.txt", "w") as f:
                         f.write("false")
+                    with open("/tmp/reason.txt", "w") as f:
+                        f.write(reason)
+                    with open("/tmp/comparison-report.json", "w") as f:
+                        json.dump(report, f, indent=2)
+                    with open("/tmp/ci_version.txt", "w") as f:
+                        f.write(str(ci_version))
+                    with open("/tmp/staging_version.txt", "w") as f:
+                        f.write("")
+                    with open("/tmp/ci_run_id.txt", "w") as f:
+                        f.write(ci_run_id)
 
                     # Create markdown summary
                     with open("/tmp/comparison-summary.md", "w") as f:
@@ -242,30 +244,17 @@ spec:
                         f.write(f"⛔ **Not promoted:** {reason}\n")
 
                     sys.exit(1)
-        except Exception as e:
-            if "RESOURCE_DOES_NOT_EXIST" in str(e):
-                reason = "No champion exists, promoting first model"
-                print(f"   {reason}")
-                should_promote = True
-                champion_info = "none (first model)"
-                improvement = "N/A"
-                report["champion_version"] = None
-                report["champion_metric_value"] = None
-                report["improvement"] = improvement
-                report["reason"] = reason
-            else:
-                reason = f"Error checking champion: {str(e)}"
-                print(f"❌ {reason}")
-                report["reason"] = reason
-                with open("/tmp/comparison-report.json", "w") as f:
-                    json.dump(report, f, indent=2)
-                with open("/tmp/reason.txt", "w") as f:
-                    f.write(reason)
-                with open("/tmp/promoted.txt", "w") as f:
-                    f.write("false")
-                with open("/tmp/comparison-summary.md", "w") as f:
-                    f.write(f"# ❌ Comparison Failed\n\n**Reason:** {reason}\n")
-                sys.exit(1)
+
+        except MlflowException as e:
+            # No champion exists - this is expected for first deployment
+            reason = "No champion exists, promoting first model"
+            print(f"   {reason}")
+            should_promote = True
+            improvement = "N/A (first deployment)"
+            report["champion_version"] = None
+            report["champion_metric_value"] = None
+            report["improvement"] = improvement
+            report["reason"] = reason
 
         if not should_promote:
             sys.exit(1)
@@ -386,7 +375,6 @@ spec:
         model_name = "{{inputs.parameters.model_name}}"
         prod_version = "{{inputs.parameters.prod_version}}"
 
-        # TODO: do we still need these or tag in code?
         tags = {
             "argo_workflow_name": "{{workflow.name}}",
             "argo_workflow_uid": "{{workflow.uid}}",
