@@ -1,0 +1,20 @@
+# src/team-apps/ai/argo-workflows/artifact-repository-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: artifact-repositories
+  namespace: ai
+  annotations:
+    workflows.argoproj.io/default-artifact-repository: default
+data:
+  default: |
+    s3:
+      bucket: argo-workflows
+      endpoint: minio.minio-tenant.svc.cluster.local:80
+      insecure: true
+      accessKeySecret:
+        name: minio-tenant-secret
+        key: accesskey
+      secretKeySecret:
+        name: minio-tenant-secret
+        key: secretkey

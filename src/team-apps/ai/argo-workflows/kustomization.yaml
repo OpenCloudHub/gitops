@@ -8,6 +8,7 @@ resources:
 - http-route.yaml
 - external-secrets.yaml
 - workflow-templates
+- artifact-repository-config.yaml
 
 patches:
 - target:
