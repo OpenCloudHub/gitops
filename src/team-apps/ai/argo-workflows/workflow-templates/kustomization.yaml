@@ -8,5 +8,4 @@ resources:
 - modules/compute.yaml
 - modules/training.yaml
 - modules/mlflow.yaml
-- modules/approval.yaml
 - modules/deployment.yaml
