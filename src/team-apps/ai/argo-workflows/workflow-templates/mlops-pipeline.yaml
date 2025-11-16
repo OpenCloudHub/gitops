@@ -4,6 +4,9 @@ kind: WorkflowTemplate
 metadata:
   name: mlops-pipeline
   namespace: ai
+  annotations:
+    workflows.argoproj.io/title: '**MLOPS Pipeline**'
+    workflows.argoproj.io/description: 'End-to-end MLOps pipeline: trains, evaluates, promotes, and deploys ML models with manual/automatic approval and full lineage tracking.'
 spec:
   serviceAccountName: workflow-executor
 
