@@ -9,7 +9,7 @@ spec:
     inputs:
       parameters:
       - name: model_name
-      - name: metric
+      - name: metric_name
       - name: higher_is_better
       - name: threshold
       - name: mlflow_tracking_uri
@@ -37,7 +37,7 @@ spec:
         mlflow.set_tracking_uri("{{inputs.parameters.mlflow_tracking_uri}}")
 
         model_name = "{{inputs.parameters.model_name}}"
-        metric_name = "{{inputs.parameters.metric}}"
+        metric_name = "{{inputs.parameters.metric_name}}"
         higher_is_better = "{{inputs.parameters.higher_is_better}}" == "true"
         threshold = float("{{inputs.parameters.threshold}}")
         workflow_uid = "{{workflow.uid}}"
@@ -226,12 +226,10 @@ spec:
         model_name = "{{inputs.parameters.model_name}}"
         prod_version = "{{inputs.parameters.prod_version}}"
 
+        # TODO: do we still need these or tag in code?
         tags = {
-            "source_staging_version": "{{inputs.parameters.staging_version}}",
-            "source_ci_version": "{{inputs.parameters.ci_version}}",
             "argo_workflow_name": "{{workflow.name}}",
             "argo_workflow_uid": "{{workflow.uid}}",
-            "deployment_ready": "true",
             "deployment_timestamp": datetime.utcnow().isoformat(),
             "approval_mode": "{{inputs.parameters.approval_mode}}",
         }

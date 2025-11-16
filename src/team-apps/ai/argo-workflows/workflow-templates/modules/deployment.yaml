@@ -23,7 +23,7 @@ spec:
 
         MODEL_NAME="{{inputs.parameters.model_name}}"
         PROD_VERSION="{{inputs.parameters.prod_version}}"
-        NAMESPACE="{{inputs.parameters.ray_service_namespace}}"
+        NAMESPACE="ai"
         SERVICE_NAME="${MODEL_NAME}-service"
         APP_NAME="${MODEL_NAME}-api"
 

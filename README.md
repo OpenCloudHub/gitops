@@ -65,6 +65,8 @@
 
 # TODO: mlflow not coming up automaticallyd
 
+# TODO: metrics in grafan for ray
+
 # TODO: start dev /etc/hosts doesn't work
 
 # TODO: follow issues with fedora and nvkind: https://github.com/NVIDIA/nvkind/issues/57

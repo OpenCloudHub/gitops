@@ -1,4 +1,3 @@
-# modules/compute.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -12,12 +11,18 @@ spec:
       - name: compute_type
     outputs:
       parameters:
-      - name: cpu
+      - name: cpu_request
         valueFrom:
-          path: /tmp/cpu.txt
-      - name: memory
+          path: /tmp/cpu_request.txt
+      - name: cpu_limit
         valueFrom:
-          path: /tmp/memory.txt
+          path: /tmp/cpu_limit.txt
+      - name: memory_request
+        valueFrom:
+          path: /tmp/memory_request.txt
+      - name: memory_limit
+        valueFrom:
+          path: /tmp/memory_limit.txt
       - name: replicas
         valueFrom:
           path: /tmp/replicas.txt
@@ -33,38 +38,58 @@ spec:
 
         case "{{inputs.parameters.compute_type}}" in
           cpu-small)
-            echo "2" > /tmp/cpu.txt
-            echo "4Gi" > /tmp/memory.txt
+            echo "2" > /tmp/cpu_request.txt
+            echo "3" > /tmp/cpu_limit.txt
+            echo "4Gi" > /tmp/memory_request.txt
+            echo "5Gi" > /tmp/memory_limit.txt
             echo "1" > /tmp/replicas.txt
             echo "0" > /tmp/gpu.txt
             ;;
+          cpu-small-distributed)
+            echo "2" > /tmp/cpu_request.txt
+            echo "3" > /tmp/cpu_limit.txt
+            echo "4Gi" > /tmp/memory_request.txt
+            echo "5Gi" > /tmp/memory_limit.txt
+            echo "2" > /tmp/replicas.txt
+            echo "0" > /tmp/gpu.txt
+            ;;
           cpu-medium)
-            echo "4" > /tmp/cpu.txt
-            echo "8Gi" > /tmp/memory.txt
+            echo "4" > /tmp/cpu_request.txt
+            echo "6" > /tmp/cpu_limit.txt
+            echo "8Gi" > /tmp/memory_request.txt
+            echo "10Gi" > /tmp/memory_limit.txt
             echo "1" > /tmp/replicas.txt
             echo "0" > /tmp/gpu.txt
             ;;
           cpu-large)
-            echo "8" > /tmp/cpu.txt
-            echo "16Gi" > /tmp/memory.txt
+            echo "8" > /tmp/cpu_request.txt
+            echo "12" > /tmp/cpu_limit.txt
+            echo "16Gi" > /tmp/memory_request.txt
+            echo "20Gi" > /tmp/memory_limit.txt
             echo "2" > /tmp/replicas.txt
             echo "0" > /tmp/gpu.txt
             ;;
           gpu-small)
-            echo "4" > /tmp/cpu.txt
-            echo "16Gi" > /tmp/memory.txt
+            echo "4" > /tmp/cpu_request.txt
+            echo "6" > /tmp/cpu_limit.txt
+            echo "16Gi" > /tmp/memory_request.txt
+            echo "20Gi" > /tmp/memory_limit.txt
             echo "1" > /tmp/replicas.txt
             echo "1" > /tmp/gpu.txt
             ;;
           gpu-medium)
-            echo "8" > /tmp/cpu.txt
-            echo "32Gi" > /tmp/memory.txt
+            echo "8" > /tmp/cpu_request.txt
+            echo "12" > /tmp/cpu_limit.txt
+            echo "32Gi" > /tmp/memory_request.txt
+            echo "40Gi" > /tmp/memory_limit.txt
             echo "1" > /tmp/replicas.txt
             echo "2" > /tmp/gpu.txt
             ;;
           gpu-large)
-            echo "16" > /tmp/cpu.txt
-            echo "64Gi" > /tmp/memory.txt
+            echo "16" > /tmp/cpu_request.txt
+            echo "24" > /tmp/cpu_limit.txt
+            echo "64Gi" > /tmp/memory_request.txt
+            echo "80Gi" > /tmp/memory_limit.txt
             echo "1" > /tmp/replicas.txt
             echo "4" > /tmp/gpu.txt
             ;;

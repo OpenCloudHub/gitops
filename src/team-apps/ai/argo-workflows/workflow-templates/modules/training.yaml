@@ -12,16 +12,18 @@ spec:
     inputs:
       parameters:
       - name: model_name
+      - name: dvc_data_version
       - name: experiment_name
       - name: training_image
       - name: training_entrypoint
       - name: training_args
-      - name: cpu
-      - name: memory
+      - name: cpu_request
+      - name: cpu_limit
+      - name: memory_request
+      - name: memory_limit
       - name: replicas
       - name: gpu
       - name: mlflow_tracking_uri
-      - name: dvc_data_version
     outputs:
       parameters:
       - name: job-name
@@ -33,6 +35,10 @@ spec:
       source: |
         set -e
 
+        MODEL_NAME="{{inputs.parameters.model_name}}"
+        DVC_DATA_VERSION="{{inputs.parameters.dvc_data_version}}"
+        TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+
         GPU="{{inputs.parameters.gpu}}"
 
         GPU_RESOURCES=""
@@ -43,21 +49,11 @@ spec:
           node.opencloudhub.org/gpu: \"true\""
         fi
 
-        RUN_LABEL="wf-$(date +%s)-${RANDOM}"
+        RUN_LABEL="${MODEL_NAME}-${DVC_DATA_VERSION}-${TIMESTAMP}-{{workflow.uid}}"
 
-        # Combine training args with data version
         TRAINING_ARGS="{{inputs.parameters.training_args}}"
-        DVC_VERSION="{{inputs.parameters.dvc_data_version}}"
 
-        # Add --data-version if not empty
-        if [ -n "$DVC_VERSION" ]; then
-          FULL_ARGS="${TRAINING_ARGS} --data-version ${DVC_VERSION}"
-        else
-          FULL_ARGS="${TRAINING_ARGS}"
-        fi
-
-        echo "Creating RayJob with label: workflow-run=${RUN_LABEL}"
-        echo "Training command: {{inputs.parameters.training_entrypoint}} ${FULL_ARGS}"
+        echo "Creating RayJob with label: workflow-run=${RUN_LABEL} and training args:${TRAINING_ARGS}"
 
         cat <<EOF | kubectl create -f -
         apiVersion: ray.io/v1
@@ -84,11 +80,11 @@ spec:
                     image: {{inputs.parameters.training_image}}
                     resources:
                       requests:
-                        cpu: "{{inputs.parameters.cpu}}"
-                        memory: "{{inputs.parameters.memory}}"
+                        cpu: "{{inputs.parameters.cpu_request}}"
+                        memory: "{{inputs.parameters.memory_request}}"
                       limits:
-                        cpu: "{{inputs.parameters.cpu}}"
-                        memory: "{{inputs.parameters.memory}}"
+                        cpu: "{{inputs.parameters.cpu_limit}}"
+                        memory: "{{inputs.parameters.memory_limit}}"
                         ${GPU_RESOURCES}
                     env:
                     - name: MLFLOW_TRACKING_URI
@@ -126,11 +122,11 @@ spec:
                     image: {{inputs.parameters.training_image}}
                     resources:
                       requests:
-                        cpu: "{{inputs.parameters.cpu}}"
-                        memory: "{{inputs.parameters.memory}}"
+                        cpu: "{{inputs.parameters.cpu_request}}"
+                        memory: "{{inputs.parameters.memory_request}}"
                       limits:
-                        cpu: "{{inputs.parameters.cpu}}"
-                        memory: "{{inputs.parameters.memory}}"
+                        cpu: "{{inputs.parameters.cpu_limit}}"
+                        memory: "{{inputs.parameters.memory_limit}}"
                         ${GPU_RESOURCES}
                     env:
                     - name: MLFLOW_TRACKING_URI
@@ -200,12 +196,13 @@ spec:
 
         echo "✅ Submitter pod: $SUBMITTER_POD"
         echo ""
-        echo "🔍 Streaming training logs..."
-        echo "================================"
+        echo "Waiting for submitter pod to become ready..."
 
-        # Wait for the submitter pod to be ready
         kubectl wait --for=condition=Ready pod/$SUBMITTER_POD -n ai --timeout=300s || true
 
+        echo ""
+        echo "🔍 Streaming training logs..."
+        echo "================================"
         # Stream logs in the background
         kubectl logs -n ai $SUBMITTER_POD -f 2>/dev/null &
         LOG_PID=$!

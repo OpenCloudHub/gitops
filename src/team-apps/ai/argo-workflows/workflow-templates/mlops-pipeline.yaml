@@ -11,10 +11,16 @@ spec:
     parameters:
     - name: model_name
       description: "Model name (e.g., wine-classifier)"
-    - name: experiment_name
-      description: "MLflow experiment name"
     - name: dvc_data_version
       description: "Data version to use for training"
+    - name: experiment_name
+      description: "MLflow experiment name"
+    - name: training_entrypoint
+      value: "python src/train.py"
+    - name: training_args
+      value: ""
+    - name: training_image
+      description: "Container image with training and serving code"
     - name: compute_type
       enum: [cpu-small, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
       description: "Compute configuration"
@@ -23,22 +29,12 @@ spec:
       enum: [manual, automatic]
     - name: comparison_metric
       value: "val_acc"
-    - name: higher_is_better
+    - name: comparison_higher_is_better
       value: "true"
     - name: comparison_threshold
       value: "0.05"
-    - name: training_image
-      description: "Container image with training and serving code"
-    - name: training_entrypoint
-      value: "python src/training/train.py"
-    - name: training_args
-      value: ""
     - name: mlflow_tracking_uri
       value: "http://mlflow.ai.svc.cluster.local:80"
-    - name: ray_service_name
-      value: "wine-classifier-service"
-    - name: ray_service_namespace
-      value: "ai"
 
   entrypoint: main
 
@@ -64,6 +60,8 @@ spec:
           parameters:
           - name: model_name
             value: "{{workflow.parameters.model_name}}"
+          - name: dvc_data_version
+            value: "{{workflow.parameters.dvc_data_version}}"
           - name: experiment_name
             value: "{{workflow.parameters.experiment_name}}"
           - name: training_image
@@ -72,18 +70,20 @@ spec:
             value: "{{workflow.parameters.training_entrypoint}}"
           - name: training_args
             value: "{{workflow.parameters.training_args}}"
-          - name: cpu
-            value: "{{steps.map-compute.outputs.parameters.cpu}}"
-          - name: memory
-            value: "{{steps.map-compute.outputs.parameters.memory}}"
+          - name: cpu_request
+            value: "{{steps.map-compute.outputs.parameters.cpu_request}}"
+          - name: cpu_limit
+            value: "{{steps.map-compute.outputs.parameters.cpu_limit}}"
+          - name: memory_request
+            value: "{{steps.map-compute.outputs.parameters.memory_request}}"
+          - name: memory_limit
+            value: "{{steps.map-compute.outputs.parameters.memory_limit}}"
           - name: replicas
             value: "{{steps.map-compute.outputs.parameters.replicas}}"
           - name: gpu
             value: "{{steps.map-compute.outputs.parameters.gpu}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
-          - name: dvc_data_version
-            value: "{{workflow.parameters.dvc_data_version}}"
 
     # Phase 3: Compare and promote to staging
     - - name: compare-promote
@@ -94,10 +94,10 @@ spec:
           parameters:
           - name: model_name
             value: "{{workflow.parameters.model_name}}"
-          - name: metric
+          - name: metric_name
             value: "{{workflow.parameters.comparison_metric}}"
           - name: higher_is_better
-            value: "{{workflow.parameters.higher_is_better}}"
+            value: "{{workflow.parameters.comparison_higher_is_better}}"
           - name: threshold
             value: "{{workflow.parameters.comparison_threshold}}"
           - name: mlflow_tracking_uri
@@ -105,13 +105,22 @@ spec:
 
     # Phase 4: Manual approval
     - - name: approval
-        templateRef:
-          name: approval-templates
-          template: approval-with-check
-        arguments:
-          parameters:
-          - name: approval_mode
-            value: "{{workflow.parameters.approval_mode}}"
+        suspend: {}
+        inputs:
+            parameters:
+              - name: approve
+                default: 'NO'
+                enum:
+                    - 'YES'
+                    - 'NO'
+                description: >-
+                  Choose YES to continue workflow and deploy to production
+        outputs:
+            parameters:
+              - name: approve
+                valueFrom:
+                    supplied: {}
+        when: "{{workflow.parameters.approval_mode}} == manual"
 
     # Phase 5: Promote to production in MLflow
     - - name: promote-production
@@ -126,7 +135,7 @@ spec:
             value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
-        when: "{{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approved}}' == 'true'"
+        when: "{{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approve}}' == 'YES'"
 
     # Phase 6: Reload Ray Serve to pick up new @champion model
     - - name: reload-ray-serve
@@ -139,11 +148,6 @@ spec:
             value: "{{workflow.parameters.model_name}}"
           - name: prod_version
             value: "{{steps.promote-production.outputs.parameters.prod_version}}"
-          - name: ray_service_name
-            value: "{{workflow.parameters.ray_service_name}}"
-          - name: ray_service_namespace
-            value: "{{workflow.parameters.ray_service_namespace}}"
-        when: "{{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approved}}' == 'true'"
 
     # Phase 7: Tag deployment info
     - - name: tag-deployment
@@ -164,4 +168,3 @@ spec:
             value: "{{workflow.parameters.approval_mode}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
-        when: "{{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approved}}' == 'true'"
