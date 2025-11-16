@@ -62,7 +62,7 @@ spec:
         NEW_MODEL_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
         # Wait for Ray Dashboard to be available
-        MAX_WAIT=300
+        MAX_WAIT=600
         ELAPSED=0
         while [ $ELAPSED -lt $MAX_WAIT ]; do
           if curl -sf "${RAY_DASHBOARD}/api/serve/applications/" > /dev/null 2>&1; then
