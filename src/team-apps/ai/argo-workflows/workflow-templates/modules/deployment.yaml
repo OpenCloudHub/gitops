@@ -39,11 +39,16 @@ spec:
           echo "📦 Image changed: ${CURRENT_IMAGE} → ${TRAINING_IMAGE}"
           echo "   Updating RayService..."
 
-          # Update both head and worker images
-          kubectl patch rayservice ${SERVICE_NAME} -n ${NAMESPACE} --type=json -p='[
-            {"op": "replace", "path": "/spec/rayClusterConfig/headGroupSpec/template/spec/containers/0/image", "value": "'${TRAINING_IMAGE}'"},
-            {"op": "replace", "path": "/spec/rayClusterConfig/workerGroupSpecs/0/template/spec/containers/0/image", "value": "'${TRAINING_IMAGE}'"}
-          ]'
+          # Create patch file
+          cat > /tmp/patch.json <<EOF
+        [
+          {"op": "replace", "path": "/spec/rayClusterConfig/headGroupSpec/template/spec/containers/0/image", "value": "${TRAINING_IMAGE}"},
+          {"op": "replace", "path": "/spec/rayClusterConfig/workerGroupSpecs/0/template/spec/containers/0/image", "value": "${TRAINING_IMAGE}"}
+        ]
+        EOF
+
+          # Apply patch
+          kubectl patch rayservice ${SERVICE_NAME} -n ${NAMESPACE} --type=json --patch-file /tmp/patch.json
 
           echo "⏳ Waiting for rollout to complete (this will restart Ray)..."
           sleep 10
