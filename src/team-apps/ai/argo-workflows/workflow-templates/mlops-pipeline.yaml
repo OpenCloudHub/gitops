@@ -105,21 +105,7 @@ spec:
 
     # Phase 4: Manual approval
     - - name: approval
-        suspend: {}
-        inputs:
-            parameters:
-              - name: approve
-                default: 'NO'
-                enum:
-                    - 'YES'
-                    - 'NO'
-                description: >-
-                  Choose YES to continue workflow and deploy to production
-        outputs:
-            parameters:
-              - name: approve
-                valueFrom:
-                    supplied: {}
+        template: approval-gate
         when: "{{workflow.parameters.approval_mode}} == manual"
 
     # Phase 5: Promote to production in MLflow
@@ -168,3 +154,22 @@ spec:
             value: "{{workflow.parameters.approval_mode}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
+
+
+  # Approval gate template
+  - name: approval-gate
+    inputs:
+      parameters:
+        - name: approve
+          default: 'NO'
+          enum:
+            - 'YES'
+            - 'NO'
+          description: >-
+            Choose YES to continue workflow and deploy to production
+    outputs:
+      parameters:
+        - name: approve
+          valueFrom:
+            supplied: {}
+    suspend: {}
