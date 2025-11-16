@@ -116,7 +116,7 @@ spec:
           - name: model_name
             value: "{{workflow.parameters.model_name}}"
           - name: staging_version
-            value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
+            value: "{{steps.compare-promote-staging.outputs.parameters.staging_version}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
@@ -135,7 +135,7 @@ spec:
           - name: model_name
             value: "{{workflow.parameters.model_name}}"
           - name: staging_version
-            value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
+            value: "{{steps.compare-promote-staging.outputs.parameters.staging_version}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
         when: "({{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approve}}' == 'YES') && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
@@ -166,9 +166,9 @@ spec:
           - name: prod_version
             value: "{{steps.promote-production.outputs.parameters.prod_version}}"
           - name: staging_version
-            value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
+            value: "{{steps.compare-promote-staging.outputs.parameters.staging_version}}"
           - name: ci_version
-            value: "{{steps.compare-promote.outputs.parameters.ci_version}}"
+            value: "{{steps.compare-promote-staging.outputs.parameters.ci_version}}"
           - name: approval_mode
             value: "{{workflow.parameters.approval_mode}}"
           - name: mlflow_tracking_uri
