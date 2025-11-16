@@ -49,7 +49,7 @@ spec:
           node.opencloudhub.org/gpu: \"true\""
         fi
 
-        RUN_LABEL="${MODEL_NAME}-${DVC_DATA_VERSION}-${TIMESTAMP}-{{workflow.uid}}"
+        RUN_LABEL="${MODEL_NAME}-${DVC_DATA_VERSION}-${TIMESTAMP}"
 
         TRAINING_ARGS="{{inputs.parameters.training_args}}"
 
