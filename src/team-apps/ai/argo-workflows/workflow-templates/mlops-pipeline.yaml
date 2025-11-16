@@ -89,10 +89,10 @@ spec:
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
     # Phase 3: Compare and promote to staging
-    - - name: compare-promote
+    - - name: compare-promote-staging
         templateRef:
           name: mlflow-templates
-          template: compare-and-promote
+          template: compare-and-promote-staging
         arguments:
           parameters:
           - name: model_name
@@ -106,12 +106,26 @@ spec:
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
-    # Phase 4: Manual approval
+    # Phase 4: Running Tests
+    - - name: test-staging
+        templateRef:
+          name: mlflow-templates
+          template: test-staging-model
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{workflow.parameters.model_name}}"
+          - name: staging_version
+            value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
+          - name: mlflow_tracking_uri
+            value: "{{workflow.parameters.mlflow_tracking_uri}}"
+
+    # Phase 5: Manual approval (only if tests pass)
     - - name: approval
         template: approval-gate
-        when: "{{workflow.parameters.approval_mode}} == manual"
+        when: "{{workflow.parameters.approval_mode}} == manual && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
 
-    # Phase 5: Promote to production in MLflow
+    # Phase 6: Promote to production (only if tests passed)
     - - name: promote-production
         templateRef:
           name: mlflow-templates
@@ -124,9 +138,9 @@ spec:
             value: "{{steps.compare-promote.outputs.parameters.staging_version}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
-        when: "{{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approve}}' == 'YES'"
+        when: "({{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approve}}' == 'YES') && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
 
-    # Phase 6: Reload Ray Serve to pick up new @champion model
+    # Phase 7: Reload Ray Serve to pick up new @champion model
     - - name: reload-ray-serve
         templateRef:
           name: deployment-templates
@@ -137,12 +151,14 @@ spec:
             value: "{{workflow.parameters.model_name}}"
           - name: prod_version
             value: "{{steps.promote-production.outputs.parameters.prod_version}}"
+          - name: training_image
+            value: "{{workflow.parameters.training_image}}"
 
-    # Phase 7: Tag deployment info
-    - - name: tag-deployment
+    # Phase 8: Tag deployment info
+    - - name: tag-mlflow-prod-model
         templateRef:
           name: mlflow-templates
-          template: tag-deployment-ready
+          template: tag-mlflow-prod-model
         arguments:
           parameters:
           - name: model_name
