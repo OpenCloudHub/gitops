@@ -1,4 +1,4 @@
-# Wine Classifier - Complete Service Definition
+# Fashion-Mnist-Classifier - Complete Service Definition
 ---
 # RayService for model serving
 apiVersion: ray.io/v1
@@ -18,10 +18,14 @@ spec:
         route_prefix: /models/fashion-mnist-classifier
         deployments:
           - name: FashionMNISTClassifier
-            num_replicas: 1
+            num_replicas: 2
+            placement_group_strategy: STRICT_SPREAD
             ray_actor_options:
               num_cpus: 1
               memory: 3221225472  # 3GB
+    http_options:
+      host: "0.0.0.0"
+      port: 8000
   rayClusterConfig:
     rayVersion: '2.48.0'
     headGroupSpec:
@@ -115,7 +119,6 @@ spec:
           - name: ray-worker
             image: opencloudhuborg/fashion-mnist-classifier:latest
             imagePullPolicy: Always
-            # Override the readiness probe - workers don't run Serve
             readinessProbe:
               exec:
                 command:
