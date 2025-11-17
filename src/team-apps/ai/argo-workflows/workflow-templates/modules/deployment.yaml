@@ -27,8 +27,8 @@ spec:
         source: |
           set -e
 
-          # Install yq
-          apk add --no-cache yq
+          # Install yq and sed
+          apk add --no-cache yq sed
 
           # Setup SSH
           mkdir -p ~/.ssh
@@ -56,9 +56,11 @@ spec:
 
           SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
-          # Get current values
+          # Get current values using simpler yq queries
           CURRENT_IMAGE=$(yq eval '.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image' "$SERVICE_FILE")
-          CURRENT_URI=$(yq eval '.spec.serveConfigV2' "$SERVICE_FILE" | yq eval '.applications[0].deployments[0].user_config.model_uri' -)
+
+          # Extract serveConfigV2 as string and parse for model_uri
+          CURRENT_URI=$(yq eval '.spec.serveConfigV2' "$SERVICE_FILE" | grep -oP 'model_uri:\s*"\K[^"]+' || echo "")
 
           echo "📊 Current State:"
           echo "   Image: ${CURRENT_IMAGE}"
@@ -67,24 +69,36 @@ spec:
 
           CHANGED=false
 
-          # Update image if different
+          # Update image if different - use sed instead of yq to avoid formatting issues
           if [ "$CURRENT_IMAGE" != "$TRAINING_IMAGE" ]; then
             echo "✏️  Updating image: ${CURRENT_IMAGE} → ${TRAINING_IMAGE}"
-            yq eval -i ".spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
-            yq eval -i ".spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
+
+            # Escape special characters in image name for sed
+            ESCAPED_OLD=$(echo "$CURRENT_IMAGE" | sed 's/[\/&]/\\&/g')
+            ESCAPED_NEW=$(echo "$TRAINING_IMAGE" | sed 's/[\/&]/\\&/g')
+
+            # Replace all occurrences of the old image
+            sed -i "s|image: ${ESCAPED_OLD}|image: ${ESCAPED_NEW}|g" "$SERVICE_FILE"
+
             CHANGED=true
           else
             echo "✓ Image unchanged"
           fi
 
-          # Update model URI if different
+          # Update model URI if different - use sed on the serveConfigV2 string
           if [ "$CURRENT_URI" != "$NEW_URI" ]; then
             echo "✏️  Updating model: ${CURRENT_URI} → ${NEW_URI}"
-            if yq eval '.spec.serveConfigV2' "$SERVICE_FILE" | grep -q "user_config:"; then
-              yq eval -i '(.spec.serveConfigV2 | from_yaml | .applications[0].deployments[0].user_config.model_uri) = "'"${NEW_URI}"'"' "$SERVICE_FILE"
+
+            if [ -n "$CURRENT_URI" ]; then
+              # Replace existing model_uri
+              ESCAPED_OLD_URI=$(echo "$CURRENT_URI" | sed 's/[\/&]/\\&/g')
+              ESCAPED_NEW_URI=$(echo "$NEW_URI" | sed 's/[\/&]/\\&/g')
+              sed -i "s|model_uri: \"${ESCAPED_OLD_URI}\"|model_uri: \"${ESCAPED_NEW_URI}\"|g" "$SERVICE_FILE"
             else
-              yq eval -i '(.spec.serveConfigV2 | from_yaml | .applications[0].deployments[0].user_config) = {"model_uri": "'"${NEW_URI}"'"}' "$SERVICE_FILE"
+              # Add model_uri under user_config (if missing)
+              sed -i "/user_config:/a\\            model_uri: \"${NEW_URI}\"" "$SERVICE_FILE"
             fi
+
             CHANGED=true
           else
             echo "✓ Model URI unchanged"
