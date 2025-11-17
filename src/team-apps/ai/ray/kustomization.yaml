@@ -3,9 +3,9 @@ kind: Kustomization
 namespace: ai
 
 resources:
-  - wine-service.yaml
+  - wine-classifier-service.yaml
   - pod-monitors.yaml
-  - fashion-mnist-service.yaml
+  - fashion-mnist-classifier-service.yaml
 
 helmCharts:
   - name: kuberay-operator
