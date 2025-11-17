@@ -47,11 +47,16 @@ spec:
 
           SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
-          # Replace model_uri - simple pattern match
-          sed -i '/model_uri:/s|/[0-9]*"|/'${PROD_VERSION}'"|' "$SERVICE_FILE"
+          # Get current values
+          OLD_VERSION=$(grep 'model_uri:' "$SERVICE_FILE" | head -1 | grep -o '[0-9]*"' | tr -d '"')
+          OLD_IMAGE=$(grep 'image:' "$SERVICE_FILE" | grep "$MODEL_NAME" | head -1 | awk '{print $2}')
 
-          # Replace image - match the old tag and replace entire line
-          sed -i '/image:.*'${MODEL_NAME}'/s|:.*|: '${TRAINING_IMAGE}'|' "$SERVICE_FILE"
+          echo "Old version: ${OLD_VERSION} -> New: ${PROD_VERSION}"
+          echo "Old image: ${OLD_IMAGE} -> New: ${TRAINING_IMAGE}"
+
+          # Simple string replacement - no regex
+          sed -i "s|prod.${MODEL_NAME}/${OLD_VERSION}|prod.${MODEL_NAME}/${PROD_VERSION}|g" "$SERVICE_FILE"
+          sed -i "s|${OLD_IMAGE}|${TRAINING_IMAGE}|g" "$SERVICE_FILE"
 
           git config user.name "Argo Workflow"
           git config user.email "workflow@opencloudhub.org"
