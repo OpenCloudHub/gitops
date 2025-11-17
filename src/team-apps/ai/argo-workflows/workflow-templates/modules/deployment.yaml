@@ -27,7 +27,6 @@ spec:
         source: |
           set -e
 
-          # Install yq only (sed is built-in)
           apk add --no-cache yq
 
           # Setup SSH
@@ -42,85 +41,50 @@ spec:
           TRAINING_IMAGE="{{inputs.parameters.training_image}}"
           NEW_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
-          # Strip whitespace
           MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
 
-          echo "📦 Deployment Request:"
-          echo "   Model: ${MODEL_NAME}"
-          echo "   Version: v${PROD_VERSION}"
-          echo "   Image: ${TRAINING_IMAGE}"
-          echo ""
+          echo "📦 Deployment: ${MODEL_NAME} v${PROD_VERSION}"
 
           git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
 
           SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
-          # Get current values
           CURRENT_IMAGE=$(yq eval '.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image' "$SERVICE_FILE")
-
-          # Extract model_uri using basic grep (no -P flag)
-          CURRENT_URI=$(grep 'model_uri:' "$SERVICE_FILE" | head -1 | sed 's/.*model_uri: *"\([^"]*\)".*/\1/')
-
-          echo "📊 Current State:"
-          echo "   Image: ${CURRENT_IMAGE}"
-          echo "   Model: ${CURRENT_URI}"
-          echo ""
 
           CHANGED=false
 
-          # Update image if different
+          # Update images if different
           if [ "$CURRENT_IMAGE" != "$TRAINING_IMAGE" ]; then
-            echo "✏️  Updating image: ${CURRENT_IMAGE} → ${TRAINING_IMAGE}"
-
-            # Use awk to safely replace image across multiple lines
-            awk -v old="$CURRENT_IMAGE" -v new="$TRAINING_IMAGE" '
-              /image:/ {
-                # If line contains "image: <value>"
-                if ($0 ~ /image: /) {
-                  sub(old, new)
-                }
-              }
-              { print }
-            ' "$SERVICE_FILE" > "${SERVICE_FILE}.tmp"
-            mv "${SERVICE_FILE}.tmp" "$SERVICE_FILE"
-
+            echo "✏️  Updating image"
+            yq eval -i ".spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
+            yq eval -i ".spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
             CHANGED=true
-          else
-            echo "✓ Image unchanged"
           fi
 
-          # Update model URI if different
+          # Update model URI in serveConfigV2 (the nested YAML string)
+          # First extract it, modify it, then put it back
+          SERVE_CONFIG=$(yq eval '.spec.serveConfigV2' "$SERVICE_FILE")
+          CURRENT_URI=$(echo "$SERVE_CONFIG" | yq eval '.applications[0].deployments[0].user_config.model_uri' -)
+
           if [ "$CURRENT_URI" != "$NEW_URI" ]; then
-            echo "✏️  Updating model: ${CURRENT_URI} → ${NEW_URI}"
-
-            # Use awk to replace model_uri in serveConfigV2 block
-            awk -v old="$CURRENT_URI" -v new="$NEW_URI" '
-              /model_uri:/ {
-                gsub(old, new)
-              }
-              { print }
-            ' "$SERVICE_FILE" > "${SERVICE_FILE}.tmp"
-            mv "${SERVICE_FILE}.tmp" "$SERVICE_FILE"
-
+            echo "✏️  Updating model URI"
+            # Update the nested YAML
+            UPDATED_CONFIG=$(echo "$SERVE_CONFIG" | yq eval ".applications[0].deployments[0].user_config.model_uri = \"${NEW_URI}\"" -)
+            # Put it back as a string
+            yq eval -i ".spec.serveConfigV2 = \"${UPDATED_CONFIG}\"" "$SERVICE_FILE"
             CHANGED=true
-          else
-            echo "✓ Model URI unchanged"
           fi
-
-          echo ""
 
           if [ "$CHANGED" = false ]; then
-            echo "✅ Already at target state - no changes needed"
+            echo "✅ No changes needed"
             exit 0
           fi
 
-          # Commit and push
           git config user.name "Argo Workflow"
           git config user.email "workflow@opencloudhub.org"
           git add "$SERVICE_FILE"
           git commit -m "🤖 Deploy ${MODEL_NAME} v${PROD_VERSION}"
           git push
 
-          echo ""
-          echo "✅ GitOps repo updated! ArgoCD will sync the changes."
+          echo "✅ Done"
