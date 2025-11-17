@@ -1,125 +1,3 @@
-apiVersion: argoproj.io/v1alpha1
-kind: WorkflowTemplate
-metadata:
-  name: deployment-templates
-  namespace: ai
-spec:
-  serviceAccountName: workflow-executor
-
-  templates:
-  - name: reload-ray-serve
-    inputs:
-      parameters:
-      - name: model_name
-      - name: prod_version
-      - name: training_image
-    script:
-      image: alpine:latest
-      command: [sh]
-      source: |
-        set -e
-
-        # Install dependencies first
-        apk add --no-cache curl jq kubectl
-
-        MODEL_NAME="{{inputs.parameters.model_name}}"
-        PROD_VERSION="{{inputs.parameters.prod_version}}"
-        TRAINING_IMAGE="{{inputs.parameters.training_image}}"
-        NAMESPACE="ai"
-        SERVICE_NAME="${MODEL_NAME}-service"
-
-        echo "🔄 Updating Ray Serve with new model and image"
-        echo "   Model: prod.${MODEL_NAME}/v${PROD_VERSION}"
-        echo "   Image: ${TRAINING_IMAGE}"
-
-        # Update RayService image if it changed
-        CURRENT_IMAGE=$(kubectl get rayservice ${SERVICE_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image}')
-
-        if [ "$CURRENT_IMAGE" != "$TRAINING_IMAGE" ]; then
-          echo "📦 Image changed: ${CURRENT_IMAGE} → ${TRAINING_IMAGE}"
-          echo "   Updating RayService..."
-
-          # Create patch file
-          cat > /tmp/patch.json <<EOF
-        [
-          {"op": "replace", "path": "/spec/rayClusterConfig/headGroupSpec/template/spec/containers/0/image", "value": "${TRAINING_IMAGE}"},
-          {"op": "replace", "path": "/spec/rayClusterConfig/workerGroupSpecs/0/template/spec/containers/0/image", "value": "${TRAINING_IMAGE}"}
-        ]
-        EOF
-
-          # Apply patch
-          kubectl patch rayservice ${SERVICE_NAME} -n ${NAMESPACE} --type=json --patch-file /tmp/patch.json
-
-          echo "⏳ Waiting for rollout to complete (this will restart Ray)..."
-          sleep 10
-          echo "   Ray cluster will restart with new image"
-        else
-          echo "✅ Image unchanged, proceeding with in-place model update"
-        fi
-
-        # Now update the model URI via Ray Serve API (in-place)
-        RAY_DASHBOARD="http://${SERVICE_NAME}-head-svc.${NAMESPACE}.svc.cluster.local:8265"
-        NEW_MODEL_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
-
-        # Wait for Ray Dashboard to be available
-        MAX_WAIT=600
-        ELAPSED=0
-        while [ $ELAPSED -lt $MAX_WAIT ]; do
-          if curl -sf "${RAY_DASHBOARD}/api/serve/applications/" > /dev/null 2>&1; then
-            echo "✅ Ray Dashboard available"
-            break
-          fi
-          echo "⏳ Waiting for Ray Dashboard..."
-          sleep 5
-          ELAPSED=$((ELAPSED + 5))
-        done
-
-        if [ $ELAPSED -ge $MAX_WAIT ]; then
-          echo "❌ Ray Dashboard not available after ${MAX_WAIT}s"
-          exit 1
-        fi
-
-        # Get current application config
-        curl -s "${RAY_DASHBOARD}/api/serve/applications/" > /tmp/current.json
-        APP_NAME="${MODEL_NAME}-api"
-        APP_CONFIG=$(cat /tmp/current.json | jq ".applications[\"${APP_NAME}\"].deployed_app_config")
-
-        if [ "$APP_CONFIG" = "null" ]; then
-          echo "❌ Application not deployed yet"
-          echo "   Current applications:"
-          cat /tmp/current.json | jq '.applications | keys'
-          exit 1
-        fi
-
-        # Update model_uri in the config
-        echo "$APP_CONFIG" | jq --arg uri "$NEW_MODEL_URI" '.deployments[0].user_config.model_uri = $uri' > /tmp/updated_app.json
-        jq -n --argjson app "$(cat /tmp/updated_app.json)" '{applications: [$app]}' > /tmp/payload.json
-
-        echo ""
-        echo "🚀 Updating model URI..."
-        cat /tmp/payload.json | jq '.'
-
-        RESPONSE=$(curl -X PUT "${RAY_DASHBOARD}/api/serve/applications/" \
-          -H "Content-Type: application/json" \
-          -d @/tmp/payload.json \
-          -w "\n%{http_code}" -s)
-
-        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-        BODY=$(echo "$RESPONSE" | head -n-1)
-
-        if [ "$HTTP_CODE" = "200" ]; then
-          echo "✅ Model deployed to version ${PROD_VERSION}!"
-          echo "   Model URI: ${NEW_MODEL_URI}"
-          if [ "$CURRENT_IMAGE" != "$TRAINING_IMAGE" ]; then
-            echo "   Ray cluster restarted with new image"
-          else
-            echo "   reconfigure() method will be called with new model"
-          fi
-        else
-          echo "❌ Failed (HTTP ${HTTP_CODE})"
-          echo "$BODY"
-          exit 1
-        fi
 # apiVersion: argoproj.io/v1alpha1
 # kind: WorkflowTemplate
 # metadata:
@@ -129,127 +7,202 @@ spec:
 #   serviceAccountName: workflow-executor
 
 #   templates:
-  # - name: reload-ray-serve
-  #   inputs:
-  #     parameters:
-  #     - name: model_name
-  #     - name: prod_version
-  #     - name: ray_service_namespace
-  #       value: "ai"
-  #   script:
-  #     image: alpine:latest
-  #     command: [sh]
-  #     source: |
-  #       set -e
-  #       apk add --no-cache curl jq
+#   - name: reload-ray-serve
+#     inputs:
+#       parameters:
+#       - name: model_name
+#       - name: prod_version
+#       - name: training_image
+#     script:
+#       image: alpine:latest
+#       command: [sh]
+#       source: |
+#         set -e
 
-  #       MODEL_NAME="{{inputs.parameters.model_name}}"
-  #       PROD_VERSION="{{inputs.parameters.prod_version}}"
-  #       NAMESPACE="ai"
-  #       SERVICE_NAME="${MODEL_NAME}-service"
-  #       APP_NAME="${MODEL_NAME}-api"
+#         # Install dependencies first
+#         apk add --no-cache curl jq kubectl
 
-  #       echo "🔄 Deploying model version ${PROD_VERSION}"
+#         MODEL_NAME="{{inputs.parameters.model_name}}"
+#         PROD_VERSION="{{inputs.parameters.prod_version}}"
+#         TRAINING_IMAGE="{{inputs.parameters.training_image}}"
+#         NAMESPACE="ai"
+#         SERVICE_NAME="${MODEL_NAME}-service"
 
-  #       RAY_DASHBOARD="http://${SERVICE_NAME}-head-svc.${NAMESPACE}.svc.cluster.local:8265"
-  #       NEW_MODEL_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
+#         echo "🔄 Updating Ray Serve with new model and image"
+#         echo "   Model: prod.${MODEL_NAME}/v${PROD_VERSION}"
+#         echo "   Image: ${TRAINING_IMAGE}"
 
-  #       # Check if Ray Serve is available
-  #       if ! curl -sf "${RAY_DASHBOARD}/api/serve/applications/" > /dev/null 2>&1; then
-  #         echo "❌ Ray Serve not available at ${RAY_DASHBOARD}"
-  #         echo "   Service may not be running yet"
-  #         exit 1
-  #       fi
+#         # Update RayService image if it changed
+#         CURRENT_IMAGE=$(kubectl get rayservice ${SERVICE_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image}')
 
-  #       # Get current deployed config
-  #       echo "📥 Checking current deployment status..."
-  #       curl -s "${RAY_DASHBOARD}/api/serve/applications/" > /tmp/current.json
+#         if [ "$CURRENT_IMAGE" != "$TRAINING_IMAGE" ]; then
+#           echo "📦 Image changed: ${CURRENT_IMAGE} → ${TRAINING_IMAGE}"
+#           echo "   Updating RayService..."
 
-  #       APP_STATUS=$(cat /tmp/current.json | jq -r ".applications[\"${APP_NAME}\"].status // \"NOT_FOUND\"")
+#           # Create patch file
+#           cat > /tmp/patch.json <<EOF
+#         [
+#           {"op": "replace", "path": "/spec/rayClusterConfig/headGroupSpec/template/spec/containers/0/image", "value": "${TRAINING_IMAGE}"},
+#           {"op": "replace", "path": "/spec/rayClusterConfig/workerGroupSpecs/0/template/spec/containers/0/image", "value": "${TRAINING_IMAGE}"}
+#         ]
+#         EOF
 
-  #       if [ "$APP_STATUS" = "NOT_FOUND" ]; then
-  #         echo "🆕 First deployment - creating application config..."
+#           # Apply patch
+#           kubectl patch rayservice ${SERVICE_NAME} -n ${NAMESPACE} --type=json --patch-file /tmp/patch.json
 
-  #         # Determine deployment class name based on model
-  #         DEPLOYMENT_CLASS="WineClassifier"
-  #         NUM_CPUS="0.5"
+#           echo "⏳ Waiting for rollout to complete (this will restart Ray)..."
+#           sleep 10
+#           echo "   Ray cluster will restart with new image"
+#         else
+#           echo "✅ Image unchanged, proceeding with in-place model update"
+#         fi
 
-  #         if echo "$MODEL_NAME" | grep -q "fashion-mnist"; then
-  #           DEPLOYMENT_CLASS="FashionMNISTClassifier"
-  #           NUM_CPUS="1"
-  #         fi
+#         # Now update the model URI via Ray Serve API (in-place)
+#         RAY_DASHBOARD="http://${SERVICE_NAME}-head-svc.${NAMESPACE}.svc.cluster.local:8265"
+#         NEW_MODEL_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
-  #         # Create full application config for first deployment
-  #         jq -n \
-  #           --arg name "$APP_NAME" \
-  #           --arg import_path "src.serve:app_builder" \
-  #           --arg route_prefix "/models/${MODEL_NAME}" \
-  #           --arg deployment_name "$DEPLOYMENT_CLASS" \
-  #           --arg model_uri "$NEW_MODEL_URI" \
-  #           --arg num_cpus "$NUM_CPUS" \
-  #           '{
-  #             applications: [{
-  #               name: $name,
-  #               import_path: $import_path,
-  #               route_prefix: $route_prefix,
-  #               deployments: [{
-  #                 name: $deployment_name,
-  #                 num_replicas: 1,
-  #                 user_config: {
-  #                   model_uri: $model_uri
-  #                 },
-  #                 ray_actor_options: {
-  #                   num_cpus: ($num_cpus | tonumber)
-  #                 }
-  #               }]
-  #             }]
-  #           }' > /tmp/payload.json
-  #       else
-  #         echo "🔄 Updating existing deployment..."
+#         # Wait for Ray Dashboard to be available
+#         MAX_WAIT=600
+#         ELAPSED=0
+#         while [ $ELAPSED -lt $MAX_WAIT ]; do
+#           if curl -sf "${RAY_DASHBOARD}/api/serve/applications/" > /dev/null 2>&1; then
+#             echo "✅ Ray Dashboard available"
+#             break
+#           fi
+#           echo "⏳ Waiting for Ray Dashboard..."
+#           sleep 5
+#           ELAPSED=$((ELAPSED + 5))
+#         done
 
-  #         # Get deployed config
-  #         APP_CONFIG=$(cat /tmp/current.json | jq ".applications[\"${APP_NAME}\"].deployed_app_config")
+#         if [ $ELAPSED -ge $MAX_WAIT ]; then
+#           echo "❌ Ray Dashboard not available after ${MAX_WAIT}s"
+#           exit 1
+#         fi
 
-  #         if [ "$APP_CONFIG" = "null" ]; then
-  #           echo "❌ Application exists but has no deployed_app_config"
-  #           exit 1
-  #         fi
+#         # Get current application config
+#         curl -s "${RAY_DASHBOARD}/api/serve/applications/" > /tmp/current.json
+#         APP_NAME="${MODEL_NAME}-api"
+#         APP_CONFIG=$(cat /tmp/current.json | jq ".applications[\"${APP_NAME}\"].deployed_app_config")
 
-  #         # Update model_uri in the config
-  #         echo "$APP_CONFIG" | jq \
-  #           --arg uri "$NEW_MODEL_URI" \
-  #           '.deployments[0].user_config.model_uri = $uri' \
-  #           > /tmp/updated_app.json
+#         if [ "$APP_CONFIG" = "null" ]; then
+#           echo "❌ Application not deployed yet"
+#           echo "   Current applications:"
+#           cat /tmp/current.json | jq '.applications | keys'
+#           exit 1
+#         fi
 
-  #         # Wrap in applications array
-  #         jq -n \
-  #           --argjson app "$(cat /tmp/updated_app.json)" \
-  #           '{applications: [$app]}' \
-  #           > /tmp/payload.json
-  #       fi
+#         # Update model_uri in the config
+#         echo "$APP_CONFIG" | jq --arg uri "$NEW_MODEL_URI" '.deployments[0].user_config.model_uri = $uri' > /tmp/updated_app.json
+#         jq -n --argjson app "$(cat /tmp/updated_app.json)" '{applications: [$app]}' > /tmp/payload.json
 
-  #       echo ""
-  #       echo "🚀 Deploying configuration..."
-  #       cat /tmp/payload.json | jq '.'
+#         echo ""
+#         echo "🚀 Updating model URI..."
+#         cat /tmp/payload.json | jq '.'
 
-  #       RESPONSE=$(curl -X PUT "${RAY_DASHBOARD}/api/serve/applications/" \
-  #         -H "Content-Type: application/json" \
-  #         -d @/tmp/payload.json \
-  #         -w "\n%{http_code}" -s)
+#         RESPONSE=$(curl -X PUT "${RAY_DASHBOARD}/api/serve/applications/" \
+#           -H "Content-Type: application/json" \
+#           -d @/tmp/payload.json \
+#           -w "\n%{http_code}" -s)
 
-  #       HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-  #       BODY=$(echo "$RESPONSE" | head -n-1)
+#         HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+#         BODY=$(echo "$RESPONSE" | head -n-1)
 
-  #       if [ "$HTTP_CODE" = "200" ]; then
-  #         echo "✅ Model deployed to version ${PROD_VERSION}!"
-  #         echo "   Model URI: ${NEW_MODEL_URI}"
-  #         if [ "$APP_STATUS" = "NOT_FOUND" ]; then
-  #           echo "   Initial deployment - application created"
-  #         else
-  #           echo "   reconfigure() method will be called with new model"
-  #         fi
-  #       else
-  #         echo "❌ Failed (HTTP ${HTTP_CODE})"
-  #         echo "$BODY"
-  #         exit 1
-  #       fi
+#         if [ "$HTTP_CODE" = "200" ]; then
+#           echo "✅ Model deployed to version ${PROD_VERSION}!"
+#           echo "   Model URI: ${NEW_MODEL_URI}"
+#           if [ "$CURRENT_IMAGE" != "$TRAINING_IMAGE" ]; then
+#             echo "   Ray cluster restarted with new image"
+#           else
+#             echo "   reconfigure() method will be called with new model"
+#           fi
+#         else
+#           echo "❌ Failed (HTTP ${HTTP_CODE})"
+#           echo "$BODY"
+#           exit 1
+#         fi
+
+# deployment-templates.yaml - update-gitops template
+- name: update-gitops
+  inputs:
+    parameters:
+    - name: model_name
+    - name: prod_version
+    - name: training_image
+    - name: gitops_repo
+      value: "https://github.com/yourusername/gitops.git"
+  script:
+    image: alpine:latest
+    command: [sh]
+    source: |
+      set -e
+
+      apk add --no-cache git yq
+
+      MODEL_NAME="{{inputs.parameters.model_name}}"
+      PROD_VERSION="{{inputs.parameters.prod_version}}"
+      TRAINING_IMAGE="{{inputs.parameters.training_image}}"
+      NEW_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
+
+      echo "🔄 Updating GitOps"
+      echo "   Model: ${MODEL_NAME}"
+      echo "   Version: ${PROD_VERSION}"
+      echo "   Image: ${TRAINING_IMAGE}"
+
+      git clone {{inputs.parameters.gitops_repo}} /tmp/gitops
+      cd /tmp/gitops
+
+      SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
+
+      # 1. Check current image
+      CURRENT_IMAGE=$(yq eval '.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image' "$SERVICE_FILE")
+
+      IMAGE_CHANGED="false"
+      if [ "$CURRENT_IMAGE" != "$TRAINING_IMAGE" ]; then
+        echo "📦 Image changed: ${CURRENT_IMAGE} → ${TRAINING_IMAGE}"
+        IMAGE_CHANGED="true"
+
+        # Update image in head and workers
+        yq eval -i ".spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
+        yq eval -i ".spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
+      else
+        echo "✅ Image unchanged: ${CURRENT_IMAGE}"
+      fi
+
+      # 2. Update or add user_config with model_uri
+      SERVE_CONFIG=$(yq eval '.spec.serveConfigV2' "$SERVICE_FILE")
+
+      if echo "$SERVE_CONFIG" | grep -q "user_config:"; then
+        echo "🔄 Updating model_uri"
+        yq eval -i '(.spec.serveConfigV2 | from_yaml | .applications[0].deployments[0].user_config.model_uri) = "'"${NEW_URI}"'"' "$SERVICE_FILE"
+      else
+        echo "🆕 Adding user_config"
+        yq eval -i '(.spec.serveConfigV2 | from_yaml | .applications[0].deployments[0].user_config) = {"model_uri": "'"${NEW_URI}"'"}' "$SERVICE_FILE"
+      fi
+
+      # 3. Commit
+      git config user.name "Argo Workflow"
+      git config user.email "workflow@opencloudhub.org"
+      git add "$SERVICE_FILE"
+
+      if [ "$IMAGE_CHANGED" = "true" ]; then
+        git commit -m "🤖 Deploy ${MODEL_NAME} v${PROD_VERSION} + update image
+
+      - Model: ${NEW_URI}
+      - Image: ${TRAINING_IMAGE}
+      - Full cluster restart required"
+      else
+        git commit -m "🤖 Deploy ${MODEL_NAME} v${PROD_VERSION}
+
+      - Model: ${NEW_URI}
+      - In-place update (image unchanged)"
+      fi
+
+      git push
+
+      echo ""
+      echo "✅ GitOps updated!"
+      if [ "$IMAGE_CHANGED" = "true" ]; then
+        echo "   ⚠️  Image changed - Ray cluster will restart"
+      else
+        echo "   ✨ In-place update - reconfigure() only"
+      fi
