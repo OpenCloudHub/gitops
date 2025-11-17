@@ -27,9 +27,7 @@ spec:
         source: |
           set -e
 
-          apk add --no-cache yq
-
-          # Setup SSH
+          # SSH setup only
           mkdir -p ~/.ssh
           cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
           echo "" >> ~/.ssh/id_ed25519
@@ -39,47 +37,32 @@ spec:
           MODEL_NAME="{{inputs.parameters.model_name}}"
           PROD_VERSION="{{inputs.parameters.prod_version}}"
           TRAINING_IMAGE="{{inputs.parameters.training_image}}"
-          NEW_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
           MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
+          NEW_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
-          echo "📦 Deployment: ${MODEL_NAME} v${PROD_VERSION}"
+          echo "📦 Deploying ${MODEL_NAME} v${PROD_VERSION}"
 
           git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
 
           SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
-          CURRENT_IMAGE=$(yq eval '.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image' "$SERVICE_FILE")
+          # Show what we're changing
+          echo "Current state:"
+          grep -E 'image:|model_uri:' "$SERVICE_FILE" | head -3
 
-          CHANGED=false
+          # Replace ONLY the exact lines we need
+          # 1. Replace model_uri line
+          sed -i "s|model_uri: \"models:/prod\.${MODEL_NAME}/[0-9]*\"|model_uri: \"${NEW_URI}\"|g" "$SERVICE_FILE"
 
-          # Update images if different
-          if [ "$CURRENT_IMAGE" != "$TRAINING_IMAGE" ]; then
-            echo "✏️  Updating image"
-            yq eval -i ".spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
-            yq eval -i ".spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
-            CHANGED=true
-          fi
+          # 2. Replace image lines (escape special chars in image name)
+          ESCAPED_IMAGE=$(echo "$TRAINING_IMAGE" | sed 's/[\/&]/\\&/g')
+          sed -i "s|image: .*${MODEL_NAME}:.*|image: ${ESCAPED_IMAGE}|g" "$SERVICE_FILE"
 
-          # Update model URI in serveConfigV2 (the nested YAML string)
-          # First extract it, modify it, then put it back
-          SERVE_CONFIG=$(yq eval '.spec.serveConfigV2' "$SERVICE_FILE")
-          CURRENT_URI=$(echo "$SERVE_CONFIG" | yq eval '.applications[0].deployments[0].user_config.model_uri' -)
-
-          if [ "$CURRENT_URI" != "$NEW_URI" ]; then
-            echo "✏️  Updating model URI"
-            # Update the nested YAML
-            UPDATED_CONFIG=$(echo "$SERVE_CONFIG" | yq eval ".applications[0].deployments[0].user_config.model_uri = \"${NEW_URI}\"" -)
-            # Put it back as a string
-            yq eval -i ".spec.serveConfigV2 = \"${UPDATED_CONFIG}\"" "$SERVICE_FILE"
-            CHANGED=true
-          fi
-
-          if [ "$CHANGED" = false ]; then
-            echo "✅ No changes needed"
-            exit 0
-          fi
+          echo ""
+          echo "New state:"
+          grep -E 'image:|model_uri:' "$SERVICE_FILE" | head -3
 
           git config user.name "Argo Workflow"
           git config user.email "workflow@opencloudhub.org"
