@@ -27,6 +27,8 @@ spec:
         source: |
           set -e
 
+          apk add --no-cache python3
+
           # SSH setup
           mkdir -p ~/.ssh
           cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
@@ -47,16 +49,14 @@ spec:
 
           SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
-          # Extract current values
-          OLD_VERSION=$(grep 'model_uri:' "$SERVICE_FILE" | head -1 | sed 's/.*\///' | sed 's/".*//')
-          OLD_IMAGE=$(grep "image: opencloudhuborg/${MODEL_NAME}" "$SERVICE_FILE" | head -1 | awk '{print $2}')
-
-          echo "Version: ${OLD_VERSION} -> ${PROD_VERSION}"
-          echo "Image: ${OLD_IMAGE} -> ${TRAINING_IMAGE}"
-
-          # Use @ as delimiter (won't conflict with : or /)
-          sed -i "s@prod.${MODEL_NAME}/${OLD_VERSION}@prod.${MODEL_NAME}/${PROD_VERSION}@g" "$SERVICE_FILE"
-          sed -i "s@${OLD_IMAGE}@${TRAINING_IMAGE}@g" "$SERVICE_FILE"
+          # One-liner Python replacement
+          python3 -c "
+          import re
+          with open('$SERVICE_FILE', 'r') as f: content = f.read()
+          content = re.sub(r'(model_uri: \"models:/prod\.$MODEL_NAME/)\d+(\")', r'\1$PROD_VERSION\2', content)
+          content = re.sub(r'image: opencloudhuborg/$MODEL_NAME:[\w\-]+', 'image: $TRAINING_IMAGE', content)
+          with open('$SERVICE_FILE', 'w') as f: f.write(content)
+          "
 
           git config user.name "Argo Workflow"
           git config user.email "workflow@opencloudhub.org"
