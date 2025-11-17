@@ -18,8 +18,8 @@ spec:
         secret:
           secretName: gitops-repo
       script:
-        image: linuxserver/yq:latest
-        command: [sh]
+        image: ubuntu:22.04
+        command: [bash]
         volumeMounts:
         - name: git-secret
           mountPath: /mnt/secrets
@@ -27,8 +27,15 @@ spec:
         source: |
           set -e
 
-          # This image has: git, yq, openssh already
+          # Install what we need
+          apt-get update -qq
+          apt-get install -y -qq git openssh-client curl > /dev/null
 
+          # Install yq
+          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+
+          # Setup SSH
           mkdir -p ~/.ssh
           cp /mnt/secrets/sshPrivateKey ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
