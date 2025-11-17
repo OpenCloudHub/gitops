@@ -65,6 +65,8 @@
 
 # TODO: mlflow not coming up automaticallyd
 
+# TODO: Ray grafan connection
+
 # TODO: metrics in grafan for ray
 
 # TODO: start dev /etc/hosts doesn't work

@@ -383,7 +383,7 @@ dev_setup_device_plugin() {
     }
 }
 
-# Todo: make more robust, cause got: sed: cannot rename /etc/sed8aBIlL: Device or resource busy
+# TODO: make more robust, cause got: sed: cannot rename /etc/sed8aBIlL: Device or resource busy
 dev_setup_update_hosts() {
     log_step "Updating /etc/hosts for local access"
 

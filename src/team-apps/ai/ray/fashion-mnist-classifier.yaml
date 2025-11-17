@@ -106,7 +106,7 @@ spec:
 
     workerGroupSpecs:
     - groupName: serving-workers
-      replicas: 1
+      replicas: 2
       minReplicas: 1
       maxReplicas: 2
       numOfHosts: 1
