@@ -18,7 +18,7 @@ spec:
         secret:
           secretName: gitops-repo
       script:
-        image: mikefarah/yq:4
+        image: alpine/git:latest
         command: [sh]
         volumeMounts:
         - name: git-secret
@@ -27,12 +27,13 @@ spec:
         source: |
           set -e
 
-          apk add --no-cache git openssh
+          # Install yq (alpine/git has apk access)
+          apk add --no-cache yq
 
           # Setup SSH with newline fix
           mkdir -p ~/.ssh
           cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
-          echo "" >> ~/.ssh/id_ed25519  # ADD MISSING NEWLINE
+          echo "" >> ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan github.com >> ~/.ssh/known_hosts
 
