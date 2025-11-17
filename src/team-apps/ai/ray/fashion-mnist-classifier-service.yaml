@@ -178,6 +178,15 @@ spec:
       namespace: istio-ingress
   hostnames:
     - "api.opencloudhub.org"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /models/fashion-mnist-classifier
+      backendRefs:
+        - name: fashion-mnist-classifier-service-serve-svc
+          port: 8000
+
 ---
 # HTTPRoute for Ray Dashboard
 apiVersion: gateway.networking.k8s.io/v1
