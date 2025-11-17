@@ -140,11 +140,11 @@ spec:
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
         when: "({{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approve}}' == 'YES') && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
 
-    # Phase 7: Reload Ray Serve to pick up new @champion model
-    - - name: reload-ray-serve
+    # Phase 7: Update Ray Serve Definition
+    - - name: update-gitops
         templateRef:
           name: deployment-templates
-          template: reload-ray-serve
+          template: update-gitops
         arguments:
           parameters:
           - name: model_name

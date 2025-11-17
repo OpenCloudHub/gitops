@@ -14,7 +14,7 @@ spec:
         - name: prod_version
         - name: training_image
         - name: gitops_repo
-          value: "https://github.com/yourusername/gitops.git"
+          value: "https://github.com/OpenCloudHub/gitops.git"
       script:
         image: alpine:latest
         command: [sh]
