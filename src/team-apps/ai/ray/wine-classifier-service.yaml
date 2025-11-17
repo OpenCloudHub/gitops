@@ -39,114 +39,112 @@ spec:
           nodeSelector:
             node.opencloudhub.org/application: "true"
           containers:
-          - name: ray-head
-            image: opencloudhuborg/wine-classifier:latest
-            imagePullPolicy: Always
-            readinessProbe:
-              httpGet:
-                path: /api/gcs_healthz  # Check Ray GCS, not Serve
-                port: 8265              # Dashboard port, not Serve port
-              initialDelaySeconds: 30
-              periodSeconds: 5
-              timeoutSeconds: 3
-              successThreshold: 1
-              failureThreshold: 6
-            livenessProbe:
-              httpGet:
-                path: /api/gcs_healthz  # Same for liveness
-                port: 8265
-              initialDelaySeconds: 120
-              periodSeconds: 30
-              timeoutSeconds: 10
-              failureThreshold: 5
-            ports:
-            - containerPort: 8000
-              name: serve
-              protocol: TCP
-            - containerPort: 8080
-              name: metrics
-              protocol: TCP
-            - containerPort: 8265
-              name: dashboard
-              protocol: TCP
-            resources:
-              requests:
-                cpu: "1"
-                memory: "2Gi"
-              limits:
-                cpu: "2"
-                memory: "3Gi"
-            env:
-            - name: MLFLOW_TRACKING_URI
-              value: "http://mlflow.ai.svc.cluster.local:80"
-            - name: RAY_GRAFANA_HOST
-              value: "http://grafana.observability.svc.cluster.local:80"
-            - name: RAY_PROMETHEUS_HOST
-              value: "http://prometheus-server.observability.svc.cluster.local:80"
-            - name: RAY_GRAFANA_IFRAME_HOST
-              value: "https://grafana.observability.internal.opencloudhub.org"
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: minio-tenant-secret
-                  key: accesskey
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: minio-tenant-secret
-                  key: secretkey
-            - name: AWS_ENDPOINT_URL
-              value: "https://minio-api.storage.internal.opencloudhub.org"
-
+            - name: ray-head
+              image: opencloudhuborg/wine-classifier:main-54bc572
+              imagePullPolicy: Always
+              readinessProbe:
+                httpGet:
+                  path: /api/gcs_healthz # Check Ray GCS, not Serve
+                  port: 8265 # Dashboard port, not Serve port
+                initialDelaySeconds: 30
+                periodSeconds: 5
+                timeoutSeconds: 3
+                successThreshold: 1
+                failureThreshold: 6
+              livenessProbe:
+                httpGet:
+                  path: /api/gcs_healthz # Same for liveness
+                  port: 8265
+                initialDelaySeconds: 120
+                periodSeconds: 30
+                timeoutSeconds: 10
+                failureThreshold: 5
+              ports:
+                - containerPort: 8000
+                  name: serve
+                  protocol: TCP
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                - containerPort: 8265
+                  name: dashboard
+                  protocol: TCP
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "2Gi"
+                limits:
+                  cpu: "2"
+                  memory: "3Gi"
+              env:
+                - name: MLFLOW_TRACKING_URI
+                  value: "http://mlflow.ai.svc.cluster.local:80"
+                - name: RAY_GRAFANA_HOST
+                  value: "http://grafana.observability.svc.cluster.local:80"
+                - name: RAY_PROMETHEUS_HOST
+                  value: "http://prometheus-server.observability.svc.cluster.local:80"
+                - name: RAY_GRAFANA_IFRAME_HOST
+                  value: "https://grafana.observability.internal.opencloudhub.org"
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-tenant-secret
+                      key: accesskey
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-tenant-secret
+                      key: secretkey
+                - name: AWS_ENDPOINT_URL
+                  value: "https://minio-api.storage.internal.opencloudhub.org"
     workerGroupSpecs:
-    - groupName: serving-workers
-      replicas: 1
-      minReplicas: 1
-      maxReplicas: 2
-      numOfHosts: 1
-      template:
-        spec:
-          nodeSelector:
-            node.opencloudhub.org/application: "true"
-          containers:
-          - name: ray-worker
-            image: opencloudhuborg/wine-classifier:latest
-            imagePullPolicy: Always
-            # Override the readiness probe - workers don't run Serve
-            readinessProbe:
-              exec:
-                command:
-                - bash
-                - -c
-                - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
-              initialDelaySeconds: 10
-              periodSeconds: 5
-              timeoutSeconds: 2
-              successThreshold: 1
-              failureThreshold: 3
-            resources:
-              requests:
-                cpu: "500m"
-                memory: "1Gi"
-              limits:
-                cpu: "1"
-                memory: "2Gi"
-            env:
-            - name: MLFLOW_TRACKING_URI
-              value: "http://mlflow.ai.svc.cluster.local:80"
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: minio-tenant-secret
-                  key: accesskey
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: minio-tenant-secret
-                  key: secretkey
-            - name: AWS_ENDPOINT_URL
-              value: "https://minio-api.storage.internal.opencloudhub.org"
-
+      - groupName: serving-workers
+        replicas: 1
+        minReplicas: 1
+        maxReplicas: 2
+        numOfHosts: 1
+        template:
+          spec:
+            nodeSelector:
+              node.opencloudhub.org/application: "true"
+            containers:
+              - name: ray-worker
+                image: opencloudhuborg/wine-classifier:main-54bc572
+                imagePullPolicy: Always
+                # Override the readiness probe - workers don't run Serve
+                readinessProbe:
+                  exec:
+                    command:
+                      - bash
+                      - -c
+                      - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
+                  timeoutSeconds: 2
+                  successThreshold: 1
+                  failureThreshold: 3
+                resources:
+                  requests:
+                    cpu: "500m"
+                    memory: "1Gi"
+                  limits:
+                    cpu: "1"
+                    memory: "2Gi"
+                env:
+                  - name: MLFLOW_TRACKING_URI
+                    value: "http://mlflow.ai.svc.cluster.local:80"
+                  - name: AWS_ACCESS_KEY_ID
+                    valueFrom:
+                      secretKeyRef:
+                        name: minio-tenant-secret
+                        key: accesskey
+                  - name: AWS_SECRET_ACCESS_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: minio-tenant-secret
+                        key: secretkey
+                  - name: AWS_ENDPOINT_URL
+                    value: "https://minio-api.storage.internal.opencloudhub.org"
 ---
 # HTTPRoute for model API (external access)
 apiVersion: gateway.networking.k8s.io/v1
@@ -161,16 +159,27 @@ spec:
       name: ingress-gateway
       namespace: istio-ingress
   hostnames:
-  - "api.opencloudhub.org"
+    - "api.opencloudhub.org"
   rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /models/wine-classifier
-    backendRefs:
-    - name: wine-classifier-service-serve-svc
-      port: 8000
-
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /models/wine-classifier
+      backendRefs:
+        - name: wine-classifier-service-serve-svc
+          port: 8000
+  rayClusterConfig:
+    headGroupSpec:
+      template:
+        spec:
+          containers:
+            - image: opencloudhuborg/wine-classifier:main-54bc572
+    workerGroupSpecs:
+      - template:
+          spec:
+            containers:
+              - image: opencloudhuborg/wine-classifier:main-54bc572
+  serveConfigV2: null
 ---
 # HTTPRoute for Ray Dashboard
 apiVersion: gateway.networking.k8s.io/v1
@@ -185,12 +194,24 @@ spec:
       name: ingress-gateway
       namespace: istio-ingress
   hostnames:
-  - "wine-classifier.ai.internal.opencloudhub.org"
+    - "wine-classifier.ai.internal.opencloudhub.org"
   rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: "/"
-    backendRefs:
-    - name: wine-classifier-service-head-svc
-      port: 8265
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/"
+      backendRefs:
+        - name: wine-classifier-service-head-svc
+          port: 8265
+  rayClusterConfig:
+    headGroupSpec:
+      template:
+        spec:
+          containers:
+            - image: opencloudhuborg/wine-classifier:main-54bc572
+    workerGroupSpecs:
+      - template:
+          spec:
+            containers:
+              - image: opencloudhuborg/wine-classifier:main-54bc572
+  serveConfigV2: null
