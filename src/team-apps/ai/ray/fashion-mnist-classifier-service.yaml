@@ -19,7 +19,7 @@ spec:
         deployments:
           - name: FashionMNISTClassifier
             user_config:
-              model_uri: "models:/prod.fashion-mnist-classifier/4"
+              model_uri: "models:/prod.fashion-mnist-classifier/5"
             num_replicas: auto  # Enable autoscaling!
             max_ongoing_requests: 5
             autoscaling_config:
@@ -47,7 +47,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
             - name: ray-head
-              image: opencloudhuborg/fashion-mnist-classifier:main-7304ef2
+              image: opencloudhuborg/fashion-mnist-classifier:main-502a29a
               imagePullPolicy: Always
               startupProbe:
                 httpGet:
@@ -124,7 +124,7 @@ spec:
               node.opencloudhub.org/application: "true"
             containers:
               - name: ray-worker
-                image: opencloudhuborg/fashion-mnist-classifier:main-7304ef2
+                image: opencloudhuborg/fashion-mnist-classifier:main-502a29a
                 imagePullPolicy: Always
                 readinessProbe:
                   exec:
