@@ -1,12 +1,97 @@
-# apiVersion: argoproj.io/v1alpha1
-# kind: WorkflowTemplate
-# metadata:
-#   name: deployment-templates
-#   namespace: ai
-# spec:
-#   serviceAccountName: workflow-executor
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: deployment-templates
+  namespace: ai
+spec:
+  serviceAccountName: workflow-executor
 
-#   templates:
+  templates:
+    - name: update-gitops
+      inputs:
+        parameters:
+        - name: model_name
+        - name: prod_version
+        - name: training_image
+        - name: gitops_repo
+          value: "https://github.com/yourusername/gitops.git"
+      script:
+        image: alpine:latest
+        command: [sh]
+        source: |
+          set -e
+
+          apk add --no-cache git yq
+
+          MODEL_NAME="{{inputs.parameters.model_name}}"
+          PROD_VERSION="{{inputs.parameters.prod_version}}"
+          TRAINING_IMAGE="{{inputs.parameters.training_image}}"
+          NEW_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
+
+          echo "🔄 Updating GitOps"
+          echo "   Model: ${MODEL_NAME}"
+          echo "   Version: ${PROD_VERSION}"
+          echo "   Image: ${TRAINING_IMAGE}"
+
+          git clone {{inputs.parameters.gitops_repo}} /tmp/gitops
+          cd /tmp/gitops
+
+          SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
+
+          # 1. Check current image
+          CURRENT_IMAGE=$(yq eval '.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image' "$SERVICE_FILE")
+
+          IMAGE_CHANGED="false"
+          if [ "$CURRENT_IMAGE" != "$TRAINING_IMAGE" ]; then
+            echo "📦 Image changed: ${CURRENT_IMAGE} → ${TRAINING_IMAGE}"
+            IMAGE_CHANGED="true"
+
+            # Update image in head and workers
+            yq eval -i ".spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
+            yq eval -i ".spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
+          else
+            echo "✅ Image unchanged: ${CURRENT_IMAGE}"
+          fi
+
+          # 2. Update or add user_config with model_uri
+          SERVE_CONFIG=$(yq eval '.spec.serveConfigV2' "$SERVICE_FILE")
+
+          if echo "$SERVE_CONFIG" | grep -q "user_config:"; then
+            echo "🔄 Updating model_uri"
+            yq eval -i '(.spec.serveConfigV2 | from_yaml | .applications[0].deployments[0].user_config.model_uri) = "'"${NEW_URI}"'"' "$SERVICE_FILE"
+          else
+            echo "🆕 Adding user_config"
+            yq eval -i '(.spec.serveConfigV2 | from_yaml | .applications[0].deployments[0].user_config) = {"model_uri": "'"${NEW_URI}"'"}' "$SERVICE_FILE"
+          fi
+
+          # 3. Commit
+          git config user.name "Argo Workflow"
+          git config user.email "workflow@opencloudhub.org"
+          git add "$SERVICE_FILE"
+
+          if [ "$IMAGE_CHANGED" = "true" ]; then
+            git commit -m "🤖 Deploy ${MODEL_NAME} v${PROD_VERSION} + update image
+
+          - Model: ${NEW_URI}
+          - Image: ${TRAINING_IMAGE}
+          - Full cluster restart required"
+          else
+            git commit -m "🤖 Deploy ${MODEL_NAME} v${PROD_VERSION}
+
+          - Model: ${NEW_URI}
+          - In-place update (image unchanged)"
+          fi
+
+          git push
+
+          echo ""
+          echo "✅ GitOps updated!"
+          if [ "$IMAGE_CHANGED" = "true" ]; then
+            echo "   ⚠️  Image changed - Ray cluster will restart"
+          else
+            echo "   ✨ In-place update - reconfigure() only"
+          fi
+
 #   - name: reload-ray-serve
 #     inputs:
 #       parameters:
@@ -122,87 +207,3 @@
 #         fi
 
 # deployment-templates.yaml - update-gitops template
-- name: update-gitops
-  inputs:
-    parameters:
-    - name: model_name
-    - name: prod_version
-    - name: training_image
-    - name: gitops_repo
-      value: "https://github.com/yourusername/gitops.git"
-  script:
-    image: alpine:latest
-    command: [sh]
-    source: |
-      set -e
-
-      apk add --no-cache git yq
-
-      MODEL_NAME="{{inputs.parameters.model_name}}"
-      PROD_VERSION="{{inputs.parameters.prod_version}}"
-      TRAINING_IMAGE="{{inputs.parameters.training_image}}"
-      NEW_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
-
-      echo "🔄 Updating GitOps"
-      echo "   Model: ${MODEL_NAME}"
-      echo "   Version: ${PROD_VERSION}"
-      echo "   Image: ${TRAINING_IMAGE}"
-
-      git clone {{inputs.parameters.gitops_repo}} /tmp/gitops
-      cd /tmp/gitops
-
-      SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
-
-      # 1. Check current image
-      CURRENT_IMAGE=$(yq eval '.spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image' "$SERVICE_FILE")
-
-      IMAGE_CHANGED="false"
-      if [ "$CURRENT_IMAGE" != "$TRAINING_IMAGE" ]; then
-        echo "📦 Image changed: ${CURRENT_IMAGE} → ${TRAINING_IMAGE}"
-        IMAGE_CHANGED="true"
-
-        # Update image in head and workers
-        yq eval -i ".spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
-        yq eval -i ".spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
-      else
-        echo "✅ Image unchanged: ${CURRENT_IMAGE}"
-      fi
-
-      # 2. Update or add user_config with model_uri
-      SERVE_CONFIG=$(yq eval '.spec.serveConfigV2' "$SERVICE_FILE")
-
-      if echo "$SERVE_CONFIG" | grep -q "user_config:"; then
-        echo "🔄 Updating model_uri"
-        yq eval -i '(.spec.serveConfigV2 | from_yaml | .applications[0].deployments[0].user_config.model_uri) = "'"${NEW_URI}"'"' "$SERVICE_FILE"
-      else
-        echo "🆕 Adding user_config"
-        yq eval -i '(.spec.serveConfigV2 | from_yaml | .applications[0].deployments[0].user_config) = {"model_uri": "'"${NEW_URI}"'"}' "$SERVICE_FILE"
-      fi
-
-      # 3. Commit
-      git config user.name "Argo Workflow"
-      git config user.email "workflow@opencloudhub.org"
-      git add "$SERVICE_FILE"
-
-      if [ "$IMAGE_CHANGED" = "true" ]; then
-        git commit -m "🤖 Deploy ${MODEL_NAME} v${PROD_VERSION} + update image
-
-      - Model: ${NEW_URI}
-      - Image: ${TRAINING_IMAGE}
-      - Full cluster restart required"
-      else
-        git commit -m "🤖 Deploy ${MODEL_NAME} v${PROD_VERSION}
-
-      - Model: ${NEW_URI}
-      - In-place update (image unchanged)"
-      fi
-
-      git push
-
-      echo ""
-      echo "✅ GitOps updated!"
-      if [ "$IMAGE_CHANGED" = "true" ]; then
-        echo "   ⚠️  Image changed - Ray cluster will restart"
-      else
-        echo "   ✨ In-place update - reconfigure() only"
-      fi
