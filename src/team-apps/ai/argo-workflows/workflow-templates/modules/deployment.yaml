@@ -38,20 +38,48 @@ spec:
           PROD_VERSION="{{inputs.parameters.prod_version}}"
           TRAINING_IMAGE="{{inputs.parameters.training_image}}"
 
-          # Clean ALL variables of whitespace
+          # Clean ALL variables
           MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
           PROD_VERSION=$(echo "$PROD_VERSION" | tr -d '\n\r\t ')
           TRAINING_IMAGE=$(echo "$TRAINING_IMAGE" | tr -d '\n\r\t ')
-
-          echo "📦 ${MODEL_NAME} v${PROD_VERSION}"
-          echo "   Image: ${TRAINING_IMAGE}"
 
           git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
 
           SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
-          # Create clean temp file with replacements
+          # Extract current values BEFORE changes
+          CURRENT_VERSION=$(grep 'model_uri:' "$SERVICE_FILE" | head -1 | grep -o '/[0-9]*"' | tr -d '/"')
+          CURRENT_IMAGE=$(grep "image: opencloudhuborg/${MODEL_NAME}" "$SERVICE_FILE" | head -1 | awk '{print $2}')
+
+          echo "📦 Deployment Request: ${MODEL_NAME}"
+          echo ""
+          echo "   Model Version:"
+          echo "     Current: v${CURRENT_VERSION}"
+          echo "     Target:  v${PROD_VERSION}"
+          if [ "$CURRENT_VERSION" = "$PROD_VERSION" ]; then
+            echo "     Status:  ✓ Already up-to-date"
+          else
+            echo "     Status:  → Updating"
+          fi
+          echo ""
+          echo "   Container Image:"
+          echo "     Current: ${CURRENT_IMAGE}"
+          echo "     Target:  ${TRAINING_IMAGE}"
+          if [ "$CURRENT_IMAGE" = "$TRAINING_IMAGE" ]; then
+            echo "     Status:  ✓ Already up-to-date"
+          else
+            echo "     Status:  → Updating"
+          fi
+          echo ""
+
+          # Check if any changes needed
+          if [ "$CURRENT_VERSION" = "$PROD_VERSION" ] && [ "$CURRENT_IMAGE" = "$TRAINING_IMAGE" ]; then
+            echo "✅ No changes needed - already at target state"
+            exit 0
+          fi
+
+          # Do replacements
           cat "$SERVICE_FILE" | \
             sed "s|opencloudhuborg/${MODEL_NAME}:[a-zA-Z0-9_-]*|${TRAINING_IMAGE}|g" | \
             sed "s|prod\.${MODEL_NAME}/[0-9]*|prod.${MODEL_NAME}/${PROD_VERSION}|g" \
@@ -65,4 +93,5 @@ spec:
           git commit -m "🤖 ${MODEL_NAME} v${PROD_VERSION}"
           git push
 
-          echo "✅ Done"
+          echo ""
+          echo "✅ GitOps updated! ArgoCD will sync changes."
