@@ -47,7 +47,9 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
             - name: ray-head
-              image: opencloudhuborg/fashion-mnist-classifier:main-7304ef2
+              image: |2-
+
+                opencloudhuborg/fashion-mnist-classifier:main-7304ef2
               imagePullPolicy: Always
               startupProbe:
                 httpGet:
@@ -124,7 +126,9 @@ spec:
               node.opencloudhub.org/application: "true"
             containers:
               - name: ray-worker
-                image: opencloudhuborg/fashion-mnist-classifier:main-7304ef2
+                image: |2-
+
+                  opencloudhuborg/fashion-mnist-classifier:main-7304ef2
                 imagePullPolicy: Always
                 readinessProbe:
                   exec:
@@ -187,12 +191,16 @@ spec:
       template:
         spec:
           containers:
-            - image: opencloudhuborg/fashion-mnist-classifier:main-7304ef2
+            - image: |2-
+
+                opencloudhuborg/fashion-mnist-classifier:main-7304ef2
     workerGroupSpecs:
       - template:
           spec:
             containers:
-              - image: opencloudhuborg/fashion-mnist-classifier:main-7304ef2
+              - image: |2-
+
+                  opencloudhuborg/fashion-mnist-classifier:main-7304ef2
   serveConfigV2: null
 ---
 # HTTPRoute for Ray Dashboard
@@ -222,10 +230,14 @@ spec:
       template:
         spec:
           containers:
-            - image: opencloudhuborg/fashion-mnist-classifier:main-7304ef2
+            - image: |2-
+
+                opencloudhuborg/fashion-mnist-classifier:main-7304ef2
     workerGroupSpecs:
       - template:
           spec:
             containers:
-              - image: opencloudhuborg/fashion-mnist-classifier:main-7304ef2
+              - image: |2-
+
+                  opencloudhuborg/fashion-mnist-classifier:main-7304ef2
   serveConfigV2: null
