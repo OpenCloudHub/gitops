@@ -18,8 +18,8 @@ spec:
         secret:
           secretName: gitops-repo
       script:
-        image: ubuntu:22.04
-        command: [bash]
+        image: mikefarah/yq:4
+        command: [sh]
         volumeMounts:
         - name: git-secret
           mountPath: /mnt/secrets
@@ -27,17 +27,12 @@ spec:
         source: |
           set -e
 
-          # Install what we need
-          apt-get update -qq
-          apt-get install -y -qq git openssh-client curl > /dev/null
+          apk add --no-cache git openssh
 
-          # Install yq
-          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
-          chmod +x /usr/local/bin/yq
-
-          # Setup SSH
+          # Setup SSH with newline fix
           mkdir -p ~/.ssh
-          cp /mnt/secrets/sshPrivateKey ~/.ssh/id_ed25519
+          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+          echo "" >> ~/.ssh/id_ed25519  # ADD MISSING NEWLINE
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan github.com >> ~/.ssh/known_hosts
 
