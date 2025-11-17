@@ -27,8 +27,6 @@ spec:
         source: |
           set -e
 
-          apk add --no-cache python3
-
           # SSH setup
           mkdir -p ~/.ssh
           cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
@@ -40,23 +38,26 @@ spec:
           PROD_VERSION="{{inputs.parameters.prod_version}}"
           TRAINING_IMAGE="{{inputs.parameters.training_image}}"
 
+          # Clean ALL variables of whitespace
           MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
+          PROD_VERSION=$(echo "$PROD_VERSION" | tr -d '\n\r\t ')
+          TRAINING_IMAGE=$(echo "$TRAINING_IMAGE" | tr -d '\n\r\t ')
 
           echo "📦 ${MODEL_NAME} v${PROD_VERSION}"
+          echo "   Image: ${TRAINING_IMAGE}"
 
           git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
 
           SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
-          # One-liner Python replacement
-          python3 -c "
-          import re
-          with open('$SERVICE_FILE', 'r') as f: content = f.read()
-          content = re.sub(r'(model_uri: \"models:/prod\.$MODEL_NAME/)\d+(\")', r'\1$PROD_VERSION\2', content)
-          content = re.sub(r'image: opencloudhuborg/$MODEL_NAME:[\w\-]+', 'image: $TRAINING_IMAGE', content)
-          with open('$SERVICE_FILE', 'w') as f: f.write(content)
-          "
+          # Create clean temp file with replacements
+          cat "$SERVICE_FILE" | \
+            sed "s|opencloudhuborg/${MODEL_NAME}:[a-zA-Z0-9_-]*|${TRAINING_IMAGE}|g" | \
+            sed "s|prod\.${MODEL_NAME}/[0-9]*|prod.${MODEL_NAME}/${PROD_VERSION}|g" \
+            > "${SERVICE_FILE}.new"
+
+          mv "${SERVICE_FILE}.new" "$SERVICE_FILE"
 
           git config user.name "Argo Workflow"
           git config user.email "workflow@opencloudhub.org"
