@@ -30,6 +30,27 @@ spec:
 
           apk add --no-cache git yq openssh
 
+          echo "🔍 Checking secret contents..."
+          echo "Secret file exists:"
+          ls -la /mnt/secrets/
+
+          echo ""
+          echo "First few lines of SSH key:"
+          head -3 /mnt/secrets/sshPrivateKey
+
+          echo ""
+          echo "Last few lines:"
+          tail -3 /mnt/secrets/sshPrivateKey
+
+          # Try to copy and check
+          mkdir -p /root/.ssh
+          cp /mnt/secrets/sshPrivateKey /root/.ssh/id_ed25519
+          chmod 600 /root/.ssh/id_ed25519
+
+          echo ""
+          echo "Validating key format:"
+          ssh-keygen -l -f /root/.ssh/id_ed25519 || echo "Key validation failed!"
+
           # Setup SSH in writable location
           mkdir -p /root/.ssh
           cp /mnt/secrets/sshPrivateKey /root/.ssh/id_ed25519
