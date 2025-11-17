@@ -17,22 +17,23 @@ spec:
       - name: git-secret
         secret:
           secretName: gitops-repo
-          defaultMode: 0600
+          defaultMode: 0400
       script:
         image: alpine:latest
         command: [sh]
         volumeMounts:
         - name: git-secret
-          mountPath: /root/.ssh
+          mountPath: /mnt/secrets
           readOnly: true
         source: |
           set -e
 
           apk add --no-cache git yq openssh
 
-          # Setup SSH
-          chmod 600 /root/.ssh/sshPrivateKey
-          cp /root/.ssh/sshPrivateKey /root/.ssh/id_rsa
+          # Setup SSH in writable location
+          mkdir -p /root/.ssh
+          cp /mnt/secrets/sshPrivateKey /root/.ssh/id_ed25519
+          chmod 600 /root/.ssh/id_ed25519
           ssh-keyscan github.com >> /root/.ssh/known_hosts
 
           MODEL_NAME="{{inputs.parameters.model_name}}"
@@ -46,24 +47,6 @@ spec:
           git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
 
-          # DEBUG: Show what we got
-          echo "📂 Repo structure:"
-          ls -la
-          echo ""
-          echo "📂 Looking for AI services:"
-          find . -name "*${MODEL_NAME}*" -type f
-          echo ""
-
-          SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
-          echo "🔍 Looking for: ${SERVICE_FILE}"
-
-          if [ ! -f "$SERVICE_FILE" ]; then
-            echo "❌ File not found!"
-            echo "📂 Contents of src/:"
-            ls -la src/ || echo "src/ doesn't exist"
-            exit 1
-          fi
-
           SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
           # 1. Check current image
@@ -74,14 +57,13 @@ spec:
             echo "📦 Image changed: ${CURRENT_IMAGE} → ${TRAINING_IMAGE}"
             IMAGE_CHANGED="true"
 
-            # Update image in head and workers
             yq eval -i ".spec.rayClusterConfig.headGroupSpec.template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
             yq eval -i ".spec.rayClusterConfig.workerGroupSpecs[0].template.spec.containers[0].image = \"${TRAINING_IMAGE}\"" "$SERVICE_FILE"
           else
             echo "✅ Image unchanged: ${CURRENT_IMAGE}"
           fi
 
-          # 2. Update or add user_config with model_uri
+          # 2. Update or add user_config
           SERVE_CONFIG=$(yq eval '.spec.serveConfigV2' "$SERVICE_FILE")
 
           if echo "$SERVE_CONFIG" | grep -q "user_config:"; then
