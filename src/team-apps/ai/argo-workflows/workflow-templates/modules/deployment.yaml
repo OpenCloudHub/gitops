@@ -27,6 +27,9 @@ spec:
         source: |
           set -e
 
+          echo "Model name: '${MODEL_NAME}'"
+          echo "Length: ${#MODEL_NAME}"
+
           # Install yq (alpine/git has apk access)
           apk add --no-cache yq
 
@@ -41,6 +44,14 @@ spec:
           PROD_VERSION="{{inputs.parameters.prod_version}}"
           TRAINING_IMAGE="{{inputs.parameters.training_image}}"
           NEW_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
+
+          MODEL_NAME="{{inputs.parameters.model_name}}"
+          echo "DEBUG: MODEL_NAME='${MODEL_NAME}'"
+          echo "DEBUG: Length=${#MODEL_NAME}"
+
+          # Strip any whitespace/newlines
+          MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
+          echo "DEBUG: Cleaned='${MODEL_NAME}'"
 
           git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
