@@ -33,8 +33,27 @@ spec:
           echo "   Version: ${PROD_VERSION}"
           echo "   Image: ${TRAINING_IMAGE}"
 
-          git clone {{inputs.parameters.gitops_repo}} /tmp/gitops
+          echo "🔄 Cloning GitOps repo..."
+          git clone https://github.com/OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
+
+          # DEBUG: Show what we got
+          echo "📂 Repo structure:"
+          ls -la
+          echo ""
+          echo "📂 Looking for AI services:"
+          find . -name "*${MODEL_NAME}*" -type f
+          echo ""
+
+          SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
+          echo "🔍 Looking for: ${SERVICE_FILE}"
+
+          if [ ! -f "$SERVICE_FILE" ]; then
+            echo "❌ File not found!"
+            echo "📂 Contents of src/:"
+            ls -la src/ || echo "src/ doesn't exist"
+            exit 1
+          fi
 
           SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
