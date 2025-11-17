@@ -18,7 +18,14 @@ spec:
         route_prefix: /models/fashion-mnist-classifier
         deployments:
           - name: FashionMNISTClassifier
-            num_replicas: 2
+            num_replicas: auto  # Enable autoscaling!
+            max_ongoing_requests: 5
+            autoscaling_config:
+              target_ongoing_requests: 2
+              min_replicas: 1
+              max_replicas: 3
+              upscale_delay_s: 10      # Fast response for demos
+              downscale_delay_s: 30    # Quick scale-down for demos
             ray_actor_options:
               num_cpus: 1
               memory: 3221225472  # 3GB
