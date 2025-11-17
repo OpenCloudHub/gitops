@@ -13,15 +13,27 @@ spec:
         - name: model_name
         - name: prod_version
         - name: training_image
-        - name: gitops_repo
-          value: "https://github.com/OpenCloudHub/gitops.git"
+      volumes:
+      - name: git-secret
+        secret:
+          secretName: gitops-repo
+          defaultMode: 0600
       script:
         image: alpine:latest
         command: [sh]
+        volumeMounts:
+        - name: git-secret
+          mountPath: /root/.ssh
+          readOnly: true
         source: |
           set -e
 
-          apk add --no-cache git yq
+          apk add --no-cache git yq openssh
+
+          # Setup SSH
+          chmod 600 /root/.ssh/sshPrivateKey
+          cp /root/.ssh/sshPrivateKey /root/.ssh/id_rsa
+          ssh-keyscan github.com >> /root/.ssh/known_hosts
 
           MODEL_NAME="{{inputs.parameters.model_name}}"
           PROD_VERSION="{{inputs.parameters.prod_version}}"
@@ -29,12 +41,9 @@ spec:
           NEW_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
           echo "🔄 Updating GitOps"
-          echo "   Model: ${MODEL_NAME}"
-          echo "   Version: ${PROD_VERSION}"
-          echo "   Image: ${TRAINING_IMAGE}"
 
-          echo "🔄 Cloning GitOps repo..."
-          git clone https://github.com/OpenCloudHub/gitops.git /tmp/gitops
+          # Clone via SSH
+          git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
 
           # DEBUG: Show what we got
