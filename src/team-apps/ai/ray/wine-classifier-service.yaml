@@ -19,7 +19,7 @@ spec:
         deployments:
           - name: WineClassifier
             user_config:
-              model_uri: "models:/prod.wine-classifier/8"
+              model_uri: "models:/prod.wine-classifier/9"
             num_replicas: auto  # Enable autoscaling!
             max_ongoing_requests: 5
             autoscaling_config:
