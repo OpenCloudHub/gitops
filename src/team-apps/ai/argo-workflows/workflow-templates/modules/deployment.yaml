@@ -39,7 +39,6 @@ spec:
           TRAINING_IMAGE="{{inputs.parameters.training_image}}"
 
           MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
-          NEW_URI="models:/prod.${MODEL_NAME}/${PROD_VERSION}"
 
           echo "📦 ${MODEL_NAME} v${PROD_VERSION}"
 
@@ -48,11 +47,11 @@ spec:
 
           SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
-          # Replace model_uri - use # as delimiter instead of |
-          sed -i "s#model_uri: \"models:/prod\.${MODEL_NAME}/[0-9]*\"#model_uri: \"${NEW_URI}\"#g" "$SERVICE_FILE"
+          # Replace model_uri - simple pattern match
+          sed -i '/model_uri:/s|/[0-9]*"|/'${PROD_VERSION}'"|' "$SERVICE_FILE"
 
-          # Replace image - use # as delimiter
-          sed -i "s#image: opencloudhuborg/${MODEL_NAME}:.*#image: ${TRAINING_IMAGE}#g" "$SERVICE_FILE"
+          # Replace image - match the old tag and replace entire line
+          sed -i '/image:.*'${MODEL_NAME}'/s|:.*|: '${TRAINING_IMAGE}'|' "$SERVICE_FILE"
 
           git config user.name "Argo Workflow"
           git config user.email "workflow@opencloudhub.org"
