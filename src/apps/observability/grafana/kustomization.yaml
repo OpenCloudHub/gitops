@@ -9,7 +9,7 @@ resources:
 helmCharts:
   - name: grafana
     releaseName: grafana
-    version: 9.3.0
+    version: 10.1.5
     repo: https://grafana.github.io/helm-charts
     namespace: observability
     valuesInline:
