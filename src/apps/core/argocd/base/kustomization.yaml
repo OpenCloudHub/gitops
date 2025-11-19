@@ -21,10 +21,10 @@ patches:
       kind: ConfigMap
       name: argocd-cm
     path: argo-cm.yaml
-  - target:
-      kind: NetworkPolicy
-      name: argocd-repo-server-network-policy
-    path: argocd-repo-server-netpol-patch.yaml
+  # - target:
+  #     kind: NetworkPolicy
+  #     name: argocd-repo-server-network-policy
+  #   path: argocd-repo-server-netpol-patch.yaml
 
 # images:
 #   - name: quay.io/argoproj/argocd
