@@ -25,3 +25,8 @@ patches:
       kind: NetworkPolicy
       name: argocd-repo-server-network-policy
     path: argocd-repo-server-netpol-patch.yaml
+
+images:
+  - name: quay.io/argoproj/argocd
+    newName: ghcr.io/argoproj/argo-cd/argocd
+    newTag: v3.2.0
