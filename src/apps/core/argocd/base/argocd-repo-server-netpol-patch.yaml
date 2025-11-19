@@ -16,6 +16,9 @@ spec:
     ports:
     - protocol: UDP
       port: 53
+  # Allow internal argocd namespace communication (Redis, etc.)
+  - to:
+    - podSelector: {}
   # Allow all HTTPS (Helm repos, GitHub)
   - ports:
     - protocol: TCP
