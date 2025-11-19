@@ -22,7 +22,6 @@ patches:
       kind: ConfigMap
       name: argocd-cm
     path: argo-cm.yaml
-  - path: argocd-repo-server-netpol-patch.yaml
 
 # images:
 #   - name: quay.io/argoproj/argocd
