@@ -46,24 +46,20 @@ helmCharts:
       namespace: ai
       labels:
         release: prometheus
+    # -- Init Containers for Mlflow Pod (Wait for the Secret)
     initContainers:
-        - name: wait-for-secrets
-          image: busybox
-          command:
-            - sh
-            - -c
-            - |
-              while [ ! -f /etc/secrets/mlflow-db-user ]; do
-                echo "Waiting for mlflow-db-user secret..."
-                sleep 5
-              done
-              while [ ! -f /etc/secrets/minio-tenant-secret ]; do
-                echo "Waiting for minio-tenant-secret..."
-                sleep 5
-              done
-          volumeMounts:
-            - name: secrets-volume
-              mountPath: /etc/secrets
+      - name: wait-for-secrets
+        image: busybox
+        command:
+          - sh
+          - -c
+          - |
+            # Wait for mlflow-flask-server-secret-key to be created
+            while true; do
+              kubectl get secret mlflow-flask-server-secret-key -n ai >/dev/null 2>&1 && break
+              echo "Waiting for mlflow-flask-server-secret-key to be created..."
+              sleep 5
+            done
 
 
 patches:
