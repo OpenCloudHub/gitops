@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argocd-repo-server-network-policy
+  namespace: argocd
+spec:
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow all HTTPS (Helm repos, GitHub, etc)
+  - ports:
+    - protocol: TCP
+      port: 443
+  # Allow HTTP
+  - ports:
+    - protocol: TCP
+      port: 80
+  # Allow SSH for Git
+  - ports:
+    - protocol: TCP
+      port: 22
