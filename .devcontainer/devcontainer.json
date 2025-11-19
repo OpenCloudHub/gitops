@@ -24,7 +24,7 @@
 		"source=${localEnv:HOME}/.ssh/opencloudhub,target=/home/vscode/.ssh/opencloudhub,type=bind,readonly",
 		"source=${localEnv:HOME}/.kube,target=/home/vscode/.kube,type=bind"
 	],
-	"runArgs": ["--network", "host", "--gpus", "all"],
+	"runArgs": ["--gpus", "all"],
 	"postCreateCommand": "bash scripts/devcontainer-postCreate.sh",
 	"customizations": {
 		"vscode": {

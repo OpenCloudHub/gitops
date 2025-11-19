@@ -245,7 +245,8 @@ dev_setup_prepare_kind_cluster() {
 
     log_info "Creating KIND cluster with config: $(basename "$KIND_CONFIG")"
     # Use nvkind for all cluster creation
-    nvkind cluster create --config-template="$KIND_CONFIG"
+    # nvkind cluster create --config-template="$KIND_CONFIG"
+    kind create cluster --config "$KIND_CONFIG"
 
     log_info "Applying resource limits to KIND nodes"
     apply_resource_limits "$CLUSTER_NAME"
@@ -418,6 +419,7 @@ dev_setup_update_hosts() {
 
     local GATEWAY_IP=""
     for i in {1..600}; do
+        echo "Checking for gateway IP (attempt $i)..."
         GATEWAY_IP=$(kubectl get svc -n istio-ingress ingress-gateway-istio \
             -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
         [[ -n "$GATEWAY_IP" ]] && break
