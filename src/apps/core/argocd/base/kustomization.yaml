@@ -23,7 +23,7 @@ patches:
     path: argo-cm.yaml
   - path: argocd-repo-server-netpol-patch.yaml
 
-images:
-  - name: quay.io/argoproj/argocd
-    newName: ghcr.io/argoproj/argo-cd/argocd
-    newTag: v3.2.0
+# images:
+#   - name: quay.io/argoproj/argocd
+#     newName: ghcr.io/argoproj/argo-cd/argocd
+#     newTag: v3.2.0
