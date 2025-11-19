@@ -42,7 +42,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
             - name: ray-head
-              image: opencloudhuborg/wine-classifier:main-8063090
+              image: opencloudhuborg/wine-classifier-serving:main-25513b1
               imagePullPolicy: Always
               readinessProbe:
                 httpGet:
@@ -111,7 +111,7 @@ spec:
               node.opencloudhub.org/application: "true"
             containers:
               - name: ray-worker
-                image: opencloudhuborg/wine-classifier:main-8063090
+                image: opencloudhuborg/wine-classifier-serving:main-25513b1
                 imagePullPolicy: Always
                 # Override the readiness probe - workers don't run Serve
                 readinessProbe:

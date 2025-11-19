@@ -46,6 +46,24 @@ helmCharts:
       namespace: ai
       labels:
         release: prometheus
+    initContainers:
+        - name: wait-for-secrets
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              while [ ! -f /etc/secrets/mlflow-db-user ]; do
+                echo "Waiting for mlflow-db-user secret..."
+                sleep 5
+              done
+              while [ ! -f /etc/secrets/minio-tenant-secret ]; do
+                echo "Waiting for minio-tenant-secret..."
+                sleep 5
+              done
+          volumeMounts:
+            - name: secrets-volume
+              mountPath: /etc/secrets
 
 
 patches:

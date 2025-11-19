@@ -47,7 +47,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
             - name: ray-head
-              image: opencloudhuborg/fashion-mnist-classifier:main-502a29a
+              image: opencloudhuborg/fashion-mnist-classifier-serving:main-502a29a
               imagePullPolicy: Always
               startupProbe:
                 httpGet:
@@ -124,7 +124,7 @@ spec:
               node.opencloudhub.org/application: "true"
             containers:
               - name: ray-worker
-                image: opencloudhuborg/fashion-mnist-classifier:main-502a29a
+                image: opencloudhuborg/fashion-mnist-classifier-serving:main-502a29a
                 imagePullPolicy: Always
                 readinessProbe:
                   exec:

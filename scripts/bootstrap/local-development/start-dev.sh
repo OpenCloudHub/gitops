@@ -384,6 +384,35 @@ dev_setup_device_plugin() {
 }
 
 # TODO: make more robust, cause got: sed: cannot rename /etc/sed8aBIlL: Device or resource busy
+# dev_setup_update_hosts() {
+#     log_step "Updating /etc/hosts for local access"
+
+#     local GATEWAY_IP=""
+#     for i in {1..600}; do
+#         GATEWAY_IP=$(kubectl get svc -n istio-ingress ingress-gateway-istio \
+#             -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+#         [[ -n "$GATEWAY_IP" ]] && break
+#         sleep 2
+#     done
+
+#     [[ -z "$GATEWAY_IP" ]] && { log_error "No gateway IP found"; exit 1; }
+
+#     # Remove old opencloudhub entries
+#     if grep -q "# Added by opencloudhub-gitops" /etc/hosts 2>/dev/null; then
+#         log_info "Removing old /etc/hosts entries (requires sudo)..."
+#         sudo sed -i '/# Added by opencloudhub-gitops/,/^$/d' /etc/hosts
+#     fi
+
+#     # Add new entries
+#     log_info "Adding new entries to /etc/hosts (requires sudo)..."
+#     {
+#         echo "# Added by opencloudhub-gitops start-dev.sh on $(date)"
+#         printf '%s\n' "${EXPOSED_SERVICES[@]/#/$GATEWAY_IP }"
+#         echo ""  # blank line for separation
+#     } | sudo tee -a /etc/hosts >/dev/null
+
+#     log_success "Updated /etc/hosts with IP: $GATEWAY_IP"
+# }
 dev_setup_update_hosts() {
     log_step "Updating /etc/hosts for local access"
 
@@ -397,11 +426,17 @@ dev_setup_update_hosts() {
 
     [[ -z "$GATEWAY_IP" ]] && { log_error "No gateway IP found"; exit 1; }
 
-    # Remove old opencloudhub entries
-    if grep -q "# Added by opencloudhub-gitops" /etc/hosts 2>/dev/null; then
-        log_info "Removing old /etc/hosts entries (requires sudo)..."
-        sudo sed -i '/# Added by opencloudhub-gitops/,/^$/d' /etc/hosts
-    fi
+    # Retry removing old entries if sed fails due to file lock
+    for i in {1..5}; do
+        if sudo grep -q "# Added by opencloudhub-gitops" /etc/hosts 2>/dev/null; then
+            log_info "Removing old /etc/hosts entries (requires sudo)..."
+            sudo sed -i '/# Added by opencloudhub-gitops/,/^$/d' /etc/hosts && break
+        else
+            log_info "No old entries found to remove."
+            break
+        fi
+        sleep 2
+    done
 
     # Add new entries
     log_info "Adding new entries to /etc/hosts (requires sudo)..."
@@ -413,6 +448,7 @@ dev_setup_update_hosts() {
 
     log_success "Updated /etc/hosts with IP: $GATEWAY_IP"
 }
+
 
 dev_setup_open_uis() {
     log_step "Opening web interfaces"

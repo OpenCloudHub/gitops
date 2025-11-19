@@ -23,7 +23,9 @@ spec:
     - name: training_args
       value: ""
     - name: training_image
-      description: "Container image with training and serving code"
+      description: "Container image with training code"
+    - name: serving_image
+      description: "Container image with serving code"
     - name: compute_type
       enum: [cpu-small, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
       description: "Compute configuration"
@@ -151,8 +153,8 @@ spec:
             value: "{{workflow.parameters.model_name}}"
           - name: prod_version
             value: "{{steps.promote-production.outputs.parameters.prod_version}}"
-          - name: training_image
-            value: "{{workflow.parameters.training_image}}"
+          - name: serving_image
+            value: "{{workflow.parameters.serving_image}}"
 
     # Phase 8: Tag deployment info
     - - name: tag-mlflow-prod-model

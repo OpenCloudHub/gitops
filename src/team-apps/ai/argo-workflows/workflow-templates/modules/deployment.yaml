@@ -12,7 +12,7 @@ spec:
         parameters:
         - name: model_name
         - name: prod_version
-        - name: training_image
+        - name: serving_image
       volumes:
       - name: git-secret
         secret:
@@ -36,7 +36,7 @@ spec:
 
           MODEL_NAME="{{inputs.parameters.model_name}}"
           PROD_VERSION="{{inputs.parameters.prod_version}}"
-          TRAINING_IMAGE="{{inputs.parameters.training_image}}"
+          TRAINING_IMAGE="{{inputs.parameters.serving_image}}"
 
           # Clean ALL variables
           MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
