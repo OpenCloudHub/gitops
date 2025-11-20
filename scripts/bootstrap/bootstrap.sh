@@ -119,6 +119,12 @@ bootstrap_cluster_prep() {
     log_info "Installing ServiceMonitor CRD..."
     kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
 
+    # Install Gateway CRDs needed by Cert-Manager
+    log_info "Installing Gateway API CRDs..."
+    kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null || \
+  kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/experimental-install.yaml
+
+
     # Pre-create ArgoCD repo-server NetworkPolicy for egress
     log_info "Pre-creating ArgoCD NetworkPolicy with egress rules..."
     kubectl apply -f "${REPO_ROOT}/src/apps/core/argocd/base/argocd-repo-server-netpol.yaml"
