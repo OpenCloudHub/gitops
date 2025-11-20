@@ -61,13 +61,13 @@ spec:
             - /webhooks/0/failurePolicy
         # Ignore resourceFieldRef divisor field (Istio ztunnel issue)
         - group: apps
-          kind: Deployment
-          jsonPointers:
-            - /spec/template/spec/containers/*/env/*/valueFrom/resourceFieldRef/divisor
-        - group: apps
           kind: DaemonSet
-          jsonPointers:
-            - /spec/template/spec/containers/*/env/*/valueFrom/resourceFieldRef/divisor
+          jqPathExpressions:
+            - '.spec.template.spec.containers[].env[]?.valueFrom.resourceFieldRef.divisor'
+        - group: apps
+          kind: Deployment
+          jqPathExpressions:
+            - '.spec.template.spec.containers[].env[]?.valueFrom.resourceFieldRef.divisor'
         # Ignore ExternalSecret operator-added fields
         - group: external-secrets.io
           kind: ExternalSecret
