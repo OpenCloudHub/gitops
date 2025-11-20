@@ -195,26 +195,44 @@ bootstrap_install_argocd() {
     fi
   fi
 
-  # Apply ArgoCD applications
-  log_info "Applying ArgoCD applications..."
+  # Apply in stages
+  log_info "Applying ArgoCD applications in stages..."
   if [[ "$DRY_RUN" == "true" ]]; then
     log_info "(DRY RUN) Would apply ArgoCD applications"
   else
+    # Stage 1: Projects and Security (namespaces, RBAC)
+    log_info "Stage 1: Projects and Security..."
     kubectl apply -f "${REPO_ROOT}/src/app-projects/"
     kubectl apply -f "${REPO_ROOT}/src/application-sets/security/applicationset.yaml"
-    kubectl apply -f "${REPO_ROOT}/src/root-app.yaml"
-
-    log_info "Triggering initial ArgoCD refresh..."
     sleep 10
 
-    kubectl patch app argocd -n argocd \
-      -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' \
-      --type merge 2>/dev/null || true
+    # Stage 2: Platform (includes external-secrets)
+    log_info "Stage 2: Platform apps (core infrastructure)..."
+    kubectl apply -f "${REPO_ROOT}/src/application-sets/platform/applicationset.yaml"
 
-    kubectl rollout restart deployment/argocd-repo-server -n argocd
-    kubectl wait --for=condition=ready pod -n argocd -l app.kubernetes.io/name=argocd-repo-server --timeout=120s || true
+    # Wait for external-secrets to be ready
+    log_info "Waiting for External Secrets operator..."
+    for i in {1..60}; do
+      if kubectl get deployment external-secrets -n external-secrets >/dev/null 2>&1; then
+        kubectl wait --for=condition=available --timeout=30s \
+          deployment/external-secrets -n external-secrets 2>/dev/null && break
+      fi
+      echo -n "."
+      sleep 5
+    done
+    log_success "External Secrets is ready"
 
+    # Stage 3: Root app (AI apps and self-management)
+    log_info "Stage 3: Root app (AI workloads)..."
+    kubectl apply -f "${REPO_ROOT}/src/root-app.yaml"
     log_success "ArgoCD applications applied"
+
+    # Force refresh
+    log_info "Triggering ArgoCD refresh..."
+    sleep 15
+    kubectl rollout restart deployment/argocd-repo-server -n argocd
+    kubectl wait --for=condition=ready pod -n argocd \
+      -l app.kubernetes.io/name=argocd-repo-server --timeout=120s || true
   fi
 }
 
