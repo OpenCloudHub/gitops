@@ -99,13 +99,6 @@ bootstrap_check_prerequisites() {
 bootstrap_cluster_prep() {
     log_step "Install essential CRDs and secrets"
 
-    # Wait for API server to be fully ready
-    log_info "Waiting for Kubernetes API server to be fully ready..."
-    if ! kubectl wait --for=condition=Ready --timeout=300s -n kube-system pod -l component=kube-apiserver 2>/dev/null; then
-        log_warning "API server readiness check timed out, but continuing..."
-    fi
-    sleep 5  # Extra buffer for service registration
-
     # Create essential namespaces and secrets
     log_info "Creating essential namespaces..."
     kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
@@ -116,13 +109,7 @@ bootstrap_cluster_prep() {
     kubectl create secret generic vault-token --from-literal=token="$VAULT_TOKEN" -n external-secrets --dry-run=client -o yaml | kubectl apply -f -
 
     # Install ServiceMonitor CRD
-    log_info "Installing ServiceMonitor CRD..."
     kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
-
-    # Pre-create ArgoCD repo-server NetworkPolicy for egress
-    log_info "Pre-creating ArgoCD NetworkPolicy with egress rules..."
-    kubectl apply -f "${REPO_ROOT}/src/apps/core/argocd/base/argocd-repo-server-netpol.yaml"
-    log_success "NetworkPolicy created - repo-server will have internet access"
 
     # Create repository secrets for each repo
     log_info "Creating ArgoCD repository secrets..."
