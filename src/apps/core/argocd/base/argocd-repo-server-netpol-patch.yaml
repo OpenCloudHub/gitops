@@ -16,18 +16,17 @@ spec:
     ports:
     - protocol: UDP
       port: 53
-  # Allow internal argocd namespace communication (Redis, etc.)
+  # Allow internal argocd namespace communication
   - to:
     - podSelector: {}
-  # Allow all HTTPS (Helm repos, GitHub)
-  - ports:
+  # Allow external traffic - SINGLE COMBINED RULE
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
     - protocol: TCP
       port: 443
-  # Allow HTTP
-  - ports:
     - protocol: TCP
       port: 80
-  # Allow SSH for Git
-  - ports:
     - protocol: TCP
       port: 22
