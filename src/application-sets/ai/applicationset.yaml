@@ -34,3 +34,19 @@ spec:
         syncOptions:
         - ServerSideApply=true
         - RespectIgnoreDifferences=true
+      ignoreDifferences:
+        # Ignore ExternalSecret operator-added fields
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jqPathExpressions:
+            - '.spec.data[].remoteRef.conversionStrategy'
+            - '.spec.data[].remoteRef.decodingStrategy'
+            - '.spec.data[].remoteRef.metadataPolicy'
+        # Ignore status fields
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jsonPointers:
+            - /status
+            - /metadata/generation
+            - /metadata/resourceVersion
+            - /metadata/managedFields

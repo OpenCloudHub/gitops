@@ -18,4 +18,6 @@ spec:
     tls:
       mode: Terminate
       certificateRefs:
-      - name: ingress-gateway-cert
+      - group: ''
+        kind: Secret
+        name: ingress-gateway-cert

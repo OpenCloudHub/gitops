@@ -48,7 +48,7 @@ spec:
           - ServerSideApply=true
         #   - RespectIgnoreDifferences=true
       ignoreDifferences:
-        # FIXME: Ignore differences in the failurePolicy field of the following istio resources that caused out-of-sync
+        # Istio webhook failurePolicy
         - group: admissionregistration.k8s.io
           kind: ValidatingWebhookConfiguration
           name: istio-validator-istio-system
@@ -59,6 +59,7 @@ spec:
           name: istiod-default-validator
           jsonPointers:
             - /webhooks/0/failurePolicy
+        # Ignore resourceFieldRef divisor field (Istio ztunnel issue)
         - group: apps
           kind: Deployment
           jsonPointers:
@@ -67,12 +68,17 @@ spec:
           kind: DaemonSet
           jsonPointers:
             - /spec/template/spec/containers/*/env/*/valueFrom/resourceFieldRef/divisor
-        # Ignore ExternalSecret status and data fields (applies to all ExternalSecrets)
+        # Ignore ExternalSecret operator-added fields
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jqPathExpressions:
+            - '.spec.data[].remoteRef.conversionStrategy'
+            - '.spec.data[].remoteRef.decodingStrategy'
+            - '.spec.data[].remoteRef.metadataPolicy'
         - group: external-secrets.io
           kind: ExternalSecret
           jsonPointers:
             - /status
-            - /spec/data
             - /metadata/generation
             - /metadata/resourceVersion
             - /metadata/managedFields
