@@ -190,5 +190,7 @@ spec:
             type: PathPrefix
             value: "/"
       backendRefs:
-        - name: wine-classifier-service-head-svc
+        - group: ''
+          kind: Secret
+          name: wine-classifier-service-head-svc
           port: 8265
