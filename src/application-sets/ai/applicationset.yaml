@@ -35,6 +35,7 @@ spec:
         - ServerSideApply=true
         - RespectIgnoreDifferences=true
       ignoreDifferences:
+        ignoreDifferences:
         # Ignore ExternalSecret operator-added fields
         - group: external-secrets.io
           kind: ExternalSecret
@@ -42,11 +43,16 @@ spec:
             - '.spec.data[].remoteRef.conversionStrategy'
             - '.spec.data[].remoteRef.decodingStrategy'
             - '.spec.data[].remoteRef.metadataPolicy'
-        # Ignore status fields
+        # Ignore metadata fields for ExternalSecrets
         - group: external-secrets.io
           kind: ExternalSecret
           jsonPointers:
             - /status
+            - /metadata/managedFields
+        # Ignore metadata fields globally
+        - group: "*"
+          kind: "*"
+          jsonPointers:
             - /metadata/generation
             - /metadata/resourceVersion
             - /metadata/managedFields
