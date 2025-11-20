@@ -6,12 +6,12 @@ namespace: istio-system
 helmCharts:
   - name: base
     releaseName: istio-base
-    version: 1.26.2
+    version: 1.28.0
     repo: https://istio-release.storage.googleapis.com/charts
 
   - name: cni
     releaseName: istio-cni
-    version: 1.26.2
+    version: 1.28.0
     repo: https://istio-release.storage.googleapis.com/charts
     valuesInline:
       ambient:
@@ -21,7 +21,7 @@ helmCharts:
 
   - name: ztunnel
     releaseName: istio-ztunnel
-    version: 1.26.2
+    version: 1.28.0
     repo: https://istio-release.storage.googleapis.com/charts
     valuesInline:
       meshConfig:
@@ -34,7 +34,7 @@ helmCharts:
 
   - name: istiod
     releaseName: istiod
-    version: 1.26.2
+    version: 1.28.0
     repo: https://istio-release.storage.googleapis.com/charts
     valuesInline:
       meshConfig:

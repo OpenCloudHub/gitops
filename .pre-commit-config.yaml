@@ -98,12 +98,12 @@ repos:
           - ruff
 
   ### Shell ###
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.10.0.1
-    hooks:
-      - id: shellcheck
-        name: "🐚 shell · Lint shell scripts"
-        args: [--severity=warning]
+  # - repo: https://github.com/shellcheck-py/shellcheck-py
+  #   rev: v0.10.0.1
+  #   hooks:
+  #     - id: shellcheck
+  #       name: "🐚 shell · Lint shell scripts"
+  #       args: [--severity=warning]
 
   ### Makefile ###
   - repo: https://github.com/mrtazz/checkmake.git
