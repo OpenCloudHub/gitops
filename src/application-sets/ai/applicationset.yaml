@@ -24,12 +24,6 @@ spec:
           {{- if eq (index .path.segments 3) "mlflow" }}200
           {{- else if eq (index .path.segments 3) "argo-workflows" }}210
           {{- else }}220{{- end }}
-        argocd.argoproj.io/sync-options: |
-          {{- if eq (index .path.segments 3) "ray" }}
-          ServerSideApply=true,RespectIgnoreDifferences=true
-          {{- else }}
-          RespectIgnoreDifferences=true
-          {{- end }}
     spec:
       project: ai
       source:
@@ -42,6 +36,9 @@ spec:
         automated:
           prune: true
           selfHeal: true
+        syncOptions:
+        - ServerSideApply=true  # Enable for all AI apps
+        - RespectIgnoreDifferences=true
       ignoreDifferences:
       - group: external-secrets.io
         kind: ExternalSecret
