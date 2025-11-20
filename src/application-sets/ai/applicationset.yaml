@@ -19,6 +19,17 @@ spec:
         app.kubernetes.io/name: "{{index .path.segments 3}}"
         app.kubernetes.io/part-of: ai
         app.kubernetes.io/managed-by: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: |
+          {{- if eq (index .path.segments 3) "mlflow" }}200
+          {{- else if eq (index .path.segments 3) "argo-workflows" }}210
+          {{- else }}220{{- end }}
+        argocd.argoproj.io/sync-options: |
+          {{- if eq (index .path.segments 3) "ray" }}
+          ServerSideApply=true,RespectIgnoreDifferences=true
+          {{- else }}
+          RespectIgnoreDifferences=true
+          {{- end }}
     spec:
       project: ai
       source:
@@ -31,27 +42,9 @@ spec:
         automated:
           prune: true
           selfHeal: true
-        syncOptions:
-        # - ServerSideApply=true
-        - RespectIgnoreDifferences=true
       ignoreDifferences:
-        # Ignore ExternalSecret operator-added fields
-        - group: external-secrets.io
-          kind: ExternalSecret
-          jqPathExpressions:
-            - '.spec.data[].remoteRef.conversionStrategy'
-            - '.spec.data[].remoteRef.decodingStrategy'
-            - '.spec.data[].remoteRef.metadataPolicy'
-        # Ignore metadata fields for ExternalSecrets
-        - group: external-secrets.io
-          kind: ExternalSecret
-          jsonPointers:
-            - /status
-            - /metadata/managedFields
-        # Ignore metadata fields globally
-        - group: "*"
-          kind: "*"
-          jsonPointers:
-            - /metadata/generation
-            - /metadata/resourceVersion
-            - /metadata/managedFields
+      - group: external-secrets.io
+        kind: ExternalSecret
+        jsonPointers:
+        - /status
+        - /spec/data

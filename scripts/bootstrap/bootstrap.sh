@@ -203,6 +203,17 @@ bootstrap_install_argocd() {
     kubectl apply -f "${REPO_ROOT}/src/app-projects/"
     kubectl apply -f "${REPO_ROOT}/src/application-sets/security/applicationset.yaml"
     kubectl apply -f "${REPO_ROOT}/src/root-app.yaml"
+
+    log_info "Triggering initial ArgoCD refresh..."
+    sleep 10
+
+    kubectl patch app argocd -n argocd \
+      -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' \
+      --type merge 2>/dev/null || true
+
+    kubectl rollout restart deployment/argocd-repo-server -n argocd
+    kubectl wait --for=condition=ready pod -n argocd -l app.kubernetes.io/name=argocd-repo-server --timeout=120s || true
+
     log_success "ArgoCD applications applied"
   fi
 }
