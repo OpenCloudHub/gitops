@@ -166,8 +166,11 @@ spec:
             type: PathPrefix
             value: /models/wine-classifier
       backendRefs:
-        - name: wine-classifier-service-serve-svc
+        - group: ''
+          kind: Secret
+          name: wine-classifier-service-serve-svc
           port: 8000
+          weight: 1
 
 ---
 # HTTPRoute for Ray Dashboard
@@ -194,3 +197,4 @@ spec:
           kind: Secret
           name: wine-classifier-service-head-svc
           port: 8265
+          weight: 1
