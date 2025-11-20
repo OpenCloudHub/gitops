@@ -26,16 +26,15 @@ spec:
   # Allow internal argocd namespace communication (Redis, etc.)
   - to:
     - podSelector: {}
-  # Allow HTTPS (Helm repos, GitHub)
-  - ports:
+  # Allow external HTTPS/HTTP/SSH
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
     - protocol: TCP
       port: 443
-  # Allow HTTP
-  - ports:
     - protocol: TCP
       port: 80
-  # Allow SSH (Git)
-  - ports:
     - protocol: TCP
       port: 22
   ingress:
