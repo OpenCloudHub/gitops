@@ -35,7 +35,6 @@ spec:
         - ServerSideApply=true
         - RespectIgnoreDifferences=true
       ignoreDifferences:
-        ignoreDifferences:
         # Ignore ExternalSecret operator-added fields
         - group: external-secrets.io
           kind: ExternalSecret
