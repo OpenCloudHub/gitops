@@ -126,9 +126,9 @@ bootstrap_cluster_prep() {
 
 
     # Pre-create ArgoCD repo-server NetworkPolicy for egress
-    # log_info "Pre-creating ArgoCD NetworkPolicy with egress rules..."
-    # kubectl apply -f "${REPO_ROOT}/src/apps/core/argocd/base/argocd-repo-server-netpol.yaml"
-    # log_success "NetworkPolicy created - repo-server will have internet access"
+    log_info "Pre-creating ArgoCD NetworkPolicy with egress rules..."
+    kubectl apply -f "${REPO_ROOT}/src/apps/core/argocd/base/argocd-repo-server-netpol.yaml"
+    log_success "NetworkPolicy created - repo-server will have internet access"
 
     # Create repository secrets for each repo
     log_info "Creating ArgoCD repository secrets..."
