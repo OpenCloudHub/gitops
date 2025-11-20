@@ -7,7 +7,7 @@ resources:
   # Could also be curled and saved first to provision the installation in a restricted environment
   # Use HA installation for production
   - https://raw.githubusercontent.com/argoproj/argo-cd/v3.2.0/manifests/install.yaml
-  - argocd-repo-server-netpol.yaml
+  # - argocd-repo-server-netpol.yaml
 
 patches:
   - target:
@@ -22,10 +22,10 @@ patches:
       kind: ConfigMap
       name: argocd-cm
     path: argo-cm.yaml
-  # - target:
-  #     kind: NetworkPolicy
-  #     name: argocd-repo-server-network-policy
-  #   path: argocd-repo-server-netpol-patch.yaml
+  - target:
+      kind: NetworkPolicy
+      name: argocd-repo-server-network-policy
+    path: argocd-repo-server-netpol-patch.yaml
 
 # images:
 #   - name: quay.io/argoproj/argocd
