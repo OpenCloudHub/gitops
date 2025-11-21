@@ -14,7 +14,7 @@ spec:
     applications:
       - name: qwen-llm
         import_path: ray.serve.llm:build_openai_app
-        route_prefix: /v1
+        route_prefix: /models/qwen-0.5b/v1
         args:
           llm_configs:
             - model_loading_config:
