@@ -260,38 +260,33 @@ dev_setup_prepull_critical_images() {
     log_step "Pre-pulling critical images to avoid registry rate limits"
 
     local critical_images=(
-        # ArgoCD
         "quay.io/argoproj/argocd:v3.2.0"
         "ghcr.io/dexidp/dex:v2.43.0"
         "redis:8.2.2-alpine"
-
-        # Infrastructure
         "ghcr.io/external-secrets/external-secrets:v1.0.0"
         "quay.io/jetstack/cert-manager-controller:v1.16.2"
         "quay.io/jetstack/cert-manager-webhook:v1.16.2"
         "quay.io/jetstack/cert-manager-cainjector:v1.16.2"
-
-        # Istio
         "docker.io/istio/pilot:1.28.0-distroless"
         "docker.io/istio/proxyv2:1.28.0-distroless"
-
-        # Add your most-used images
-        "quay.io/argoproj/workflow-controller:v3.7.3"
-        "docker.io/burakince/mlflow:3.5.1"
     )
 
-    log_info "Pulling images in parallel (this may take 2-3 minutes)..."
+    log_info "Pulling images in parallel..."
     for image in "${critical_images[@]}"; do
-        docker pull "$image" >/dev/null 2>&1 &
-    done
-    wait
-
-    log_info "Loading images into Kind cluster..."
-    for image in "${critical_images[@]}"; do
-        kind load docker-image "$image" --name "$CLUSTER_NAME" 2>/dev/null
+        log_info "  Pulling: $image"
+        docker pull "$image" 2>&1 | grep -q "Downloaded\|up to date\|Already exists" || log_warning "Failed to pull $image (will retry from registry)"
     done
 
-    log_success "Critical images pre-loaded"
+    log_info "Loading successfully pulled images into Kind cluster..."
+    for image in "${critical_images[@]}"; do
+        # Only load if image exists locally
+        if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${image}$"; then
+            log_info "  Loading: $image"
+            kind load docker-image "$image" --name "$CLUSTER_NAME" || log_warning "Failed to load $image"
+        fi
+    done
+
+    log_success "Image pre-loading complete"
 }
 
 dev_setup_assign_external_ip() {
