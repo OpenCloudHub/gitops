@@ -99,12 +99,19 @@ spec:
           # Update images (both head and worker)
           sed -i "s|image: opencloudhuborg/${MODEL_NAME}:[a-zA-Z0-9_-]*|image: ${SERVING_IMAGE}|g" "$SERVICE_FILE"
 
+          # DEBUG: Show what changed
+          echo "=== DEBUG: After changes ==="
+          grep "image:" "$SERVICE_FILE"
+          echo ""
+
           # Update or add model_uri
           if grep -q "model_uri:" "$SERVICE_FILE"; then
             # Update existing model_uri
+            echo "Update existing model_uri..."
             sed -i "s|model_uri: \"models://prod\.${MODEL_NAME}/[0-9]*\"|model_uri: \"models://prod.${MODEL_NAME}/${PROD_VERSION}\"|g" "$SERVICE_FILE"
           else
             # Add model_uri after import_path line
+            echo "Adding model_uri to serveConfigV2..."
             sed -i "/import_path: src.serving.serve:app_builder/a\\        args:\\n          model_uri: \"models://prod.${MODEL_NAME}/${PROD_VERSION}\"" "$SERVICE_FILE"
           fi
 
