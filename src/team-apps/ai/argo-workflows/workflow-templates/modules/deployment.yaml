@@ -152,13 +152,27 @@ spec:
     script:
       image: ghcr.io/mlflow/mlflow:v2.18.0
       command: [python]
+      env:
+      - name: MODEL_URI
+        value: "{{inputs.parameters.model_uri}}"
+      - name: SERVING_IMAGE
+        value: "{{inputs.parameters.serving_image}}"
+      - name: DEPLOYED_BY
+        value: "{{inputs.parameters.deployed_by}}"
+      - name: MLFLOW_TRACKING_URI
+        value: "{{inputs.parameters.mlflow_tracking_uri}}"
+      - name: WORKFLOW_UID
+        value: "{{workflow.uid}}"
+      - name: WORKFLOW_NAME
+        value: "{{workflow.name}}"
       source: |
         from mlflow import MlflowClient
         from datetime import datetime
         import re
+        import os
 
-        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
-        model_uri = "{{inputs.parameters.model_uri}}"
+        client = MlflowClient(os.environ["MLFLOW_TRACKING_URI"])
+        model_uri = os.environ["MODEL_URI"]
 
         # Parse: models:/prod.wine-classifier/1
         match = re.match(r'models:/([^.]+)\.([^/]+)/(\d+)', model_uri)
@@ -177,11 +191,11 @@ spec:
         tags = {
             "deployment_status": "deployed",
             "deployed_at": datetime.utcnow().isoformat(),
-            "deployed_by": "{{inputs.parameters.deployed_by}}",
-            "serving_image": "{{inputs.parameters.serving_image}}",
+            "deployed_by": os.environ["DEPLOYED_BY"],
+            "serving_image": os.environ["SERVING_IMAGE"],
             "kubernetes_namespace": "ai",
-            "argo_workflow_uid": "{{workflow.uid}}",
-            "argo_workflow_name": "{{workflow.name}}"
+            "argo_workflow_uid": os.environ["WORKFLOW_UID"],
+            "argo_workflow_name": os.environ["WORKFLOW_NAME"]
         }
 
         for key, value in tags.items():
