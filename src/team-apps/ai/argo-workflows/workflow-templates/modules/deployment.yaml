@@ -148,7 +148,9 @@ spec:
       - name: model_uri
       - name: serving_image
       - name: deployed_by
+        value: "manual"
       - name: mlflow_tracking_uri
+        value: "http://mlflow.ai.svc.cluster.local:80"
     script:
       image: ghcr.io/mlflow/mlflow:v2.18.0
       command: [python]
@@ -172,12 +174,12 @@ spec:
         import os
 
         client = MlflowClient(os.environ["MLFLOW_TRACKING_URI"])
-        model_uri = os.environ["MODEL_URI"]
+        model_uri = os.environ["MODEL_URI"].strip()  # ← Add .strip()
 
         # Parse: models:/prod.wine-classifier/1
         match = re.match(r'models:/([^.]+)\.([^/]+)/(\d+)', model_uri)
         if not match:
-            print(f"❌ Invalid model URI format: {model_uri}")
+            print(f"❌ Invalid model URI format: '{model_uri}'")  # ← Add quotes to see whitespace
             exit(1)
 
         registry_prefix = match.group(1)
@@ -191,11 +193,11 @@ spec:
         tags = {
             "deployment_status": "deployed",
             "deployed_at": datetime.utcnow().isoformat(),
-            "deployed_by": os.environ["DEPLOYED_BY"],
-            "serving_image": os.environ["SERVING_IMAGE"],
+            "deployed_by": os.environ["DEPLOYED_BY"].strip(),
+            "serving_image": os.environ["SERVING_IMAGE"].strip(),
             "kubernetes_namespace": "ai",
-            "argo_workflow_uid": os.environ["WORKFLOW_UID"],
-            "argo_workflow_name": os.environ["WORKFLOW_NAME"]
+            "argo_workflow_uid": os.environ["WORKFLOW_UID"].strip(),
+            "argo_workflow_name": os.environ["WORKFLOW_NAME"].strip()
         }
 
         for key, value in tags.items():
