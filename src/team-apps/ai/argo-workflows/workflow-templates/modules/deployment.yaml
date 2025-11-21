@@ -83,8 +83,9 @@ spec:
         MODEL_URI=$(echo "$MODEL_URI" | tr -d '\n\r\t ')
         SERVING_IMAGE=$(echo "$SERVING_IMAGE" | tr -d '\n\r\t ')
 
-        # Extract version from model URI
-        VERSION=$(echo "$MODEL_URI" | grep -oP '/\K[0-9]+$')
+        # Extract version from model URI using sed instead of grep -P
+        # models:/prod.wine-classifier/1 → 1
+        VERSION=$(echo "$MODEL_URI" | sed -n 's|.*/\([0-9]*\)$|\1|p')
 
         git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
         cd /tmp/gitops
@@ -100,7 +101,8 @@ spec:
         CURRENT_IMAGE=$(grep "image: opencloudhuborg/${MODEL_NAME}" "$SERVICE_FILE" | head -1 | awk '{print $2}')
 
         if grep -q "model_uri:" "$SERVICE_FILE"; then
-          CURRENT_URI=$(grep "model_uri:" "$SERVICE_FILE" | grep -oP 'models:/[^"]*')
+          # Extract current URI using sed instead of grep -P
+          CURRENT_URI=$(grep "model_uri:" "$SERVICE_FILE" | sed -n 's/.*model_uri: "\([^"]*\)".*/\1/p')
           echo "   Current: ${CURRENT_URI} with ${CURRENT_IMAGE}"
         else
           echo "   Current: (no model) with ${CURRENT_IMAGE}"
@@ -119,7 +121,7 @@ spec:
         git config user.name "Argo Workflow"
         git config user.email "workflow@opencloudhub.org"
         git add "$SERVICE_FILE"
-        git commit -m "🚀 Deploy ${MODEL_NAME} ${MODEL_URI##*/} (${SERVING_IMAGE##*:})"
+        git commit -m "🚀 Deploy ${MODEL_NAME} v${VERSION} (${SERVING_IMAGE##*:})"
         git push
 
         echo ""
