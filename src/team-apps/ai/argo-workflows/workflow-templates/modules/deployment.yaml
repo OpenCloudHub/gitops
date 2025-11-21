@@ -1,3 +1,4 @@
+# modules/deployment.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -7,189 +8,167 @@ spec:
   serviceAccountName: workflow-executor
 
   templates:
-    - name: update-gitops
-      inputs:
-        parameters:
-        - name: model_name
-        - name: prod_version
-        - name: serving_image
-      volumes:
+  # Main deployment workflow - combines GitOps update + MLflow tagging
+  - name: deploy-model
+    inputs:
+      parameters:
+      - name: model_name          # e.g., wine-classifier
+      - name: model_uri           # e.g., models:/prod.wine-classifier/1
+      - name: serving_image       # e.g., opencloudhuborg/wine-classifier-serving:main-abc123
+      - name: deployed_by         # e.g., "pipeline", "manual", or username
+        value: "manual"
+      - name: mlflow_tracking_uri
+        value: "http://mlflow.ai.svc.cluster.local:80"
+    steps:
+    # Step 1: Update GitOps repo
+    - - name: update-gitops-repo
+        template: update-gitops
+        arguments:
+          parameters:
+          - name: model_name
+            value: "{{inputs.parameters.model_name}}"
+          - name: model_uri
+            value: "{{inputs.parameters.model_uri}}"
+          - name: serving_image
+            value: "{{inputs.parameters.serving_image}}"
+
+    # Step 2: Tag deployment in MLflow
+    - - name: tag-mlflow-deployment
+        template: tag-deployment-in-mlflow
+        arguments:
+          parameters:
+          - name: model_uri
+            value: "{{inputs.parameters.model_uri}}"
+          - name: serving_image
+            value: "{{inputs.parameters.serving_image}}"
+          - name: deployed_by
+            value: "{{inputs.parameters.deployed_by}}"
+          - name: mlflow_tracking_uri
+            value: "{{inputs.parameters.mlflow_tracking_uri}}"
+
+  # Sub-template: GitOps update
+  - name: update-gitops
+    inputs:
+      parameters:
+      - name: model_name
+      - name: model_uri
+      - name: serving_image
+    volumes:
+    - name: git-secret
+      secret:
+        secretName: gitops-repo
+    script:
+      image: alpine/git:latest
+      command: [sh]
+      volumeMounts:
       - name: git-secret
-        secret:
-          secretName: gitops-repo
-      script:
-        image: alpine/git:latest
-        command: [sh]
-        volumeMounts:
-        - name: git-secret
-          mountPath: /mnt/secrets
-          readOnly: true
-        source: |
-          set -e
+        mountPath: /mnt/secrets
+        readOnly: true
+      source: |
+        set -e
 
-          # SSH setup
-          mkdir -p ~/.ssh
-          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
-          echo "" >> ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
+        # SSH setup
+        mkdir -p ~/.ssh
+        cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+        echo "" >> ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-          MODEL_NAME="{{inputs.parameters.model_name}}"
-          PROD_VERSION="{{inputs.parameters.prod_version}}"
-          SERVING_IMAGE="{{inputs.parameters.serving_image}}"
+        MODEL_NAME="{{inputs.parameters.model_name}}"
+        MODEL_URI="{{inputs.parameters.model_uri}}"
+        SERVING_IMAGE="{{inputs.parameters.serving_image}}"
 
-          # Clean variables
-          MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
-          PROD_VERSION=$(echo "$PROD_VERSION" | tr -d '\n\r\t ')
-          SERVING_IMAGE=$(echo "$SERVING_IMAGE" | tr -d '\n\r\t ')
+        # Clean variables
+        MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
+        MODEL_URI=$(echo "$MODEL_URI" | tr -d '\n\r\t ')
+        SERVING_IMAGE=$(echo "$SERVING_IMAGE" | tr -d '\n\r\t ')
 
-          git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
-          cd /tmp/gitops
+        # Extract version from model URI
+        VERSION=$(echo "$MODEL_URI" | grep -oP '/\K[0-9]+$')
 
-          SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
+        git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
+        cd /tmp/gitops
 
-          echo "📦 Deployment Request: ${MODEL_NAME}"
-          echo ""
+        SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
 
-          # Extract current image (appears multiple times - head and worker)
-          CURRENT_IMAGE=$(grep "image: opencloudhuborg/${MODEL_NAME}" "$SERVICE_FILE" | head -1 | awk '{print $2}')
+        echo "📦 Deployment: ${MODEL_NAME}"
+        echo "   Model: ${MODEL_URI}"
+        echo "   Image: ${SERVING_IMAGE}"
+        echo ""
 
-          # Check if model_uri exists in serveConfigV2
-          if grep -q "model_uri:" "$SERVICE_FILE"; then
-            CURRENT_VERSION=$(grep "model_uri:" "$SERVICE_FILE" | grep -oP 'models:/prod\.[^/]*/\K[0-9]+' | head -1)
-            echo "   Model Version:"
-            echo "     Current: v${CURRENT_VERSION}"
-            echo "     Target:  v${PROD_VERSION}"
+        # Extract current state
+        CURRENT_IMAGE=$(grep "image: opencloudhuborg/${MODEL_NAME}" "$SERVICE_FILE" | head -1 | awk '{print $2}')
 
-            if [ "$CURRENT_VERSION" = "$PROD_VERSION" ]; then
-              echo "     Status:  ✓ Already up-to-date"
-              MODEL_CHANGED=false
-            else
-              echo "     Status:  → Updating"
-              MODEL_CHANGED=true
-            fi
-          else
-            echo "   Model Version:"
-            echo "     Current: (not set)"
-            echo "     Target:  v${PROD_VERSION}"
-            echo "     Status:  → Adding model_uri"
-            MODEL_CHANGED=true
-          fi
+        if grep -q "model_uri:" "$SERVICE_FILE"; then
+          CURRENT_URI=$(grep "model_uri:" "$SERVICE_FILE" | grep -oP 'models:/[^"]*')
+          echo "   Current: ${CURRENT_URI} with ${CURRENT_IMAGE}"
+        else
+          echo "   Current: (no model) with ${CURRENT_IMAGE}"
+        fi
 
-          echo ""
-          echo "   Container Image:"
-          echo "     Current: ${CURRENT_IMAGE}"
-          echo "     Target:  ${SERVING_IMAGE}"
+        # Update images
+        sed -i "s|image: opencloudhuborg/${MODEL_NAME}-serving:[a-zA-Z0-9_-]*|image: ${SERVING_IMAGE}|g" "$SERVICE_FILE"
 
-          if [ "$CURRENT_IMAGE" = "$SERVING_IMAGE" ]; then
-            echo "     Status:  ✓ Already up-to-date"
-            IMAGE_CHANGED=false
-          else
-            echo "     Status:  → Updating"
-            IMAGE_CHANGED=true
-          fi
-          echo ""
+        # Update or add model_uri
+        if grep -q "user_config:" "$SERVICE_FILE"; then
+          sed -i "s|model_uri: \"models:/[^\"]*\"|model_uri: \"${MODEL_URI}\"|g" "$SERVICE_FILE"
+        else
+          sed -i "/- name: WineClassifier/a\\            user_config:\\n              model_uri: \"${MODEL_URI}\"" "$SERVICE_FILE"
+        fi
 
-          # Check if any changes needed
-          if [ "$MODEL_CHANGED" = "false" ] && [ "$IMAGE_CHANGED" = "false" ]; then
-            echo "✅ No changes needed - already at target state"
-            exit 0
-          fi
+        git config user.name "Argo Workflow"
+        git config user.email "workflow@opencloudhub.org"
+        git add "$SERVICE_FILE"
+        git commit -m "🚀 Deploy ${MODEL_NAME} ${MODEL_URI##*/} (${SERVING_IMAGE##*:})"
+        git push
 
-          # Update images (both head and worker)
-          sed -i "s|image: opencloudhuborg/${MODEL_NAME}:[a-zA-Z0-9_-]*|image: ${SERVING_IMAGE}|g" "$SERVICE_FILE"
+        echo ""
+        echo "✅ GitOps updated!"
 
-          # DEBUG: Show what changed
-          echo "=== DEBUG: After changes ==="
-          grep "image:" "$SERVICE_FILE"
-          echo ""
+  # Sub-template: MLflow tagging
+  - name: tag-deployment-in-mlflow
+    inputs:
+      parameters:
+      - name: model_uri
+      - name: serving_image
+      - name: deployed_by
+      - name: mlflow_tracking_uri
+    script:
+      image: ghcr.io/mlflow/mlflow:v2.18.0
+      command: [python]
+      source: |
+        from mlflow import MlflowClient
+        from datetime import datetime
+        import re
 
-          # Update or add user_config with model_uri under WineClassifier deployment
-          # ⚠️ IMPORTANT: Depends on correct naming
-          if grep -q "user_config:" "$SERVICE_FILE"; then
-            echo "Update existing model_uri..."
-            sed -i "s|model_uri: \"models:/prod\.${MODEL_NAME}/[0-9]*\"|model_uri: \"models:/prod.${MODEL_NAME}/${PROD_VERSION}\"|g" "$SERVICE_FILE"
-          else
-            echo "Adding model_uri to serveConfigV2..."
-            # Find the line with "- name: WineClassifier" and add user_config after it
-            sed -i "/- name: WineClassifier/a\\            user_config:\\n              model_uri: \"models:/prod.${MODEL_NAME}/${PROD_VERSION}\"" "$SERVICE_FILE"
-          fi
+        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
+        model_uri = "{{inputs.parameters.model_uri}}"
 
-          git config user.name "Argo Workflow"
-          git config user.email "workflow@opencloudhub.org"
-          git add "$SERVICE_FILE"
-          git commit -m "🤖 Deploy ${MODEL_NAME} v${PROD_VERSION} with ${SERVING_IMAGE##*:}"
-          git push
+        # Parse: models:/prod.wine-classifier/1
+        match = re.match(r'models:/([^.]+)\.([^/]+)/(\d+)', model_uri)
+        if not match:
+            print(f"❌ Invalid model URI format: {model_uri}")
+            exit(1)
 
-          echo ""
-          echo "✅ GitOps updated! ArgoCD will sync changes."
-          # set -e
+        registry_prefix = match.group(1)
+        model_name = match.group(2)
+        version = match.group(3)
+        full_name = f"{registry_prefix}.{model_name}"
 
-          # # SSH setup
-          # mkdir -p ~/.ssh
-          # cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
-          # echo "" >> ~/.ssh/id_ed25519
-          # chmod 600 ~/.ssh/id_ed25519
-          # ssh-keyscan github.com >> ~/.ssh/known_hosts
+        print(f"🏷️  Tagging deployment in MLflow")
+        print(f"   Model: {full_name}/v{version}")
 
-          # MODEL_NAME="{{inputs.parameters.model_name}}"
-          # PROD_VERSION="{{inputs.parameters.prod_version}}"
-          # TRAINING_IMAGE="{{inputs.parameters.serving_image}}"
+        tags = {
+            "deployment_status": "deployed",
+            "deployed_at": datetime.utcnow().isoformat(),
+            "deployed_by": "{{inputs.parameters.deployed_by}}",
+            "serving_image": "{{inputs.parameters.serving_image}}",
+            "kubernetes_namespace": "ai",
+            "argo_workflow_uid": "{{workflow.uid}}",
+            "argo_workflow_name": "{{workflow.name}}"
+        }
 
-          # # Clean ALL variables
-          # MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
-          # PROD_VERSION=$(echo "$PROD_VERSION" | tr -d '\n\r\t ')
-          # TRAINING_IMAGE=$(echo "$TRAINING_IMAGE" | tr -d '\n\r\t ')
+        for key, value in tags.items():
+            client.set_model_version_tag(full_name, version, key, value)
 
-          # git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
-          # cd /tmp/gitops
-
-          # SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
-
-          # # Extract current values BEFORE changes
-          # CURRENT_VERSION=$(grep 'model_uri:' "$SERVICE_FILE" | head -1 | grep -o '/[0-9]*"' | tr -d '/"')
-          # CURRENT_IMAGE=$(grep "image: opencloudhuborg/${MODEL_NAME}" "$SERVICE_FILE" | head -1 | awk '{print $2}')
-
-          # echo "📦 Deployment Request: ${MODEL_NAME}"
-          # echo ""
-          # echo "   Model Version:"
-          # echo "     Current: v${CURRENT_VERSION}"
-          # echo "     Target:  v${PROD_VERSION}"
-          # if [ "$CURRENT_VERSION" = "$PROD_VERSION" ]; then
-          #   echo "     Status:  ✓ Already up-to-date"
-          # else
-          #   echo "     Status:  → Updating"
-          # fi
-          # echo ""
-          # echo "   Container Image:"
-          # echo "     Current: ${CURRENT_IMAGE}"
-          # echo "     Target:  ${TRAINING_IMAGE}"
-          # if [ "$CURRENT_IMAGE" = "$TRAINING_IMAGE" ]; then
-          #   echo "     Status:  ✓ Already up-to-date"
-          # else
-          #   echo "     Status:  → Updating"
-          # fi
-          # echo ""
-
-          # # Check if any changes needed
-          # if [ "$CURRENT_VERSION" = "$PROD_VERSION" ] && [ "$CURRENT_IMAGE" = "$TRAINING_IMAGE" ]; then
-          #   echo "✅ No changes needed - already at target state"
-          #   exit 0
-          # fi
-
-          # # Do replacements
-          # cat "$SERVICE_FILE" | \
-          #   sed "s|opencloudhuborg/${MODEL_NAME}:[a-zA-Z0-9_-]*|${TRAINING_IMAGE}|g" | \
-          #   sed "s|prod\.${MODEL_NAME}/[0-9]*|prod.${MODEL_NAME}/${PROD_VERSION}|g" \
-          #   > "${SERVICE_FILE}.new"
-
-          # mv "${SERVICE_FILE}.new" "$SERVICE_FILE"
-
-          # git config user.name "Argo Workflow"
-          # git config user.email "workflow@opencloudhub.org"
-          # git add "$SERVICE_FILE"
-          # git commit -m "🤖 ${MODEL_NAME} v${PROD_VERSION}"
-          # git push
-
-          # echo ""
-          # echo "✅ GitOps updated! ArgoCD will sync changes."
+        print(f"✅ Tagged: {full_name}/v{version}")
