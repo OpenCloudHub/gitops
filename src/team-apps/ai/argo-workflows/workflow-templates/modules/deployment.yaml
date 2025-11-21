@@ -104,15 +104,15 @@ spec:
           grep "image:" "$SERVICE_FILE"
           echo ""
 
-          # Update or add model_uri
-          if grep -q "model_uri:" "$SERVICE_FILE"; then
-            # Update existing model_uri
+          # Update or add user_config with model_uri under WineClassifier deployment
+          # ⚠️ IMPORTANT: Depends on correct naming
+          if grep -q "user_config:" "$SERVICE_FILE"; then
             echo "Update existing model_uri..."
             sed -i "s|model_uri: \"models://prod\.${MODEL_NAME}/[0-9]*\"|model_uri: \"models://prod.${MODEL_NAME}/${PROD_VERSION}\"|g" "$SERVICE_FILE"
           else
-            # Add model_uri after import_path line
             echo "Adding model_uri to serveConfigV2..."
-            sed -i "/import_path: src.serving.serve:app_builder/a\\        args:\\n          model_uri: \"models://prod.${MODEL_NAME}/${PROD_VERSION}\"" "$SERVICE_FILE"
+            # Find the line with "- name: WineClassifier" and add user_config after it
+            sed -i "/- name: WineClassifier/a\\            user_config:\\n              model_uri: \"models://prod.${MODEL_NAME}/${PROD_VERSION}\"" "$SERVICE_FILE"
           fi
 
           git config user.name "Argo Workflow"
