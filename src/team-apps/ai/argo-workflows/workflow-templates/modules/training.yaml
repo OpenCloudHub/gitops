@@ -78,6 +78,16 @@ spec:
                   containers:
                   - name: ray-head
                     image: {{inputs.parameters.training_image}}
+                    readinessProbe:
+                      exec:
+                        command:
+                          - bash
+                          - -c
+                          - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success && wget --tries 1 -T 10 -q -O- http://localhost:8265/api/gcs_healthz | grep success
+                      initialDelaySeconds: 45
+                      periodSeconds: 5
+                      timeoutSeconds: 5
+                      failureThreshold: 10
                     resources:
                       requests:
                         cpu: "{{inputs.parameters.cpu_request}}"
@@ -120,6 +130,16 @@ spec:
                   containers:
                   - name: ray-worker
                     image: {{inputs.parameters.training_image}}
+                    readinessProbe:
+                      exec:
+                        command:
+                          - bash
+                          - -c
+                          - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
+                      initialDelaySeconds: 30
+                      periodSeconds: 5
+                      timeoutSeconds: 5
+                      failureThreshold: 10
                     resources:
                       requests:
                         cpu: "{{inputs.parameters.cpu_request}}"
