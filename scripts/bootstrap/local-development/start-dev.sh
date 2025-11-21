@@ -256,6 +256,44 @@ dev_setup_prepare_kind_cluster() {
     log_success "KIND cluster is ready"
 }
 
+dev_setup_prepull_critical_images() {
+    log_step "Pre-pulling critical images to avoid registry rate limits"
+
+    local critical_images=(
+        # ArgoCD
+        "quay.io/argoproj/argocd:v3.2.0"
+        "ghcr.io/dexidp/dex:v2.43.0"
+        "redis:8.2.2-alpine"
+
+        # Infrastructure
+        "ghcr.io/external-secrets/external-secrets:v1.0.0"
+        "quay.io/jetstack/cert-manager-controller:v1.16.2"
+        "quay.io/jetstack/cert-manager-webhook:v1.16.2"
+        "quay.io/jetstack/cert-manager-cainjector:v1.16.2"
+
+        # Istio
+        "docker.io/istio/pilot:1.28.0-distroless"
+        "docker.io/istio/proxyv2:1.28.0-distroless"
+
+        # Add your most-used images
+        "quay.io/argoproj/workflow-controller:v3.7.3"
+        "docker.io/burakince/mlflow:3.5.1"
+    )
+
+    log_info "Pulling images in parallel (this may take 2-3 minutes)..."
+    for image in "${critical_images[@]}"; do
+        docker pull "$image" >/dev/null 2>&1 &
+    done
+    wait
+
+    log_info "Loading images into Kind cluster..."
+    for image in "${critical_images[@]}"; do
+        kind load docker-image "$image" --name "$CLUSTER_NAME" 2>/dev/null
+    done
+
+    log_success "Critical images pre-loaded"
+}
+
 dev_setup_assign_external_ip() {
     log_step "Setting up Cloud-Provider-Kind for external IPs"
 
@@ -543,6 +581,7 @@ main() {
     dev_setup_check_prerequisites
     dev_setup_setup_local_vault
     dev_setup_prepare_kind_cluster
+    dev_setup_prepull_critical_images
     dev_setup_assign_external_ip
     dev_setup_device_plugin
     dev_setup_bootstrap_cluster
