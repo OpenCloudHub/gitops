@@ -47,7 +47,7 @@ spec:
             node.opencloudhub.org/application: "true"
           containers:
             - name: ray-head
-              image: rayproject/ray-llm:2.48.0-py312-cpu  # CPU-only image
+              image: rayproject/ray-llm:2.46.0-py311-cu124
               imagePullPolicy: IfNotPresent
               ports:
                 - containerPort: 8000
