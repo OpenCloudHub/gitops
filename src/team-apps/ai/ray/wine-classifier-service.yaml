@@ -15,6 +15,8 @@ spec:
     applications:
       - name: wine-classifier-api
         import_path: src.serving.serve:app_builder
+        args:
+          model_uri: "models://prod.wine-classifier/1"
         route_prefix: /models/wine-classifier
         deployments:
           - name: WineClassifier
