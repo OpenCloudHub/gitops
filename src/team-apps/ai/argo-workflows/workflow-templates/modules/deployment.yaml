@@ -56,7 +56,7 @@ spec:
 
           # Check if model_uri exists in serveConfigV2
           if grep -q "model_uri:" "$SERVICE_FILE"; then
-            CURRENT_VERSION=$(grep "model_uri:" "$SERVICE_FILE" | grep -oP 'prod\.[^/]*/\K[0-9]+' | head -1)
+            CURRENT_VERSION=$(grep "model_uri:" "$SERVICE_FILE" | grep -oP 'models:/prod\.[^/]*/\K[0-9]+' | head -1)
             echo "   Model Version:"
             echo "     Current: v${CURRENT_VERSION}"
             echo "     Target:  v${PROD_VERSION}"
@@ -108,11 +108,11 @@ spec:
           # ⚠️ IMPORTANT: Depends on correct naming
           if grep -q "user_config:" "$SERVICE_FILE"; then
             echo "Update existing model_uri..."
-            sed -i "s|model_uri: \"models://prod\.${MODEL_NAME}/[0-9]*\"|model_uri: \"models://prod.${MODEL_NAME}/${PROD_VERSION}\"|g" "$SERVICE_FILE"
+            sed -i "s|model_uri: \"models:/prod\.${MODEL_NAME}/[0-9]*\"|model_uri: \"models:/prod.${MODEL_NAME}/${PROD_VERSION}\"|g" "$SERVICE_FILE"
           else
             echo "Adding model_uri to serveConfigV2..."
             # Find the line with "- name: WineClassifier" and add user_config after it
-            sed -i "/- name: WineClassifier/a\\            user_config:\\n              model_uri: \"models://prod.${MODEL_NAME}/${PROD_VERSION}\"" "$SERVICE_FILE"
+            sed -i "/- name: WineClassifier/a\\            user_config:\\n              model_uri: \"models:/prod.${MODEL_NAME}/${PROD_VERSION}\"" "$SERVICE_FILE"
           fi
 
           git config user.name "Argo Workflow"
