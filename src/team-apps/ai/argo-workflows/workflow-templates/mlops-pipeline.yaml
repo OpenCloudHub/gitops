@@ -121,6 +121,7 @@ spec:
             value: "{{steps.compare-promote-staging.outputs.parameters.staging_version}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
+        when: "{{steps.compare-promote-staging.outputs.parameters.promoted}} == true"
 
     # Phase 5: Manual approval (only if tests pass)
     - - name: approval

@@ -243,7 +243,7 @@ spec:
                         f.write(f"## Decision\n\n")
                         f.write(f"⛔ **Not promoted:** {reason}\n")
 
-                    sys.exit(1)
+                    print(f"✅ Comparison complete - model not promoted (below threshold)")
 
         except MlflowException as e:
             # No champion exists - this is expected for first deployment
