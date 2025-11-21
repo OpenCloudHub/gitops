@@ -113,9 +113,23 @@ spec:
 
         # Update or add model_uri
         if grep -q "user_config:" "$SERVICE_FILE"; then
+          echo "   Updating existing user_config..."
           sed -i "s|model_uri: \"models:/[^\"]*\"|model_uri: \"${MODEL_URI}\"|g" "$SERVICE_FILE"
         else
-          sed -i "/- name: WineClassifier/a\\            user_config:\\n              model_uri: \"${MODEL_URI}\"" "$SERVICE_FILE"
+          echo "   Adding user_config..."
+          # Add user_config after first deployment name, with proper indentation
+          awk '
+            /deployments:/ { in_deployments=1 }
+            in_deployments && /- name:/ && !added {
+              print
+              print "            user_config:"
+              print "              model_uri: \"'"${MODEL_URI}"'\""
+              added=1
+              next
+            }
+            { print }
+          ' "$SERVICE_FILE" > "${SERVICE_FILE}.tmp"
+          mv "${SERVICE_FILE}.tmp" "$SERVICE_FILE"
         fi
 
         git config user.name "Argo Workflow"
