@@ -6,6 +6,7 @@ resources:
   - wine-classifier-service.yaml
   - pod-monitors.yaml
   - fashion-mnist-classifier-service.yaml
+  - qwen-llm-service.yaml
 
 helmCharts:
   - name: kuberay-operator
