@@ -4,6 +4,9 @@ namespace: observability
 resources:
   - external-secrets.yaml
   - http-route.yaml
+  - dashboards/k8s-dashboard-cm.yaml
+  - dashboards/minio-dashboard-cm.yaml
+
 
 helmCharts:
   - name: grafana
@@ -158,11 +161,18 @@ helmCharts:
               options:
                 path: /var/lib/grafana/dashboards/minio
 
+      sidecar:
+        dashboards:
+          enabled: true
+          label: grafana_dashboard
+          labelValue: "1"
+          searchNamespace: observability
+          folderAnnotation: grafana_folder  # ← Enable folder annotations
+          provider:
+            foldersFromFilesStructure: true
+
       dashboards:
         kubernetes:
-          k8s-cluster:
-            url: https://grafana.com/api/dashboards/15661/revisions/latest/download
-            datasource: Prometheus
           argocd:
             gnetId: 14584
             datasource: Prometheus
@@ -193,12 +203,6 @@ helmCharts:
           # Operator dashboard
           ray-operator:
             url: https://raw.githubusercontent.com/ray-project/kuberay/master/config/grafana/KubeRay-Operator.json
-            datasource: Prometheus
-        minio:
-          # MinIO Metrics
-          minio-dashboard:
-            gnetId: 13502
-            revision: 1
             datasource: Prometheus
 
       securityContext:
