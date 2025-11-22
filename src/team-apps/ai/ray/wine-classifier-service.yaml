@@ -20,14 +20,8 @@ spec:
           - name: WineClassifier
             user_config:
               model_uri: "models:/prod.wine-classifier/1"
-            num_replicas: auto  # Enable autoscaling!
+            num_replicas: 2  # Fixed
             max_ongoing_requests: 5
-            autoscaling_config:
-              target_ongoing_requests: 2
-              min_replicas: 1
-              max_replicas: 3
-              upscale_delay_s: 10      # Fast response for demos
-              downscale_delay_s: 30    # Quick scale-down for demos
             ray_actor_options:
               num_cpus: 0.5
   rayClusterConfig:
@@ -46,21 +40,22 @@ spec:
               imagePullPolicy: Always
               readinessProbe:
                 httpGet:
-                  path: /api/gcs_healthz # Check Ray GCS, not Serve
-                  port: 8265 # Dashboard port, not Serve port
-                initialDelaySeconds: 30
+                  path: /models/wine-classifier/health
+                  port: 8000  # Serve port
+                initialDelaySeconds: 60  # Give Serve time to deploy
                 periodSeconds: 5
                 timeoutSeconds: 3
                 successThreshold: 1
-                failureThreshold: 6
-              livenessProbe:
+                failureThreshold: 3
+              # Add startup probe to handle cold starts
+              startupProbe:
                 httpGet:
-                  path: /api/gcs_healthz # Same for liveness
-                  port: 8265
-                initialDelaySeconds: 120
-                periodSeconds: 30
-                timeoutSeconds: 10
-                failureThreshold: 5
+                  path: /models/wine-classifier/health
+                  port: 8000
+                initialDelaySeconds: 30
+                periodSeconds: 10
+                timeoutSeconds: 5
+                failureThreshold: 12  # 2 minutes max startup time
               ports:
                 - containerPort: 8000
                   name: serve
@@ -127,11 +122,11 @@ spec:
                   failureThreshold: 3
                 resources:
                   requests:
-                    cpu: "500m"
-                    memory: "1Gi"
-                  limits:
                     cpu: "1"
                     memory: "2Gi"
+                  limits:
+                    cpu: "2"
+                    memory: "3Gi"
                 env:
                   - name: MLFLOW_TRACKING_URI
                     value: "http://mlflow.ai.svc.cluster.local:80"
@@ -167,6 +162,8 @@ spec:
         - path:
             type: PathPrefix
             value: /models/wine-classifier
+      timeouts:
+        request: 30s
       backendRefs:
         - group: ''
           kind: Service
