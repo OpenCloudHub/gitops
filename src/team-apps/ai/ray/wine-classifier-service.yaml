@@ -38,33 +38,33 @@ spec:
             - name: ray-head
               image: opencloudhuborg/wine-classifier-serving:main-3863d43
               imagePullPolicy: Always
-              # Startup probe: Check Ray cluster is up (port 8265)
-              startupProbe:
-                httpGet:
-                  path: /api/gcs_healthz  # ← Ray GCS (cluster), not Serve
-                  port: 8265              # ← Dashboard port, not Serve port
-                initialDelaySeconds: 30
-                periodSeconds: 5
-                failureThreshold: 24  # 2 minutes
+              # # Startup probe: Check Ray cluster is up (port 8265)
+              # startupProbe:
+              #   httpGet:
+              #     path: /api/gcs_healthz  # ← Ray GCS (cluster), not Serve
+              #     port: 8265              # ← Dashboard port, not Serve port
+              #   initialDelaySeconds: 30
+              #   periodSeconds: 5
+              #   failureThreshold: 24  # 2 minutes
 
-              # Readiness probe: Check Serve app is deployed (port 8000)
-              readinessProbe:
-                httpGet:
-                  path: /models/wine-classifier/health  # ← Your Serve app
-                  port: 8000                             # ← Serve port
-                initialDelaySeconds: 90  # After Ray cluster is up
-                periodSeconds: 5
-                timeoutSeconds: 3
-                failureThreshold: 20
+              # # Readiness probe: Check Serve app is deployed (port 8000)
+              # readinessProbe:
+              #   httpGet:
+              #     path: /models/wine-classifier/health  # ← Your Serve app
+              #     port: 8000                             # ← Serve port
+              #   initialDelaySeconds: 90  # After Ray cluster is up
+              #   periodSeconds: 5
+              #   timeoutSeconds: 3
+              #   failureThreshold: 20
 
-              # Liveness probe: Keep checking Ray cluster
-              livenessProbe:
-                httpGet:
-                  path: /api/gcs_healthz
-                  port: 8265
-                initialDelaySeconds: 180
-                periodSeconds: 30
-                failureThreshold: 5
+              # # Liveness probe: Keep checking Ray cluster
+              # livenessProbe:
+              #   httpGet:
+              #     path: /api/gcs_healthz
+              #     port: 8265
+              #   initialDelaySeconds: 180
+              #   periodSeconds: 30
+              #   failureThreshold: 5
               ports:
                 - containerPort: 8000
                   name: serve
