@@ -4,7 +4,6 @@ namespace: observability
 resources:
   - external-secrets.yaml
   - http-route.yaml
-  # - grafana-k8s-dashboard.yaml
 
 helmCharts:
   - name: grafana
