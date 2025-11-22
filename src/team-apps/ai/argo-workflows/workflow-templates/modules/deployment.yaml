@@ -3,7 +3,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: deployment-templates
-  namespace: ai
+  namespace: ai-mlops
 spec:
   serviceAccountName: workflow-executor
 

@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
 - platform.yaml
 - ai.yaml
+- demo-app.yaml

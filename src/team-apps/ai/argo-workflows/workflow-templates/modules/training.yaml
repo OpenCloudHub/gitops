@@ -3,7 +3,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: training-templates
-  namespace: ai
+  namespace: ai-mlops
 spec:
   serviceAccountName: workflow-executor
 
@@ -60,7 +60,7 @@ spec:
         kind: RayJob
         metadata:
           generateName: {{inputs.parameters.model_name}}-training-
-          namespace: ai
+          namespace: ai-mlops
           labels:
             workflow-run: "${RUN_LABEL}"
             model: "{{inputs.parameters.model_name}}"

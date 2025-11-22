@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: mlflow-templates
-  namespace: ai
+  namespace: ai-mlops
 spec:
   templates:
   - name: compare-and-promote-staging

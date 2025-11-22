@@ -1,6 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: ai
+namespace: ai-mlops
 resources:
   - external-secrets.yaml
   - http-route.yaml
@@ -43,24 +43,9 @@ helmCharts:
       containerPort: 5000
     serviceMonitor:
       enabled: true
-      namespace: ai
+      namespace: ai-mlops
       labels:
         release: prometheus
-    # # -- Init Containers for Mlflow Pod (Wait for the Secret)
-    # initContainers:
-    #   - name: wait-for-secrets
-    #     image: busybox
-    #     command:
-    #       - sh
-    #       - -c
-    #       - |
-    #         # Wait for mlflow-flask-server-secret-key to be created
-    #         while true; do
-    #           kubectl get secret mlflow-flask-server-secret-key -n ai >/dev/null 2>&1 && break
-    #           echo "Waiting for mlflow-flask-server-secret-key to be created..."
-    #           sleep 5
-    #         done
-
 
 patches:
   - target:

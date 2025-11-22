@@ -1,6 +1,11 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ai
-  # labels:
-  #   istio.io/dataplane-mode: ambient
+  name: ai-mlops
+  labels:
+    istio.io/dataplane-mode: ambient
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-serving
