@@ -4,7 +4,7 @@ namespace: observability
 resources:
   - external-secrets.yaml
   - http-route.yaml
-  - grafana-k8s-dashboard.yaml
+  # - grafana-k8s-dashboard.yaml
 
 helmCharts:
   - name: grafana
@@ -201,19 +201,9 @@ helmCharts:
             url: https://raw.githubusercontent.com/ray-project/kuberay/master/config/grafana/KubeRay-Operator.json
             datasource: Prometheus
         minio:
-          # MinIO Server Metrics
-          minio-server:
+          # MinIO Metrics
+          minio-dashboard:
             gnetId: 13502
-            revision: 1
-            datasource: Prometheus
-          # MinIO Bucket Metrics
-          minio-bucket:
-            gnetId: 19237
-            revision: 1
-            datasource: Prometheus
-          # MinIO Replication Metrics
-          minio-replication:
-            gnetId: 15305
             revision: 1
             datasource: Prometheus
 
