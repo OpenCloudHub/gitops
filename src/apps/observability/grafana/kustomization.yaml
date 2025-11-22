@@ -162,25 +162,20 @@ helmCharts:
         kubernetes:
           k8s-cluster:
             gnetId: 15661
-            revision: 1
             datasource: Prometheus
           argocd:
             gnetId: 14584
-            revision: 1
             datasource: Prometheus
         istio:
           ztunnel:
             gnetId: 21306
-            revision: 1
             datasource: Prometheus
           performance:
             gnetId: 11829
-            revision: 1
             datasource: Prometheus
         opencost:
           cost-overview:
             gnetId: 22208
-            revision: 1
             datasource: Prometheus
         ray:
           # Ray default dashboard
