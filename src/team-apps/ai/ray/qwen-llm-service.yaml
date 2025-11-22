@@ -1,222 +1,222 @@
-apiVersion: ray.io/v1
-kind: RayService
-metadata:
-  name: qwen-llm-service
-  namespace: ai
-  labels:
-    app.kubernetes.io/name: qwen-llm
-    app.kubernetes.io/component: llm-inference
-spec:
-  serviceUnhealthySecondThreshold: 900
-  deploymentUnhealthySecondThreshold: 300
-  serveConfigV2: |
-    applications:
-      - name: qwen-llm
-        import_path: ray.serve.llm:build_openai_app
-        route_prefix: /v1  # Change back to /v1, use URLRewrite in HTTPRoute
-        args:
-          llm_configs:
-            - model_loading_config:
-                model_id: qwen2.5-0.5b-instruct
-                model_source: Qwen/Qwen2.5-0.5B-Instruct
-              engine_kwargs:
-                dtype: float16
-                max_model_len: 1024
-                device: cpu
-              deployment_config:
-                autoscaling_config:
-                  min_replicas: 1
-                  max_replicas: 2
-                  target_ongoing_requests: 4
-                max_ongoing_requests: 8
-                # THIS IS THE KEY FIX - explicitly set CPU-only
-                ray_actor_options:
-                  num_cpus: 4
-                  num_gpus: 0  # Explicitly request 0 GPUs
-              runtime_env:
-                env_vars:
-                  VLLM_USE_V1: "1"
-  rayClusterConfig:
-    rayVersion: '2.48.0'
-    headGroupSpec:
-      rayStartParams:
-        dashboard-host: '0.0.0.0'
-        metrics-export-port: '8080'
-        num-cpus: "0"
-      template:
-        spec:
-          nodeSelector:
-            node.opencloudhub.org/application: "true"
-          containers:
-            - name: ray-head
-              image: rayproject/ray-llm:2.46.0-py311-cu124
-              imagePullPolicy: IfNotPresent
-              ports:
-                - containerPort: 8000
-                  name: serve
-                  protocol: TCP
-                - containerPort: 8080
-                  name: metrics
-                  protocol: TCP
-                - containerPort: 8265
-                  name: dashboard
-                  protocol: TCP
-              startupProbe:
-                httpGet:
-                  path: /api/gcs_healthz
-                  port: 8265
-                initialDelaySeconds: 10
-                periodSeconds: 10
-                timeoutSeconds: 5
-                failureThreshold: 18
-              readinessProbe:
-                httpGet:
-                  path: /api/gcs_healthz
-                  port: 8265
-                initialDelaySeconds: 5
-                periodSeconds: 5
-                timeoutSeconds: 3
-              livenessProbe:
-                httpGet:
-                  path: /api/gcs_healthz
-                  port: 8265
-                initialDelaySeconds: 180
-                periodSeconds: 30
-                timeoutSeconds: 10
-                failureThreshold: 5
-              resources:
-                requests:
-                  cpu: "1"
-                  memory: "2Gi"
-                limits:
-                  cpu: "2"
-                  memory: "4Gi"
-              env:
-                - name: RAY_GRAFANA_HOST
-                  value: "http://grafana.observability.svc.cluster.local:80"
-                - name: RAY_PROMETHEUS_HOST
-                  value: "http://prometheus-server.observability.svc.cluster.local:80"
-    workerGroupSpecs:
-      - groupName: cpu-workers
-        replicas: 1
-        minReplicas: 1
-        maxReplicas: 2
-        numOfHosts: 1
-        rayStartParams: {}
-        template:
-          spec:
-            nodeSelector:
-              node.opencloudhub.org/application: "true"
-            containers:
-              - name: ray-worker
-                image: rayproject/ray-llm:2.46.0-py311-cu124
-                imagePullPolicy: IfNotPresent
-                readinessProbe:
-                  exec:
-                    command:
-                      - bash
-                      - -c
-                      - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
-                  initialDelaySeconds: 10
-                  periodSeconds: 5
-                  timeoutSeconds: 2
-                resources:
-                  requests:
-                    cpu: "4"
-                    memory: "8Gi"
-                  limits:
-                    cpu: "6"
-                    memory: "12Gi"
-                env:
-                  - name: HUGGING_FACE_HUB_TOKEN
-                    valueFrom:
-                      secretKeyRef:
-                        name: huggingface-token
-                        key: token
-                        optional: true
-                  - name: OMP_NUM_THREADS
-                    value: "4"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: qwen-llm
-  namespace: ai
-  labels:
-    app.kubernetes.io/name: qwen-llm
-spec:
-  type: ClusterIP
-  ports:
-    - name: http
-      port: 8000
-      targetPort: 8000
-      protocol: TCP
-  selector:
-    ray.io/cluster: qwen-llm-service-raycluster
-    ray.io/node-type: head
+# apiVersion: ray.io/v1
+# kind: RayService
+# metadata:
+#   name: qwen-llm-service
+#   namespace: ai
+#   labels:
+#     app.kubernetes.io/name: qwen-llm
+#     app.kubernetes.io/component: llm-inference
+# spec:
+#   serviceUnhealthySecondThreshold: 900
+#   deploymentUnhealthySecondThreshold: 300
+#   serveConfigV2: |
+#     applications:
+#       - name: qwen-llm
+#         import_path: ray.serve.llm:build_openai_app
+#         route_prefix: /v1  # Change back to /v1, use URLRewrite in HTTPRoute
+#         args:
+#           llm_configs:
+#             - model_loading_config:
+#                 model_id: qwen2.5-0.5b-instruct
+#                 model_source: Qwen/Qwen2.5-0.5B-Instruct
+#               engine_kwargs:
+#                 dtype: float16
+#                 max_model_len: 1024
+#                 device: cpu
+#               deployment_config:
+#                 autoscaling_config:
+#                   min_replicas: 1
+#                   max_replicas: 2
+#                   target_ongoing_requests: 4
+#                 max_ongoing_requests: 8
+#                 # THIS IS THE KEY FIX - explicitly set CPU-only
+#                 ray_actor_options:
+#                   num_cpus: 4
+#                   num_gpus: 0  # Explicitly request 0 GPUs
+#               runtime_env:
+#                 env_vars:
+#                   VLLM_USE_V1: "1"
+#   rayClusterConfig:
+#     rayVersion: '2.48.0'
+#     headGroupSpec:
+#       rayStartParams:
+#         dashboard-host: '0.0.0.0'
+#         metrics-export-port: '8080'
+#         num-cpus: "0"
+#       template:
+#         spec:
+#           nodeSelector:
+#             node.opencloudhub.org/application: "true"
+#           containers:
+#             - name: ray-head
+#               image: rayproject/ray-llm:2.46.0-py311-cu124
+#               imagePullPolicy: IfNotPresent
+#               ports:
+#                 - containerPort: 8000
+#                   name: serve
+#                   protocol: TCP
+#                 - containerPort: 8080
+#                   name: metrics
+#                   protocol: TCP
+#                 - containerPort: 8265
+#                   name: dashboard
+#                   protocol: TCP
+#               startupProbe:
+#                 httpGet:
+#                   path: /api/gcs_healthz
+#                   port: 8265
+#                 initialDelaySeconds: 10
+#                 periodSeconds: 10
+#                 timeoutSeconds: 5
+#                 failureThreshold: 18
+#               readinessProbe:
+#                 httpGet:
+#                   path: /api/gcs_healthz
+#                   port: 8265
+#                 initialDelaySeconds: 5
+#                 periodSeconds: 5
+#                 timeoutSeconds: 3
+#               livenessProbe:
+#                 httpGet:
+#                   path: /api/gcs_healthz
+#                   port: 8265
+#                 initialDelaySeconds: 180
+#                 periodSeconds: 30
+#                 timeoutSeconds: 10
+#                 failureThreshold: 5
+#               resources:
+#                 requests:
+#                   cpu: "1"
+#                   memory: "2Gi"
+#                 limits:
+#                   cpu: "2"
+#                   memory: "4Gi"
+#               env:
+#                 - name: RAY_GRAFANA_HOST
+#                   value: "http://grafana.observability.svc.cluster.local:80"
+#                 - name: RAY_PROMETHEUS_HOST
+#                   value: "http://prometheus-server.observability.svc.cluster.local:80"
+#     workerGroupSpecs:
+#       - groupName: cpu-workers
+#         replicas: 1
+#         minReplicas: 1
+#         maxReplicas: 2
+#         numOfHosts: 1
+#         rayStartParams: {}
+#         template:
+#           spec:
+#             nodeSelector:
+#               node.opencloudhub.org/application: "true"
+#             containers:
+#               - name: ray-worker
+#                 image: rayproject/ray-llm:2.46.0-py311-cu124
+#                 imagePullPolicy: IfNotPresent
+#                 readinessProbe:
+#                   exec:
+#                     command:
+#                       - bash
+#                       - -c
+#                       - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
+#                   initialDelaySeconds: 10
+#                   periodSeconds: 5
+#                   timeoutSeconds: 2
+#                 resources:
+#                   requests:
+#                     cpu: "4"
+#                     memory: "8Gi"
+#                   limits:
+#                     cpu: "6"
+#                     memory: "12Gi"
+#                 env:
+#                   - name: HUGGING_FACE_HUB_TOKEN
+#                     valueFrom:
+#                       secretKeyRef:
+#                         name: huggingface-token
+#                         key: token
+#                         optional: true
+#                   - name: OMP_NUM_THREADS
+#                     value: "4"
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: qwen-llm
+#   namespace: ai
+#   labels:
+#     app.kubernetes.io/name: qwen-llm
+# spec:
+#   type: ClusterIP
+#   ports:
+#     - name: http
+#       port: 8000
+#       targetPort: 8000
+#       protocol: TCP
+#   selector:
+#     ray.io/cluster: qwen-llm-service-raycluster
+#     ray.io/node-type: head
 
----
-# HTTPRoute for Qwen 0.5B LLM API
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: qwen-0.5b-api-route
-  namespace: ai
-  labels:
-    app.kubernetes.io/name: qwen-llm
-    app.kubernetes.io/component: api-route
-spec:
-  parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: ingress-gateway
-      namespace: istio-ingress
-  hostnames:
-    - "api.opencloudhub.org"
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /models/qwen-0.5b/v1
-      filters:
-        - type: URLRewrite
-          urlRewrite:
-            path:
-              type: ReplacePrefixMatch
-              replacePrefixMatch: /v1
-      backendRefs:
-        - group: ''
-          kind: Service
-          name: qwen-llm-service-serve-svc
-          port: 8000
-          weight: 1
+# ---
+# # HTTPRoute for Qwen 0.5B LLM API
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: HTTPRoute
+# metadata:
+#   name: qwen-0.5b-api-route
+#   namespace: ai
+#   labels:
+#     app.kubernetes.io/name: qwen-llm
+#     app.kubernetes.io/component: api-route
+# spec:
+#   parentRefs:
+#     - group: gateway.networking.k8s.io
+#       kind: Gateway
+#       name: ingress-gateway
+#       namespace: istio-ingress
+#   hostnames:
+#     - "api.opencloudhub.org"
+#   rules:
+#     - matches:
+#         - path:
+#             type: PathPrefix
+#             value: /models/qwen-0.5b/v1
+#       filters:
+#         - type: URLRewrite
+#           urlRewrite:
+#             path:
+#               type: ReplacePrefixMatch
+#               replacePrefixMatch: /v1
+#       backendRefs:
+#         - group: ''
+#           kind: Service
+#           name: qwen-llm-service-serve-svc
+#           port: 8000
+#           weight: 1
 
----
-# HTTPRoute for Ray Dashboard
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: qwen-0.5b-dashboard-route
-  namespace: ai
-  labels:
-    app.kubernetes.io/name: qwen-llm
-    app.kubernetes.io/component: dashboard-route
-spec:
-  parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: ingress-gateway
-      namespace: istio-ingress
-  hostnames:
-    - "qwen-0.5b.ai.internal.opencloudhub.org"
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: "/"
-      backendRefs:
-        - group: ''
-          kind: Service
-          name: qwen-llm-service-head-svc
-          port: 8265
-          weight: 1
+# ---
+# # HTTPRoute for Ray Dashboard
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: HTTPRoute
+# metadata:
+#   name: qwen-0.5b-dashboard-route
+#   namespace: ai
+#   labels:
+#     app.kubernetes.io/name: qwen-llm
+#     app.kubernetes.io/component: dashboard-route
+# spec:
+#   parentRefs:
+#     - group: gateway.networking.k8s.io
+#       kind: Gateway
+#       name: ingress-gateway
+#       namespace: istio-ingress
+#   hostnames:
+#     - "qwen-0.5b.ai.internal.opencloudhub.org"
+#   rules:
+#     - matches:
+#         - path:
+#             type: PathPrefix
+#             value: "/"
+#       backendRefs:
+#         - group: ''
+#           kind: Service
+#           name: qwen-llm-service-head-svc
+#           port: 8265
+#           weight: 1
