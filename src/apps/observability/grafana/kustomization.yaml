@@ -187,6 +187,8 @@ helmCharts:
           cost-overview:
             gnetId: 22208
             datasource: Prometheus
+        storage:
+
         ray:
           # Ray default dashboard
           ray-default:
