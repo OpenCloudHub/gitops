@@ -161,7 +161,7 @@ helmCharts:
       dashboards:
         kubernetes:
           k8s-cluster:
-            gnetId: 15661
+            url: https://grafana.com/api/dashboards/15661/revisions/latest/download
             datasource: Prometheus
           argocd:
             gnetId: 14584
