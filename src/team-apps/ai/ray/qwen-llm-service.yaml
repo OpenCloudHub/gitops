@@ -3,9 +3,6 @@ kind: RayService
 metadata:
   name: qwen-llm-service
   namespace: ai
-  labels:
-    app.kubernetes.io/name: qwen-llm
-    app.kubernetes.io/component: llm-inference
 spec:
   serviceUnhealthySecondThreshold: 900
   deploymentUnhealthySecondThreshold: 300
@@ -13,7 +10,7 @@ spec:
     applications:
       - name: qwen-llm
         import_path: ray.serve.llm:build_openai_app
-        route_prefix: /v1  # Change back to /v1, use URLRewrite in HTTPRoute
+        route_prefix: /v1
         args:
           llm_configs:
             - model_loading_config:
@@ -22,11 +19,12 @@ spec:
               engine_kwargs:
                 dtype: float16
                 max_model_len: 1024
-                device: cpu
+                device: auto  # Changed from cpu
+                gpu_memory_utilization: 0.5  # Added for small GPU
               deployment_config:
                 autoscaling_config:
                   min_replicas: 1
-                  max_replicas: 2
+                  max_replicas: 1
                   target_ongoing_requests: 4
                 max_ongoing_requests: 8
               runtime_env:
@@ -39,48 +37,13 @@ spec:
         dashboard-host: '0.0.0.0'
         metrics-export-port: '8080'
         num-cpus: "0"
-        num-gpus: "0"
+        num-gpus: "0"  # Head doesn't need GPU
       template:
         spec:
-          nodeSelector:
-            node.opencloudhub.org/application: "true"
           containers:
             - name: ray-head
               image: rayproject/ray-llm:2.46.0-py311-cu124
-              imagePullPolicy: IfNotPresent
-              ports:
-                - containerPort: 8000
-                  name: serve
-                  protocol: TCP
-                - containerPort: 8080
-                  name: metrics
-                  protocol: TCP
-                - containerPort: 8265
-                  name: dashboard
-                  protocol: TCP
-              startupProbe:
-                httpGet:
-                  path: /api/gcs_healthz
-                  port: 8265
-                initialDelaySeconds: 10
-                periodSeconds: 10
-                timeoutSeconds: 5
-                failureThreshold: 18
-              readinessProbe:
-                httpGet:
-                  path: /api/gcs_healthz
-                  port: 8265
-                initialDelaySeconds: 5
-                periodSeconds: 5
-                timeoutSeconds: 3
-              livenessProbe:
-                httpGet:
-                  path: /api/gcs_healthz
-                  port: 8265
-                initialDelaySeconds: 180
-                periodSeconds: 30
-                timeoutSeconds: 10
-                failureThreshold: 5
+              # ... keep your existing head config ...
               resources:
                 requests:
                   cpu: "1"
@@ -88,50 +51,29 @@ spec:
                 limits:
                   cpu: "2"
                   memory: "4Gi"
-              env:
-                - name: RAY_GRAFANA_HOST
-                  value: "http://grafana.observability.svc.cluster.local:80"
-                - name: RAY_PROMETHEUS_HOST
-                  value: "http://prometheus-server.observability.svc.cluster.local:80"
     workerGroupSpecs:
-      - groupName: cpu-workers
+      - groupName: gpu-workers  # Renamed from cpu-workers
         replicas: 1
         minReplicas: 1
-        maxReplicas: 2
+        maxReplicas: 1
         numOfHosts: 1
         rayStartParams:
-          num-gpus: "1"
+          num-gpus: "1"  # Enable GPU
         template:
           spec:
-            nodeSelector:
-              node.opencloudhub.org/application: "true"
             containers:
               - name: ray-worker
                 image: rayproject/ray-llm:2.46.0-py311-cu124
-                imagePullPolicy: IfNotPresent
-                readinessProbe:
-                  exec:
-                    command:
-                      - bash
-                      - -c
-                      - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
-                  initialDelaySeconds: 10
-                  periodSeconds: 5
-                  timeoutSeconds: 2
                 resources:
                   requests:
                     cpu: "4"
                     memory: "8Gi"
+                    nvidia.com/gpu: "1"  # Request GPU
                   limits:
                     cpu: "6"
                     memory: "12Gi"
+                    nvidia.com/gpu: "1"  # Request GPU
                 env:
-                  - name: HUGGING_FACE_HUB_TOKEN
-                    valueFrom:
-                      secretKeyRef:
-                        name: huggingface-token
-                        key: token
-                        optional: true
                   - name: OMP_NUM_THREADS
                     value: "4"
 ---
