@@ -20,6 +20,10 @@ spec:
   - repoURL: git@github.com:opencloudhub/gitops.git
     path: src/application-sets/ai
     targetRevision: HEAD
+  # Demo Apps
+  - repoURL: git@github.com:opencloudhub/gitops.git
+    path: src/application-sets/demo-app
+    targetRevision: HEAD
 
   destination:
     namespace: argocd

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app-genai-backend
+  namespace: demo-app
+spec:
+  selector:
+    app: demo-app-genai-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+  type: ClusterIP
