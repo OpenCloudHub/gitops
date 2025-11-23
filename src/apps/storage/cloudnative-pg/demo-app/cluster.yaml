@@ -4,7 +4,7 @@ metadata:
   name: demo-app-db-cluster
   namespace: storage
 spec:
-  instances: 1
+  instances: 2
   bootstrap:
     initdb:
       database: demo_app
@@ -18,8 +18,8 @@ spec:
         - "REVOKE ALL ON FUNCTION public.user_search(text) FROM public"
         - "GRANT EXECUTE ON FUNCTION public.user_search(text) TO cnpg_pooler_pgbouncer"
   storage:
-    size: 1Gi
-    storageClass: standard
+    storageClass: local-storage  # Use our custom storage class
+    size: 20Gi
   monitoring:
     enablePodMonitor: true
 ---

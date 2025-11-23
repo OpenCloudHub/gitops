@@ -1,13 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 namespace: minio-tenant
-
 resources:
   - external-secrets.yaml
   - http-route.yaml
   - service-monitor.yaml
-
 helmCharts:
   - name: tenant
     releaseName: minio
@@ -17,16 +14,16 @@ helmCharts:
       tenant:
         name: minio
         env:
-        - name: MINIO_PROMETHEUS_AUTH_TYPE
-          value: "public"  # Allow unauthenticated access to metrics
-        - name: MINIO_PROMETHEUS_JOB_ID
-          value: "minio-job"
+          - name: MINIO_PROMETHEUS_AUTH_TYPE
+            value: "public"  # Allow unauthenticated access to metrics
+          - name: MINIO_PROMETHEUS_JOB_ID
+            value: "minio-job"
         pools:
           - name: pool-0
             servers: 1
-            volumesPerServer: 1
+            volumesPerServer: 4  # Use all 4 PVs we created
             size: 10Gi
-            storageClassName: standard
+            storageClassName: local-storage  # Changed from 'standard'
         buckets:
           - name: mlflow
           - name: argo-workflows

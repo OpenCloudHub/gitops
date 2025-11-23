@@ -5,9 +5,9 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 source "$REPO_ROOT/scripts/_utils.sh"
 
 CLUSTER_NAME="minikube"
-CPUS="${MINIKUBE_CPUS:-8}"
-MEMORY="${MINIKUBE_MEMORY:-24g}"
-DISK="${MINIKUBE_DISK:-50g}"
+CPUS="${MINIKUBE_CPUS:-16}"
+MEMORY="${MINIKUBE_MEMORY:-36g}"
+DISK="${MINIKUBE_DISK:-100g}"
 
 main() {
     print_banner "🚀 Start Minikube Dev Environment"
@@ -23,6 +23,16 @@ main() {
         --memory "$MEMORY" \
         --disk-size "$DISK" \
         --gpus all
+
+    log_step "Create persistent data directories inside minikube"
+    minikube ssh "sudo mkdir -p $MINIO_DATA_PATH $POSTGRES_DATA_PATH && sudo chmod 777 $MINIO_DATA_PATH $POSTGRES_DATA_PATH"
+
+    log_step "✅ Minikube started with persistent storage"
+    echo "   CPUs: $CPUS"
+    echo "   Memory: $MEMORY"
+    echo "   Disk: $DISK"
+    echo "   MinIO data: $MINIO_DATA_PATH (persists across restarts)"
+    echo "   Postgres data: $POSTGRES_DATA_PATH (persists across restarts)"
 
     log_step "Start minikube tunnel (background)"
     # Kill any existing tunnels
