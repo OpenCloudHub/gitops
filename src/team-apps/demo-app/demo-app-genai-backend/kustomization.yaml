@@ -4,3 +4,4 @@ namespace: demo-app
 resources:
   - deployment.yaml
   - service.yaml
+  - http-route.yaml
