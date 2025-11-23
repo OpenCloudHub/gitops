@@ -21,7 +21,7 @@ helmCharts:
         pools:
           - name: pool-0
             servers: 1
-            volumesPerServer: 4  # Use all 4 PVs we created
+            volumesPerServer: 2  # Use all 2 PVs we created
             size: 10Gi
             storageClassName: local-storage  # Changed from 'standard'
         buckets:

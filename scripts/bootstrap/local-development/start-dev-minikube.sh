@@ -9,6 +9,10 @@ CPUS="${MINIKUBE_CPUS:-16}"
 MEMORY="${MINIKUBE_MEMORY:-36g}"
 DISK="${MINIKUBE_DISK:-100g}"
 
+# Persistent data directories (inside minikube VM, survives restarts)
+MINIO_DATA_PATH="/data/minio"
+POSTGRES_DATA_PATH="/data/postgres"
+
 main() {
     print_banner "🚀 Start Minikube Dev Environment"
 
