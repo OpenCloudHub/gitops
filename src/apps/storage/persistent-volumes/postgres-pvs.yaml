@@ -50,7 +50,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: postgres-rag-0
+  name: postgres-demo-app-0
 spec:
   capacity:
     storage: 20Gi
@@ -73,7 +73,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: postgres-rag-1
+  name: postgres-demo-app-1
 spec:
   capacity:
     storage: 20Gi
