@@ -4,7 +4,7 @@ metadata:
   name: demo-app-db-cluster
   namespace: storage
 spec:
-  instances: 2
+  instances: 1
   bootstrap:
     initdb:
       database: demo_app
@@ -22,3 +22,16 @@ spec:
     storageClass: standard
   monitoring:
     enablePodMonitor: true
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: demo-app-pgvector
+  namespace: storage
+spec:
+  name: demo_app
+  owner: demo-app
+  cluster:
+    name: demo-app-db-cluster
+  extensions:
+    - name: vector

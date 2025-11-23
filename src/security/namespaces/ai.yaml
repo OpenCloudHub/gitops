@@ -3,9 +3,9 @@ kind: Namespace
 metadata:
   name: ai-mlops
   labels:
-    istio.io/dataplane-mode: ambient
+    istio.io/dataplane-mode: ambient  # Part of mesh as we wanna communicate to other pods safely
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ai-serving
+  name: ai-serving  # Not part of mesh for faster serving, no need for secure communication with other pods in cluster
