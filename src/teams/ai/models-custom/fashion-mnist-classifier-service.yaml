@@ -174,7 +174,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: /models/fashion-mnist-classifier
+            value: /models/custom/fashion-mnist-classifier
       backendRefs:
         - group: ''
           kind: Service

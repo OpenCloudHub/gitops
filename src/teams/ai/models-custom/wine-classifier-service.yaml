@@ -139,7 +139,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: /models/wine-classifier
+            value: /models/custom/wine-classifier
       timeouts:
         request: 30s
       backendRefs:
