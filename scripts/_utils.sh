@@ -235,22 +235,29 @@ check_git_status() {
 
 # Returns list of hostnames for /etc/hosts configuration
 # Used by start-dev.sh to configure local DNS
+#
+# Structure:
+#   *.internal.*        - Platform tools (ArgoCD, Grafana, MLflow, etc.)
+#   *.dashboard.*       - Model Ray dashboards
+#   api.*               - Public API gateway
+#   <team>.*            - Team applications
+#
 get_exposed_services() {
   local base="opencloudhub.org"
 
-  cat <<EOF
-argocd.core.internal.${base}
-keycloak.auth.internal.${base}
-grafana.observability.internal.${base}
-pgadmin.storage.internal.${base}
-minio-api.storage.internal.${base}
-minio.storage.internal.${base}
-mlflow.mlops.internal.${base}
-argo.mlops.internal.${base}
-demo-app-genai-backend.demo-app.${base}
-fashion-mnist-classifier.models.internal.${base}
-wine-classifier.models.internal.${base}
-qwen-0.5b.models.internal.${base}
+cat <<EOF
+argocd.internal.${base}
+grafana.internal.${base}
+mlflow.internal.${base}
+argo-workflows.internal.${base}
+minio.internal.${base}
+minio-api.internal.${base}
+pgadmin.internal.${base}
+keycloak.internal.${base}
+fashion-mnist.dashboard.${base}
+wine-classifier.dashboard.${base}
+qwen.dashboard.${base}
 api.${base}
+demo-app.${base}
 EOF
 }

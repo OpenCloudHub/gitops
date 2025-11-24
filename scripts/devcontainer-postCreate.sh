@@ -169,7 +169,7 @@ main() {
     verify_development_tools
 
     # Setup pre-commit hooks
-    # setup_precommit_hooks # TODO: enable again
+    setup_precommit_hooks
 
     # Print welcome message
     print_welcome_message

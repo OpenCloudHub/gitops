@@ -11,6 +11,7 @@ spec:
   namespaceSelector:
     matchNames:
       - mlops
+      - models
   selector:
     matchLabels:
       ray.io/node-type: head
@@ -62,6 +63,7 @@ spec:
   namespaceSelector:
     matchNames:
       - mlops
+      - models
   selector:
     matchLabels:
       ray.io/node-type: worker

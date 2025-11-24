@@ -60,7 +60,7 @@ helmCharts:
           metricsSource: prometheus
           opencost:
             exporter:
-              defaultClusterId: "opencloudhub-local"  # TODO: change in prod
+              defaultClusterId: "minikube"  # FIXME: change in prod
               extraEnv:
                 CURRENT_CLUSTER_ID_FILTER_ENABLED: "true"
                 PROM_CLUSTER_ID_LABEL: cluster

@@ -5,7 +5,6 @@ resources:
   - external-secrets.yaml
   - http-route.yaml
 
-# TODO: let it wait longer so dont fail if secrets aren't there yet
 helmCharts:
 - name: mlflow
   releaseName: mlflow
