@@ -10,7 +10,7 @@ resources:
 helmCharts:
   - name: loki
     releaseName: loki
-    version: 6.31.0
+    version: 6.46.0
     repo: https://grafana.github.io/helm-charts
     namespace: observability
     valuesInline:
