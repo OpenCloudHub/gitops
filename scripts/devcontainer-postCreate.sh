@@ -142,7 +142,7 @@ Available components:
 Quick start commands:
  🚀 Bootstrap cluster:     bash scripts/bootstrap/start-dev.sh
  🔍 Check cluster status:  kubectl get pods --all-namespaces
- 📈 View ArgoCD apps:      https://argocd.core.internal.opencloudhub.org
+ 📈 View ArgoCD apps:      https://argocd.internal.opencloudhub.org
 
 Documentation: https://github.com/OpenCloudHub/docs
 Happy coding! 🚀

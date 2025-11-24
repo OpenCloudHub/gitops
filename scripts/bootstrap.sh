@@ -319,7 +319,7 @@ step_create_summary() {
     "namespace": "argocd",
     "username": "admin",
     "password": "$argocd_password",
-    "url": "https://argocd.core.internal.opencloudhub.org"
+    "url": "https://argocd.internal.opencloudhub.org"
   },
   "repositories": [
 $(for repo_config in "${ARGOCD_REPOS[@]}"; do
@@ -349,7 +349,7 @@ print_completion_summary() {
 
   echo ""
   echo -e "  ${GREEN}ArgoCD Access:${NC}"
-  echo -e "    URL:      https://argocd.core.internal.opencloudhub.org"
+  echo -e "    URL:      https://argocd.internal.opencloudhub.org"
   echo -e "    Username: admin"
   echo -e "    Password: $argocd_password"
   echo ""

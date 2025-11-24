@@ -10,7 +10,7 @@ spec:
       name: ingress-gateway
       namespace: istio-ingress
   hostnames:
-    - grafana.observability.internal.opencloudhub.org
+    - grafana.internal.opencloudhub.org
   rules:
     - matches:
         - path:

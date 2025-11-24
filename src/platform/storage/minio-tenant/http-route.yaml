@@ -10,7 +10,7 @@ spec:
       name: ingress-gateway
       namespace: istio-ingress
   hostnames:
-    - minio.storage.internal.opencloudhub.org
+    - minio.internal.opencloudhub.org
   rules:
     - matches:
         - path:
@@ -36,7 +36,7 @@ spec:
       name: ingress-gateway
       namespace: istio-ingress
   hostnames:
-    - minio-api.storage.internal.opencloudhub.org
+    - minio-api.internal.opencloudhub.org
   rules:
     - matches:
         - path:

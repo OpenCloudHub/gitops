@@ -59,7 +59,7 @@ spec:
                 - name: RAY_PROMETHEUS_HOST
                   value: "http://prometheus-server.observability.svc.cluster.local:80"
                 - name: RAY_GRAFANA_IFRAME_HOST
-                  value: "https://grafana.observability.internal.opencloudhub.org"
+                  value: "https://grafana.internal.opencloudhub.org"
                 - name: AWS_ACCESS_KEY_ID
                   valueFrom:
                     secretKeyRef:
@@ -71,7 +71,7 @@ spec:
                       name: minio-tenant-secret
                       key: secretkey
                 - name: AWS_ENDPOINT_URL
-                  value: "https://minio-api.storage.internal.opencloudhub.org"
+                  value: "https://minio-api.internal.opencloudhub.org"
     workerGroupSpecs:
       - groupName: serving-workers
         replicas: 1
@@ -117,7 +117,7 @@ spec:
                         name: minio-tenant-secret
                         key: secretkey
                   - name: AWS_ENDPOINT_URL
-                    value: "https://minio-api.storage.internal.opencloudhub.org"
+                    value: "https://minio-api.internal.opencloudhub.org"
 ---
 # HTTPRoute for model API (external access)
 apiVersion: gateway.networking.k8s.io/v1
@@ -161,7 +161,7 @@ spec:
       name: ingress-gateway
       namespace: istio-ingress
   hostnames:
-    - "wine-classifier.models.internal.opencloudhub.org"
+    - "wine-classifier.dashboard.opencloudhub.org"
   rules:
     - matches:
         - path:
