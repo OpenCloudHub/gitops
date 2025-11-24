@@ -15,25 +15,31 @@ spec:
     spec:
       containers:
         - name: api
-          image: opencloudhuborg/demo-app-genai-backend:main-11c79a5  # TODO: Image Updater will update this
+          image: opencloudhuborg/demo-app-genai-backend:main-11c79a5
           ports:
             - containerPort: 8000
               name: http
           env:
             - name: LOG_LEVEL
               value: "INFO"
+          # Liveness: Is the process alive? (checks if FastAPI is running)
           livenessProbe:
             httpGet:
-              path: /health
+              path: /  # Just check if FastAPI responds
               port: http
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness: Is it ready to serve traffic? (checks if chain is loaded)
           readinessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30  # Allow up to 150s (30*5s) to become ready
           resources:
             requests:
               memory: "512Mi"
