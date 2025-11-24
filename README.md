@@ -179,11 +179,14 @@ GPU 0: NVIDIA GeForce RTX 4070 Ti SUPER (UUID: GPU-6a40bb1d-57b2-78e1-5220-e458c
 1. Store kubeconfig as secret KUBE_CONFIG in github:
 
 ```bash
-# Get base64-encoded kubeconfig (this is what goes in the GitHub secret)
-cat ~/.kube/config | base64 -w 0
+# Create a kubeconfig with embedded certificates for GitHub Actions
+kubectl config view --flatten --minify > /tmp/kubeconfig-embedded.yaml
 
-# Or if you're on macOS:
-cat ~/.kube/config | base64
+# Now base64 encode it
+cat /tmp/kubeconfig-embedded.yaml | base64 -w 0
+
+# Clean up
+rm /tmp/kubeconfig-embedded.yaml
 ```
 
 <h2 id="project-structure">📁 Project Structure</h2>

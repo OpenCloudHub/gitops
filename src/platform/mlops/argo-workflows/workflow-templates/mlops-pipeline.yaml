@@ -161,41 +161,6 @@ spec:
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
-    # # Phase 7: Update Ray Serve Definition
-    # - - name: update-gitops
-    #     templateRef:
-    #       name: deployment-templates
-    #       template: update-gitops
-    #     arguments:
-    #       parameters:
-    #       - name: model_name
-    #         value: "{{workflow.parameters.model_name}}"
-    #       - name: prod_version
-    #         value: "{{steps.promote-production.outputs.parameters.prod_version}}"
-    #       - name: serving_image
-    #         value: "{{workflow.parameters.serving_image}}"
-
-    # # Phase 8: Tag deployment info
-    # - - name: tag-mlflow-prod-model
-    #     templateRef:
-    #       name: mlflow-templates
-    #       template: tag-mlflow-prod-model
-    #     arguments:
-    #       parameters:
-    #       - name: model_name
-    #         value: "{{workflow.parameters.model_name}}"
-    #       - name: prod_version
-    #         value: "{{steps.promote-production.outputs.parameters.prod_version}}"
-    #       - name: staging_version
-    #         value: "{{steps.compare-promote-staging.outputs.parameters.staging_version}}"
-    #       - name: ci_version
-    #         value: "{{steps.compare-promote-staging.outputs.parameters.ci_version}}"
-    #       - name: approval_mode
-    #         value: "{{workflow.parameters.approval_mode}}"
-    #       - name: mlflow_tracking_uri
-    #         value: "{{workflow.parameters.mlflow_tracking_uri}}"
-
-
   # Approval gate template
   - name: approval-gate
     inputs:

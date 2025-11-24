@@ -178,7 +178,7 @@ spec:
         echo "⏳ Waiting for RayJob..."
         sleep 3
 
-        JOB_NAME=$(kubectl get rayjobs -n ai -l workflow-run="${RUN_LABEL}" -o jsonpath='{.items[0].metadata.name}')
+        JOB_NAME=$(kubectl get rayjobs -n mlops -l workflow-run="${RUN_LABEL}" -o jsonpath='{.items[0].metadata.name}')
 
         if [ -z "$JOB_NAME" ]; then
           echo "❌ Failed to get RayJob"
@@ -194,7 +194,7 @@ spec:
         ELAPSED=0
 
         while [ $ELAPSED -lt $MAX_WAIT ]; do
-          JOB_DEPLOYMENT_STATUS=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}')
+          JOB_DEPLOYMENT_STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}')
 
           if [ "$JOB_DEPLOYMENT_STATUS" = "Running" ] || [ "$JOB_DEPLOYMENT_STATUS" = "Complete" ]; then
             echo "✅ Job submitted successfully"
@@ -207,29 +207,29 @@ spec:
 
         if [ $ELAPSED -ge $MAX_WAIT ]; then
           echo "❌ Job submission timeout after ${MAX_WAIT}s"
-          kubectl describe rayjob -n ai $JOB_NAME
+          kubectl describe rayjob -n mlops $JOB_NAME
           exit 1
         fi
 
         # Then find the submitter pod
-        SUBMITTER_POD=$(kubectl get pods -n ai -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
+        SUBMITTER_POD=$(kubectl get pods -n mlops -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
 
         echo "✅ Submitter pod: $SUBMITTER_POD"
         echo ""
         echo "Waiting for submitter pod to become ready..."
 
-        kubectl wait --for=condition=Ready pod/$SUBMITTER_POD -n ai --timeout=300s || true
+        kubectl wait --for=condition=Ready pod/$SUBMITTER_POD -n mlops --timeout=300s || true
 
         echo ""
         echo "🔍 Streaming training logs..."
         echo "================================"
         # Stream logs in the background
-        kubectl logs -n ai $SUBMITTER_POD -f 2>/dev/null &
+        kubectl logs -n mlops $SUBMITTER_POD -f 2>/dev/null &
         LOG_PID=$!
 
         # Wait for RayJob to complete
         while true; do
-          STATUS=$(kubectl get rayjob -n ai $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null)
+          STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null)
 
           # Handle empty status (job not yet started)
           if [ -z "$STATUS" ]; then
@@ -252,7 +252,7 @@ spec:
               wait $LOG_PID 2>/dev/null || true
               echo ""
               echo "❌ Training failed: $STATUS"
-              kubectl describe rayjob -n ai $JOB_NAME
+              kubectl describe rayjob -n mlops $JOB_NAME
               exit 1
               ;;
             "PENDING"|"RUNNING")
