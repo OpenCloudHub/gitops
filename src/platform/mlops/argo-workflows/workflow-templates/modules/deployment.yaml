@@ -90,7 +90,7 @@ spec:
         git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
         cd /tmp/gitops
 
-        SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
+        SERVICE_FILE="src/teams/ai/models-custom/${MODEL_NAME}-service.yaml"
 
         echo "📦 Deployment: ${MODEL_NAME}"
         echo "   Model: ${MODEL_URI}"
@@ -174,7 +174,7 @@ spec:
         import os
 
         client = MlflowClient(os.environ["MLFLOW_TRACKING_URI"])
-        model_uri = os.environ["MODEL_URI"].strip()  # ← Add .strip()
+        model_uri = os.environ["MODEL_URI"].strip()
 
         # Parse: models:/prod.wine-classifier/1
         match = re.match(r'models:/([^.]+)\.([^/]+)/(\d+)', model_uri)
