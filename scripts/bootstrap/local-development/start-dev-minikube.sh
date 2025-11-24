@@ -49,6 +49,7 @@ main() {
 
     log_step "Setup local Vault"
     bash "$REPO_ROOT/scripts/bootstrap/local-development/setup-vault.sh"
+    sleep 10
 
     log_step "Bootstrap GitOps stack"
     bash "$REPO_ROOT/scripts/bootstrap/bootstrap.sh"

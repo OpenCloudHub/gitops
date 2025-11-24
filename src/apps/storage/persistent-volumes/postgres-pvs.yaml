@@ -13,16 +13,9 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-storage
-  local:
+  hostPath:
     path: /data/postgres/mlflow-0
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - minikube
+    type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -36,16 +29,9 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-storage
-  local:
+  hostPath:
     path: /data/postgres/mlflow-1
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - minikube
+    type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -59,16 +45,9 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-storage
-  local:
+  hostPath:
     path: /data/postgres/rag-0
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - minikube
+    type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -82,13 +61,6 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-storage
-  local:
+  hostPath:
     path: /data/postgres/rag-1
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - minikube
+    type: DirectoryOrCreate

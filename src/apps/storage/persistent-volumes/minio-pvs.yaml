@@ -7,22 +7,15 @@ metadata:
   name: minio-data-0
 spec:
   capacity:
-    storage: 10Gi
+    storage: 50Gi
   volumeMode: Filesystem
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-storage
-  local:
+  hostPath:
     path: /data/minio/data-0
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - minikube
+    type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -30,19 +23,12 @@ metadata:
   name: minio-data-1
 spec:
   capacity:
-    storage: 10Gi
+    storage: 50Gi
   volumeMode: Filesystem
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-storage
-  local:
+  hostPath:
     path: /data/minio/data-1
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - minikube
+    type: DirectoryOrCreate
