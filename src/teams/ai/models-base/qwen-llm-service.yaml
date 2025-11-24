@@ -19,14 +19,13 @@ spec:
               engine_kwargs:
                 dtype: float16
                 max_model_len: 1024
-                device: auto
                 gpu_memory_utilization: 0.4  # 40% of GPU memory for model+KV cache
                 enforce_eager: true  # Disable CUDA graphs to reduce memory
                 use_tqdm_on_load: false
               deployment_config:
                 autoscaling_config:
                   min_replicas: 1
-                  max_replicas: 1
+                  max_replicas: 1   # Could Scale this up later
                   target_ongoing_requests: 4
                 max_ongoing_requests: 8
               # Fractional GPU configuration
