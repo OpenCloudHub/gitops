@@ -11,7 +11,7 @@ helmCharts:
     includeCRDs: true
     valuesInline:
       cluster:
-        name: opencloudhub-local
+        name: "minikube"
 
       # Fixed destinations with proper routing
       destinations:
