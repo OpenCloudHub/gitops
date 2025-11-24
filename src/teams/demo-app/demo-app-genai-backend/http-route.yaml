@@ -25,13 +25,13 @@ spec:
           port: 8000
 
     # Frontend (default/root path)
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - group: ""
-          kind: Service
-          name: demo-app-frontend
-          namespace: demo-app
-          port: 80
+    # - matches:
+    #     - path:
+    #         type: PathPrefix
+    #         value: /
+    #   backendRefs:
+    #     - group: ""
+    #       kind: Service
+    #       name: demo-app-frontend
+    #       namespace: demo-app
+    #       port: 80
