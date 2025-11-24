@@ -9,7 +9,7 @@ resources:
 helmCharts:
   - name: kuberay-operator
     releaseName: kuberay-operator
-    version: 1.4.2
+    version: 1.5.1      # 1.4.2
     repo: https://ray-project.github.io/kuberay-helm/
     namespace: mlops
     includeCRDs: true
