@@ -34,7 +34,7 @@ spec:
           # Readiness: Is it ready to serve traffic? (checks if chain is loaded)
           readinessProbe:
             httpGet:
-              path: /health
+              path: /  # Just check if FastAPI responds
               port: http
             initialDelaySeconds: 10
             periodSeconds: 5
