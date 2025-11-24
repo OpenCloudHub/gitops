@@ -82,8 +82,6 @@ spec:
         numOfHosts: 1
         template:
           spec:
-            nodeSelector:
-              node.opencloudhub.org/application: "true"
             containers:
               - name: ray-worker
                 image: opencloudhuborg/wine-classifier-serving:main-3863d43
