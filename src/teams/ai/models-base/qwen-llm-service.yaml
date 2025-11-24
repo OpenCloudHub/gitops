@@ -59,7 +59,7 @@ spec:
         spec:
           containers:
             - name: ray-head
-              image: rayproject/ray-llm:2.46.0-py311-cu124
+              image: rayproject/ray-llm:2.51.0-py311-cu128
               resources:
                 requests:
                   cpu: "1"
@@ -86,7 +86,7 @@ spec:
           spec:
             containers:
               - name: ray-worker
-                image: rayproject/ray-llm:2.46.0-py311-cu124
+                image: rayproject/ray-llm:2.51.0-py311-cu128
                 resources:
                   requests:
                     cpu: "4"
