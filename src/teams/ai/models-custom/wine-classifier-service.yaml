@@ -18,6 +18,8 @@ spec:
         route_prefix: /models/wine-classifier
         deployments:
           - name: WineClassifier
+            user_config:
+              model_uri: "models:/prod.wine-classifier/1"
             num_replicas: 2  # Fixed
             max_ongoing_requests: 5
             ray_actor_options:
