@@ -205,15 +205,17 @@ step_start_tunnel() {
   pkill -f "minikube tunnel" 2>/dev/null || true
   sleep 2
 
-  log_info "Starting tunnel (requires sudo)..."
-  # Run in separate session, detached from this script
-  setsid minikube tunnel > /tmp/minikube-tunnel.log 2>&1 &
+  # Cache sudo credentials upfront
+  log_info "Tunnel requires sudo access..."
+  sudo -v
+
+  log_info "Starting tunnel in background..."
+  nohup sudo minikube tunnel > /tmp/minikube-tunnel.log 2>&1 &
   TUNNEL_PID=$!
   echo "$TUNNEL_PID" > /tmp/minikube-tunnel.pid
 
   sleep 5
   log_success "Tunnel started (PID: $TUNNEL_PID)"
-  log_info "Note: Tunnel may prompt for sudo password in background log"
 }
 
 step_wait_for_gateway() {

@@ -79,6 +79,6 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ai-mlops
+  name: mlops
   labels:
     istio.io/dataplane-mode: ambient

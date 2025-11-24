@@ -24,13 +24,13 @@ spec:
           {{- else }}
           SkipDryRunOnMissingResource=true
           {{- end }}
-        argocd.argoproj.io/sync-wave: |
-          {{- if eq (index .path.segments 3) "gateway" }}-600
-          {{- else if eq (index .path.segments 3) "cert-manager" }}-500
-          {{- else if eq (index .path.segments 3) "external-secrets" }}-400
-          {{- else if eq (index .path.segments 3) "istio" }}-300
-          {{- else if or (eq (index .path.segments 2) "storage") (eq (index .path.segments 2) "observability") }}-200
-          {{- else }}-100{{- end }}
+        # argocd.argoproj.io/sync-wave: |
+        #   {{- if eq (index .path.segments 3) "gateway" }}-600
+        #   {{- else if eq (index .path.segments 3) "cert-manager" }}-500
+        #   {{- else if eq (index .path.segments 3) "external-secrets" }}-400
+        #   {{- else if eq (index .path.segments 3) "istio" }}-300
+        #   {{- else if or (eq (index .path.segments 2) "storage") (eq (index .path.segments 2) "observability") }}-200
+        #   {{- else }}-100{{- end }}
 
     spec:
       project: platform

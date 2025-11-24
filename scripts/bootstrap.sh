@@ -220,7 +220,7 @@ step_install_argocd() {
   # Build and apply ArgoCD manifests
   log_info "Building ArgoCD manifests..."
   local manifests
-  if ! manifests=$(kustomize build --enable-helm "${REPO_ROOT}/src/apps/core/argocd/base"); then
+  if ! manifests=$(kustomize build --enable-helm "${REPO_ROOT}/src/platform/core/argocd/base"); then
     log_error "Failed to build ArgoCD manifests"
     return 1
   fi
@@ -249,7 +249,7 @@ step_deploy_applications() {
 
   # Stage 1: Projects and Security
   log_info "Stage 1: Deploying projects and security..."
-  kubectl apply -f "${REPO_ROOT}/src/app-projects/"
+  kubectl apply -k "${REPO_ROOT}/src/app-projects/"
   kubectl apply -f "${REPO_ROOT}/src/application-sets/security/applicationset.yaml"
   sleep 10
 
