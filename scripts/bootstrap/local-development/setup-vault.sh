@@ -173,39 +173,17 @@ vault_setup_load_ssh_key() {
 }
 
 vault_setup_check_existing_container() {
-  log_step "Checking for existing Vault container"
+  log_step "Removing any existing Vault container"
 
-  # Check if running
-  if docker ps --format '{{.Names}}' | grep -qx "$VAULT_CONTAINER_NAME"; then
-    log_success "Vault container '$VAULT_CONTAINER_NAME' is already running"
-    return 1  # Don't recreate
-  fi
-
-  # Check if exists but stopped
   if docker ps -a --format '{{.Names}}' | grep -qx "$VAULT_CONTAINER_NAME"; then
-    log_warning "Vault container '$VAULT_CONTAINER_NAME' exists but is stopped"
-    read -rp "Start existing container? [Y/n]: " START
-    if [[ ! "$START" =~ ^[Nn]$ ]]; then
-      log_info "Starting existing container..."
-      docker start "$VAULT_CONTAINER_NAME"
-      log_success "Container started"
-      return 1  # Don't recreate
-    fi
-
-    read -rp "Delete and recreate instead? [y/N]: " DELETE
-    if [[ "$DELETE" =~ ^[Yy]$ ]]; then
-      log_info "Removing existing container..."
-      docker rm -f "$VAULT_CONTAINER_NAME" >/dev/null
-      log_success "Container removed, will create new one"
-      return 0  # Proceed to create
-    fi
-
-    log_info "Keeping stopped container as-is"
-    return 1
+    log_info "Removing existing Vault container '$VAULT_CONTAINER_NAME'"
+    docker rm -f "$VAULT_CONTAINER_NAME" >/dev/null 2>&1 || true
+    log_success "Container removed"
+  else
+    log_info "No existing Vault container found"
   fi
 
-  log_info "No existing Vault container found"
-  return 0  # Proceed to create
+  return 0  # Always proceed to create
 }
 
 vault_setup_start_container() {

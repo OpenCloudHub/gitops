@@ -29,7 +29,11 @@ main() {
         --gpus all
 
     log_step "Create persistent data directories inside minikube"
-    minikube ssh "sudo mkdir -p $MINIO_DATA_PATH $POSTGRES_DATA_PATH && sudo chmod 777 $MINIO_DATA_PATH $POSTGRES_DATA_PATH"
+    minikube ssh "sudo mkdir -p $MINIO_DATA_PATH $POSTGRES_DATA_PATH && \
+        sudo chown -R 1000:1000 $MINIO_DATA_PATH && \
+        sudo chmod -R 755 $MINIO_DATA_PATH && \
+        sudo chown -R 999:999 $POSTGRES_DATA_PATH && \
+        sudo chmod -R 700 $POSTGRES_DATA_PATH"
 
     log_step "✅ Minikube started with persistent storage"
     echo "   CPUs: $CPUS"
