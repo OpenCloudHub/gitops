@@ -1,0 +1,125 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: deployment-templates
+  namespace: mlops
+spec:
+  serviceAccountName: workflow-executor
+
+  templates:
+    - name: update-gitops
+      inputs:
+        parameters:
+        - name: model_name
+        - name: prod_version
+        - name: serving_image
+      volumes:
+      - name: git-secret
+        secret:
+          secretName: gitops-repo
+      script:
+        image: alpine/git:latest
+        command: [sh]
+        volumeMounts:
+        - name: git-secret
+          mountPath: /mnt/secrets
+          readOnly: true
+        source: |
+          set -e
+
+          # SSH setup
+          mkdir -p ~/.ssh
+          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+          echo "" >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+          MODEL_NAME="{{inputs.parameters.model_name}}"
+          PROD_VERSION="{{inputs.parameters.prod_version}}"
+          SERVING_IMAGE="{{inputs.parameters.serving_image}}"
+
+          # Clean variables
+          MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
+          PROD_VERSION=$(echo "$PROD_VERSION" | tr -d '\n\r\t ')
+          SERVING_IMAGE=$(echo "$SERVING_IMAGE" | tr -d '\n\r\t ')
+
+          git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
+          cd /tmp/gitops
+
+          SERVICE_FILE="src/team-apps/ai/ray/${MODEL_NAME}-service.yaml"
+
+          echo "📦 Deployment Request: ${MODEL_NAME}"
+          echo ""
+
+          # Extract current image (appears multiple times - head and worker)
+          CURRENT_IMAGE=$(grep "image: opencloudhuborg/${MODEL_NAME}" "$SERVICE_FILE" | head -1 | awk '{print $2}')
+
+          # Check if model_uri exists in serveConfigV2
+          if grep -q "model_uri:" "$SERVICE_FILE"; then
+            CURRENT_VERSION=$(grep "model_uri:" "$SERVICE_FILE" | grep -oP 'models:/prod\.[^/]*/\K[0-9]+' | head -1)
+            echo "   Model Version:"
+            echo "     Current: v${CURRENT_VERSION}"
+            echo "     Target:  v${PROD_VERSION}"
+
+            if [ "$CURRENT_VERSION" = "$PROD_VERSION" ]; then
+              echo "     Status:  ✓ Already up-to-date"
+              MODEL_CHANGED=false
+            else
+              echo "     Status:  → Updating"
+              MODEL_CHANGED=true
+            fi
+          else
+            echo "   Model Version:"
+            echo "     Current: (not set)"
+            echo "     Target:  v${PROD_VERSION}"
+            echo "     Status:  → Adding model_uri"
+            MODEL_CHANGED=true
+          fi
+
+          echo ""
+          echo "   Container Image:"
+          echo "     Current: ${CURRENT_IMAGE}"
+          echo "     Target:  ${SERVING_IMAGE}"
+
+          if [ "$CURRENT_IMAGE" = "$SERVING_IMAGE" ]; then
+            echo "     Status:  ✓ Already up-to-date"
+            IMAGE_CHANGED=false
+          else
+            echo "     Status:  → Updating"
+            IMAGE_CHANGED=true
+          fi
+          echo ""
+
+          # Check if any changes needed
+          if [ "$MODEL_CHANGED" = "false" ] && [ "$IMAGE_CHANGED" = "false" ]; then
+            echo "✅ No changes needed - already at target state"
+            exit 0
+          fi
+
+          # Update images (both head and worker)
+          sed -i "s|image: opencloudhuborg/${MODEL_NAME}:[a-zA-Z0-9_-]*|image: ${SERVING_IMAGE}|g" "$SERVICE_FILE"
+
+          # DEBUG: Show what changed
+          echo "=== DEBUG: After changes ==="
+          grep "image:" "$SERVICE_FILE"
+          echo ""
+
+          # Update or add user_config with model_uri under WineClassifier deployment
+          # ⚠️ IMPORTANT: Depends on correct naming
+          if grep -q "user_config:" "$SERVICE_FILE"; then
+            echo "Update existing model_uri..."
+            sed -i "s|model_uri: \"models:/prod\.${MODEL_NAME}/[0-9]*\"|model_uri: \"models:/prod.${MODEL_NAME}/${PROD_VERSION}\"|g" "$SERVICE_FILE"
+          else
+            echo "Adding model_uri to serveConfigV2..."
+            # Find the line with "- name: WineClassifier" and add user_config after it
+            sed -i "/- name: WineClassifier/a\\            user_config:\\n              model_uri: \"models:/prod.${MODEL_NAME}/${PROD_VERSION}\"" "$SERVICE_FILE"
+          fi
+
+          git config user.name "Argo Workflow"
+          git config user.email "workflow@opencloudhub.org"
+          git add "$SERVICE_FILE"
+          git commit -m "🤖 Deploy ${MODEL_NAME} v${PROD_VERSION} with ${SERVING_IMAGE##*:}"
+          git push
+
+          echo ""
+          echo "✅ GitOps updated! ArgoCD will sync changes."

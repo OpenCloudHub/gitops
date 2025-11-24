@@ -1,0 +1,40 @@
+# MinIO requires 4 volumes per server pod
+# For 1 tenant with 4 servers = 16 PVs for data + 2 for metrics/logs
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-data-0
+spec:
+  claimRef:
+    namespace: minio-tenant
+    name: data0-minio-pool-0-0
+  capacity:
+    storage: 50Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /data/minio/data-0
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-data-1
+spec:
+  claimRef:
+    namespace: minio-tenant
+    name: data1-minio-pool-0-0
+  capacity:
+    storage: 50Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /data/minio/data-1
+    type: DirectoryOrCreate

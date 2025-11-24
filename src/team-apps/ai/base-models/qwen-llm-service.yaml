@@ -1,0 +1,162 @@
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: qwen-llm-service
+  namespace: models
+spec:
+  serviceUnhealthySecondThreshold: 900
+  deploymentUnhealthySecondThreshold: 300
+  serveConfigV2: |
+    applications:
+      - name: qwen-llm
+        import_path: ray.serve.llm:build_openai_app
+        route_prefix: /
+        args:
+          llm_configs:
+            - model_loading_config:
+                model_id: qwen2.5-0.5b-instruct
+                model_source: Qwen/Qwen2.5-0.5B-Instruct
+              engine_kwargs:
+                dtype: float16
+                max_model_len: 1024
+                device: auto  # Changed from cpu
+                gpu_memory_utilization: 0.5  # Added for small GPU
+              deployment_config:
+                autoscaling_config:
+                  min_replicas: 1
+                  max_replicas: 1
+                  target_ongoing_requests: 4
+                max_ongoing_requests: 8
+              runtime_env:
+                env_vars:
+                  VLLM_USE_V1: "1"
+  rayClusterConfig:
+    rayVersion: '2.48.0'
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: '0.0.0.0'
+        metrics-export-port: '8080'
+        num-cpus: "0"
+        num-gpus: "0"  # Head doesn't need GPU
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: rayproject/ray-llm:2.46.0-py311-cu124
+              # ... keep your existing head config ...
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "2Gi"
+                limits:
+                  cpu: "2"
+                  memory: "4Gi"
+    workerGroupSpecs:
+      - groupName: gpu-workers  # Renamed from cpu-workers
+        replicas: 1
+        minReplicas: 1
+        maxReplicas: 1
+        numOfHosts: 1
+        rayStartParams:
+          num-gpus: "1"  # Enable GPU
+        template:
+          spec:
+            containers:
+              - name: ray-worker
+                image: rayproject/ray-llm:2.46.0-py311-cu124
+                resources:
+                  requests:
+                    cpu: "4"
+                    memory: "8Gi"
+                    nvidia.com/gpu: "1"  # Request GPU
+                  limits:
+                    cpu: "6"
+                    memory: "12Gi"
+                    nvidia.com/gpu: "1"  # Request GPU
+                env:
+                  - name: OMP_NUM_THREADS
+                    value: "4"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen-llm
+  namespace: models
+  labels:
+    app.kubernetes.io/name: qwen-llm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    ray.io/cluster: qwen-llm-service-raycluster
+    ray.io/node-type: head
+
+---
+# HTTPRoute for Qwen 0.5B LLM API
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qwen-0.5b-api-route
+  namespace: models
+  labels:
+    app.kubernetes.io/name: qwen-llm
+    app.kubernetes.io/component: api-route
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ingress-gateway
+      namespace: istio-ingress
+  hostnames:
+    - "api.opencloudhub.org"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /models/qwen-0.5b/v1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /v1
+      backendRefs:
+        - group: ''
+          kind: Service
+          name: qwen-llm-service-serve-svc
+          port: 8000
+          weight: 1
+
+---
+# HTTPRoute for Ray Dashboard
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qwen-0.5b-dashboard-route
+  namespace: models
+  labels:
+    app.kubernetes.io/name: qwen-llm
+    app.kubernetes.io/component: dashboard-route
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ingress-gateway
+      namespace: istio-ingress
+  hostnames:
+    - "qwen-0.5b.models.internal.opencloudhub.org"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/"
+      backendRefs:
+        - group: ''
+          kind: Service
+          name: qwen-llm-service-head-svc
+          port: 8265
+          weight: 1

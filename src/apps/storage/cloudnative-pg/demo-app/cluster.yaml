@@ -34,4 +34,5 @@ spec:
   cluster:
     name: demo-app-db-cluster
   extensions:
-    - name: vector
+    - ensure: present
+      name: vector

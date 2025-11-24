@@ -1,0 +1,18 @@
+# =============================================================================
+# local-dev/manifests/kustomization.yaml
+# Local storage resources (PVs, StorageClass) for Minikube
+# =============================================================================
+#
+# These resources are applied directly (not via ArgoCD) because they're
+# specific to local development and need to exist before the GitOps stack.
+#
+# =============================================================================
+
+
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - storage-class.yaml
+  - minio-pvs.yaml
+  - postgres-pvs.yaml

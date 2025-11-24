@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mlops
+
+resources:
+- https://github.com/argoproj/argo-workflows/releases/download/v3.7.3/namespace-install.yaml
+- http-route.yaml
+- external-secrets.yaml
+- workflow-templates
+- artifact-repository-config.yaml
+
+patches:
+- target:
+    kind: Namespace
+    name: argo
+  patch: |-
+    - op: replace
+      path: /metadata/name
+      value: ai
+
+- target:
+    kind: Deployment
+    name: argo-server
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --auth-mode=server
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --secure=false
+    - op: replace
+      path: /spec/template/spec/containers/0/readinessProbe/httpGet/scheme
+      value: HTTP

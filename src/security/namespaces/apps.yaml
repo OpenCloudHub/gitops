@@ -1,0 +1,84 @@
+# Core service namespaces
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  # ArgoCD should stay outside the mesh
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    istio.io/dataplane-mode: ambient
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-system
+  # No ambient label - this is the control plane
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-ingress
+  labels:
+    istio.io/dataplane-mode: ambient
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+  labels:
+    istio.io/dataplane-mode: ambient
+
+# Auth service namespaces
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: auth
+  labels:
+    istio.io/dataplane-mode: ambient
+
+# Observability service namespaces
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    istio.io/dataplane-mode: ambient
+
+# Storage service namespaces
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storage
+  labels:
+    istio.io/dataplane-mode: ambient
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio-tenant
+  labels:
+    istio.io/dataplane-mode: ambient
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio-operator
+  labels:
+    istio.io/dataplane-mode: ambient
+
+# MLOps namespace
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-mlops
+  labels:
+    istio.io/dataplane-mode: ambient

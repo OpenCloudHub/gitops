@@ -1,0 +1,12 @@
+# =============================================================================
+# local-dev/manifests/storage-class.yaml
+# StorageClass for local persistent volumes
+# =============================================================================
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
