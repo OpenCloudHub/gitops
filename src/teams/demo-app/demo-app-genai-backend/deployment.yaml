@@ -29,7 +29,7 @@ spec:
           # Liveness: Is the process alive? (checks if FastAPI is running)
           livenessProbe:
             httpGet:
-              path: /api  # Just check if FastAPI responds
+              path: /  # Just check if FastAPI responds
               port: http
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -38,7 +38,7 @@ spec:
           # Readiness: Is it ready to serve traffic? (checks if chain is loaded)
           readinessProbe:
             httpGet:
-              path: /api  # Just check if FastAPI responds
+              path: /  # Just check if FastAPI responds
               port: http
             initialDelaySeconds: 10
             periodSeconds: 5
