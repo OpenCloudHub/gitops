@@ -18,7 +18,7 @@ spec:
       - name: deployed_by         # e.g., "pipeline", "manual", or username
         value: "manual"
       - name: mlflow_tracking_uri
-        value: "http://mlflow.ai-mlops.svc.cluster.local:80"
+        value: "http://mlflow.mlops.svc.cluster.local:80"
     steps:
     # Step 1: Update GitOps repo
     - - name: update-gitops-repo
@@ -150,7 +150,7 @@ spec:
       - name: deployed_by
         value: "manual"
       - name: mlflow_tracking_uri
-        value: "http://mlflow.ai-mlops.svc.cluster.local:80"
+        value: "http://mlflow.mlops.svc.cluster.local:80"
     script:
       image: ghcr.io/mlflow/mlflow:v2.18.0
       command: [python]

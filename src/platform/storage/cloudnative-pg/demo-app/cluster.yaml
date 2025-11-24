@@ -3,6 +3,8 @@ kind: Cluster
 metadata:
   name: demo-app-db-cluster
   namespace: storage
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   instances: 2
   bootstrap:
@@ -28,6 +30,8 @@ kind: Database
 metadata:
   name: demo-app-pgvector
   namespace: storage
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   name: demo_app
   owner: demo-app
