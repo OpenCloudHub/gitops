@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: ai-apps
+  name: teams-apps
   namespace: argocd
 spec:
   goTemplate: true
@@ -11,7 +11,7 @@ spec:
       repoURL: git@github.com:opencloudhub/gitops.git
       revision: HEAD
       directories:
-      - path: src/team-apps/ai/*
+      - path: src/teams/*/*
   template:
     metadata:
       name: "{{index .path.segments 3}}"
@@ -19,13 +19,8 @@ spec:
         app.kubernetes.io/name: "{{index .path.segments 3}}"
         app.kubernetes.io/part-of: ai
         app.kubernetes.io/managed-by: argocd
-      annotations:
-        argocd.argoproj.io/sync-wave: |
-          {{- if eq (index .path.segments 3) "mlflow" }}200
-          {{- else if eq (index .path.segments 3) "argo-workflows" }}210
-          {{- else }}220{{- end }}
     spec:
-      project: ai
+      project: teams
       source:
         repoURL: git@github.com:opencloudhub/gitops.git
         targetRevision: HEAD

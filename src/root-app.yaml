@@ -8,7 +8,10 @@ metadata:
 spec:
   project: default
   sources:
-  # Security policies ApplicationSet
+  # Security policies ApplicationSet and AppProjects
+  - repoURL: git@github.com:opencloudhub/gitops.git
+    path: src/app-projects
+    targetRevision: HEAD
   - repoURL: git@github.com:opencloudhub/gitops.git
     path: src/application-sets/security
     targetRevision: HEAD
@@ -16,13 +19,9 @@ spec:
   - repoURL: git@github.com:opencloudhub/gitops.git
     path: src/application-sets/platform
     targetRevision: HEAD
-  # MLOps Apps
+  # Team Apps
   - repoURL: git@github.com:opencloudhub/gitops.git
-    path: src/application-sets/ai
-    targetRevision: HEAD
-  # Demo Apps
-  - repoURL: git@github.com:opencloudhub/gitops.git
-    path: src/application-sets/demo-app
+    path: src/application-sets/teams
     targetRevision: HEAD
 
   destination:

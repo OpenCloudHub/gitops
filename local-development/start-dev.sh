@@ -43,10 +43,6 @@ source "${REPO_ROOT}/scripts/_utils.sh"
 # =============================================================================
 
 cleanup() {
-  if [[ -n "${TUNNEL_PID:-}" ]]; then
-    kill "$TUNNEL_PID" 2>/dev/null || true
-  fi
-  pkill -f "minikube tunnel" 2>/dev/null || true
   rm -f /tmp/minikube-tunnel.pid
 }
 
@@ -206,16 +202,18 @@ step_start_tunnel() {
     return 0
   fi
 
-  # Kill any existing tunnels
   pkill -f "minikube tunnel" 2>/dev/null || true
+  sleep 2
 
-  log_info "Starting tunnel in background..."
-  nohup minikube tunnel > /tmp/minikube-tunnel.log 2>&1 &
+  log_info "Starting tunnel (requires sudo)..."
+  # Run in separate session, detached from this script
+  setsid minikube tunnel > /tmp/minikube-tunnel.log 2>&1 &
   TUNNEL_PID=$!
   echo "$TUNNEL_PID" > /tmp/minikube-tunnel.pid
 
   sleep 5
   log_success "Tunnel started (PID: $TUNNEL_PID)"
+  log_info "Note: Tunnel may prompt for sudo password in background log"
 }
 
 step_wait_for_gateway() {

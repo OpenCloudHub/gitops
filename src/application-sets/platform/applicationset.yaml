@@ -11,7 +11,7 @@ spec:
         repoURL: git@github.com:opencloudhub/gitops.git
         revision: HEAD
         directories:
-          - path: src/apps/*/*
+          - path: src/platform/*/*
   template:
     metadata:
       name: "{{index .path.segments 3}}"
