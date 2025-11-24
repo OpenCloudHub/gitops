@@ -43,8 +43,6 @@ spec:
         object-store-memory: '1073741824' # 1GB for object store
       template:
         spec:
-          nodeSelector:
-            node.opencloudhub.org/application: "true"
           containers:
             - name: ray-head
               image: opencloudhuborg/fashion-mnist-classifier-serving:main-8ab95e8

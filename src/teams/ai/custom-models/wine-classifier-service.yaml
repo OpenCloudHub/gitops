@@ -32,8 +32,6 @@ spec:
         metrics-export-port: '8080'
       template:
         spec:
-          nodeSelector:
-            node.opencloudhub.org/application: "true"
           containers:
             - name: ray-head
               image: opencloudhuborg/wine-classifier-serving:main-3863d43
