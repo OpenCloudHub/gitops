@@ -51,6 +51,13 @@ spec:
                 limits:
                   cpu: "2"
                   memory: "4Gi"
+              env:
+                - name: RAY_GRAFANA_HOST
+                  value: "http://grafana.observability.svc.cluster.local:80"
+                - name: RAY_PROMETHEUS_HOST
+                  value: "http://prometheus-server.observability.svc.cluster.local:80"
+                - name: RAY_GRAFANA_IFRAME_HOST
+                  value: "https://grafana.internal.opencloudhub.org"
     workerGroupSpecs:
       - groupName: gpu-workers  # Renamed from cpu-workers
         replicas: 1
