@@ -29,6 +29,7 @@ spec:
           name: demo-app-genai-backend
           namespace: demo-app
           port: 8000
+          weight: 1
 
     # Frontend (default/root path)
     # - matches:
