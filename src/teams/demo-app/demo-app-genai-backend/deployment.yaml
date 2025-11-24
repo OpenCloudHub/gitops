@@ -26,6 +26,8 @@ spec:
               value: postgresql+psycopg://demo-app:1234@demo-app-db-pooler:5432/demo_app
             - name: MLFLOW_TRACKING_URI
               value: https://mlflow.internal.opencloudhub.org
+            - name: MLFLOW_TRACKING_INSECURE_TLS
+              value: "true"
           # Liveness: Is the process alive? (checks if FastAPI is running)
           # livenessProbe:
           #   httpGet:
