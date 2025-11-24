@@ -20,7 +20,7 @@ spec:
           - name: WineClassifier
             user_config:
               model_uri: "models:/prod.wine-classifier/1"
-            num_replicas: 2  # Fixed
+            num_replicas: 2
             max_ongoing_requests: 5
             ray_actor_options:
               num_cpus: 0.5
