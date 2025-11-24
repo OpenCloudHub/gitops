@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: opencloudhuborg/demo-app-genai-backend:main-17043fb  # ODO: Image Updater will update this
+          image: opencloudhuborg/demo-app-genai-backend:main-17043fb  # TODO: Image Updater will update this
           ports:
             - containerPort: 8000
               name: http

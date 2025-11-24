@@ -374,5 +374,6 @@ get_exposed_services() {
     echo "fashion-mnist-classifier.ai.internal.${base}"
     echo "minio-api.storage.internal.${base}"
     echo "qwen-0.5b.ai.internal.${base}"
+    echo "demo-app-genai-backend.demo-app.${base}"
     echo "api.${base}"
 }
