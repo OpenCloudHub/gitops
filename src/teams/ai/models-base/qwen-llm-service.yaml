@@ -38,17 +38,8 @@ spec:
                   VLLM_USE_V1: "1"
                   VLLM_RAY_PER_WORKER_GPUS: "0.49"  # Must match placement_group_config
                   VLLM_DISABLE_COMPILE_CACHE: "1"  # Avoid resource contention
-          router_config:
-            deployment_config:
-              num_replicas: 1
-              autoscaling_config:
-                min_replicas: 1
-                max_replicas: 1
-            ray_actor_options:
-              num_cpus: 0.5
-              num_gpus: 0  # Router runs on CPU
   rayClusterConfig:
-    rayVersion: '2.48.0'
+    rayVersion: '2.51.0'
     headGroupSpec:
       rayStartParams:
         dashboard-host: '0.0.0.0'
