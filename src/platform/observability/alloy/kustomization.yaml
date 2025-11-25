@@ -112,10 +112,11 @@ helmCharts:
               port: 4318
         connectors:
           spanLogs:
-            enabled: true
+            enabled: false  # Disable - creates noise
           spanMetrics:
-            enabled: true
-          collector: alloy-receiver
+            enabled: false  # Disable - Tempo's metricsGenerator already does this
+          grafanaCloudMetrics:
+            enabled: false  # Not using Grafana Cloud
         # Enable metrics and traces
         metrics:
           enabled: true
