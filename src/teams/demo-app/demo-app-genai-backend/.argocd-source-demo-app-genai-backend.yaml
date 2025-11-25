@@ -1,0 +1,3 @@
+kustomize:
+  images:
+  - opencloudhuborg/demo-app-genai-backend:latest@sha256:e91946e885165d4611bccdaf8a10b8dd2c7e6055d202933c760544c88ccedf1e
