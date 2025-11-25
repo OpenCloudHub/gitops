@@ -15,7 +15,7 @@ spec:
     applications:
       - name: fashion-mnist-classifier-api
         import_path: src.serving.serve:app_builder
-        route_prefix: /models/fashion-mnist-classifier
+        route_prefix: /models/custom/fashion-mnist-classifier
         deployments:
           - name: FashionMNISTClassifier
             user_config:

@@ -22,7 +22,7 @@ spec:
           env:
             - name: LOG_LEVEL
               value: "INFO"
-            - name: CONNECTION_STRING
+            - name: DB_CONNECTION_STRING
               value: postgresql+psycopg://demo-app:1234@demo-app-db-pooler.storage.svc.cluster.local:5432/demo_app
             - name: MLFLOW_TRACKING_URI
               value: https://mlflow.internal.opencloudhub.org
