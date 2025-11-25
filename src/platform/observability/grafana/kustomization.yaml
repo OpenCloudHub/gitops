@@ -152,15 +152,6 @@ helmCharts:
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/ray
-            - name: 'minio'
-              orgId: 1
-              folder: 'MinIO'
-              type: file
-              disableDeletion: false
-              editable: true
-              options:
-                path: /var/lib/grafana/dashboards/minio
-
       sidecar:
         dashboards:
           enabled: true
