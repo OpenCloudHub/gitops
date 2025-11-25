@@ -254,7 +254,7 @@ minio.internal.${base}
 minio-api.internal.${base}
 pgadmin.internal.${base}
 keycloak.internal.${base}
-fashion-mnist.dashboard.${base}
+fashion-mnist-classifier.dashboard.${base}
 wine-classifier.dashboard.${base}
 qwen-0.5b.dashboard.${base}
 api.${base}

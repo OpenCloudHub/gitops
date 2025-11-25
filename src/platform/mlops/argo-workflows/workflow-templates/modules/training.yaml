@@ -69,7 +69,7 @@ spec:
           shutdownAfterJobFinishes: true
           ttlSecondsAfterFinished: 300
           rayClusterSpec:
-            rayVersion: "2.48.0"
+            rayVersion: "2.51.0"
             headGroupSpec:
               serviceType: ClusterIP
               template:
