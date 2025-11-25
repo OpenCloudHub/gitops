@@ -65,7 +65,7 @@ spec:
             workflow-run: "${RUN_LABEL}"
             model: "{{inputs.parameters.model_name}}"
         spec:
-          entrypoint: {{inputs.parameters.training_entrypoint}} ${FULL_ARGS}
+          entrypoint: {{inputs.parameters.training_entrypoint}} ${TRAINING_ARGS}
           shutdownAfterJobFinishes: true
           ttlSecondsAfterFinished: 300
           rayClusterSpec:
