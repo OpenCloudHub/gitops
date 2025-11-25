@@ -96,6 +96,9 @@ helmCharts:
         collector: alloy-metrics
         crds:
           deploy: true
+        serviceMonitors:
+          enabled: true
+          namespaces: []  # Empty = all namespaces (explicit)
 
       # Enable Application Observability for traces
       applicationObservability:
