@@ -10,7 +10,7 @@ spec:
       name: ingress-gateway
       namespace: istio-ingress
   hostnames:
-    - argo.internal.opencloudhub.org
+    - argo-workflows.internal.opencloudhub.org
   rules:
     - matches:
         - path:

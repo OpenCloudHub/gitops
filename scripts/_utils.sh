@@ -256,7 +256,7 @@ pgadmin.internal.${base}
 keycloak.internal.${base}
 fashion-mnist.dashboard.${base}
 wine-classifier.dashboard.${base}
-qwen.dashboard.${base}
+qwen-0.5b.dashboard.${base}
 api.${base}
 demo-app.${base}
 EOF
