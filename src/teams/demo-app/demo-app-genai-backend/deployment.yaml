@@ -14,7 +14,7 @@ spec:
         app: demo-app-genai-backend
     spec:
       containers:
-        - name: api
+        - name: demo-app-genai-backend-api
           image: opencloudhuborg/demo-app-genai-backend:main-a47ece9
           ports:
             - containerPort: 8000
