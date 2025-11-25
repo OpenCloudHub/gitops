@@ -6,6 +6,7 @@ resources:
 - https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/config/install.yaml
 - external-secrets.yaml
 - demo-app-backend.yaml
+- wine-classifier.yaml
 
 patches:
 - target:

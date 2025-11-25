@@ -1,0 +1,24 @@
+# In your gitops repo, e.g., src/argocd/image-updater/wine-classifier.yaml
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: wine-classifier-updater
+  namespace: argocd
+spec:
+  namespace: argocd
+  writeBackConfig:
+    method: git
+    gitConfig:
+      repository: git@github.com:opencloudhub/gitops.git
+      branch: main
+  applicationRefs:
+    - namePattern: "wine-classifier-service"  # Your ArgoCD Application name
+      images:
+        - alias: ray-serve
+          imageName: opencloudhuborg/wine-classifier-serving:latest
+          commonUpdateSettings:
+            updateStrategy: digest
+            forceUpdate: true  # Required for CRDs
+          manifestTargets:
+            kustomize:
+              name: opencloudhuborg/wine-classifier-serving
