@@ -257,7 +257,7 @@ spec:
             report["reason"] = reason
 
         if not should_promote:
-            return  # Exit gracefully
+            sys.exit(0)
 
         # Copy to staging
         print(f"\n📦 Copying ci.{model_name}/v{ci_version} → staging.{model_name}")

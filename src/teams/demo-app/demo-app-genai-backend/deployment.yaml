@@ -15,14 +15,14 @@ spec:
     spec:
       containers:
         - name: api
-          image: opencloudhuborg/demo-app-genai-backend:main-c882eef
+          image: opencloudhuborg/demo-app-genai-backend:main-a47ece9
           ports:
             - containerPort: 8000
               name: http
           env:
             - name: LOG_LEVEL
               value: "INFO"
-            - name: DATABASE_CONFIG_CONNECTION_STRING
+            - name: CONNECTION_STRING
               value: postgresql+psycopg://demo-app:1234@demo-app-db-pooler:5432/demo_app
             - name: MLFLOW_TRACKING_URI
               value: https://mlflow.internal.opencloudhub.org
