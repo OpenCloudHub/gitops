@@ -19,6 +19,12 @@ spec:
         app.kubernetes.io/name: "{{index .path.segments 3}}"
         app.kubernetes.io/part-of: ai
         app.kubernetes.io/managed-by: argocd
+      annotations:
+        # Images follow folder naming, we use templating to determine the correct image
+        argocd-image-updater.argoproj.io/image-list: app=opencloudhuborg/{{index .path.segments 3}}:latest
+        argocd-image-updater.argoproj.io/app.update-strategy: latest
+        argocd-image-updater.argoproj.io/write-back-method: git
+        argocd-image-updater.argoproj.io/git-branch: main
     spec:
       project: teams
       source:
