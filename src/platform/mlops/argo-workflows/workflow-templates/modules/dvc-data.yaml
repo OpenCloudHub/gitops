@@ -22,6 +22,7 @@ spec:
             default: "false"
       container:
         image: "{{inputs.parameters.image}}"
+        imagePullPolicy: Always
         command: ["bash", "-c"]
         args:
           - |
@@ -73,6 +74,7 @@ spec:
             default: "opencloudhuborg/data-registry-pipelines:latest"
       container:
         image: "{{inputs.parameters.image}}"
+        imagePullPolicy: Always
         command: ["bash", "-c"]
         args:
           - |
