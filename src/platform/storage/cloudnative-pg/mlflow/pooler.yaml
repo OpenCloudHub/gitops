@@ -3,6 +3,8 @@ kind: Pooler
 metadata:
   name: mlflow-db-pooler
   namespace: storage
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
   labels:
     app: cnpg
 spec:

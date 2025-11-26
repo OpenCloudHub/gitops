@@ -34,6 +34,8 @@ helmCharts:
           - name: dvcstore
         configSecret:
           name: minio-tenant-secret
+          accesskey: accesskey
+          secretkey: secretkey
           existingSecret: true
         console:
           enabled: true
