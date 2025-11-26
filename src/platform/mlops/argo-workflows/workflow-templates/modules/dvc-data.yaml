@@ -18,6 +18,8 @@ spec:
           - name: pipeline_name
           - name: image
             default: "opencloudhuborg/data-registry-pipelines:latest"
+          - name: force
+            default: "false"
       container:
         image: "{{inputs.parameters.image}}"
         command: ["bash", "-c"]
@@ -32,8 +34,13 @@ spec:
             dvc remote modify minio access_key_id $AWS_ACCESS_KEY_ID
             dvc remote modify minio secret_access_key $AWS_SECRET_ACCESS_KEY
 
-            dvc repro pipelines/{{inputs.parameters.pipeline_name}}/dvc.yaml
+            FORCE_FLAG=""
+            if [ "{{inputs.parameters.force}}" = "true" ]; then
+              FORCE_FLAG="--force"
+              echo "⚠️  Force mode enabled - ignoring cache"
+            fi
 
+            dvc repro $FORCE_FLAG pipelines/{{inputs.parameters.pipeline_name}}/dvc.yaml
             echo "✅ Pipeline {{inputs.parameters.pipeline_name}} complete"
         env:
           - name: AWS_ACCESS_KEY_ID

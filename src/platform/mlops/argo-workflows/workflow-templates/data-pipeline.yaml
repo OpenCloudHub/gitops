@@ -19,6 +19,8 @@ spec:
         value: "false"
       - name: trigger_embeddings
         value: "true"
+      - name: force
+        value: "false"
       - name: image
         value: "opencloudhuborg/data-registry-pipelines:latest"
 
@@ -38,6 +40,8 @@ spec:
                   value: "{{item}}"
                 - name: image
                   value: "{{workflow.parameters.image}}"
+                - name: force
+                  value: "{{workflow.parameters.force}}"
             withParam: "{{workflow.parameters.pipelines}}"
 
         # 2. Push to remote
