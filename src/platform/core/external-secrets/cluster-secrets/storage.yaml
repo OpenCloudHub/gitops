@@ -21,6 +21,9 @@ spec:
       deletionPolicy: Retain
       template:
         data:
+          config.env: |
+            export MINIO_ROOT_USER={{ .accesskey }}
+            export MINIO_ROOT_PASSWORD={{ .secretkey }}
           accesskey: "{{ .accesskey }}"
           secretkey: "{{ .secretkey }}"
     data:
