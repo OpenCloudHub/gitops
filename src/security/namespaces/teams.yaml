@@ -1,16 +1,52 @@
+# src/security/namespaces/teams.yaml
+# =============================================================================
+# Team Namespaces - Application Workloads
+# =============================================================================
+#
+# Namespaces for team-deployed workloads (applications, model serving).
+# Mesh strategy based on workload characteristics:
+#
+# MESHED: User-facing apps handling requests
+# NON-MESHED: Latency-sensitive inference endpoints
+#
+# =============================================================================
+
+# =============================================================================
+# MESHED: User-Facing Applications
+# =============================================================================
+# Applications handling user requests and student data.
+# Benefits from mTLS, traffic policies, observability.
+# =============================================================================
+
 ---
+# Demo application - frontend, backend, user interactions
 apiVersion: v1
 kind: Namespace
 metadata:
   name: demo-app
   labels:
     istio.io/dataplane-mode: ambient
-# TODO: add demo db secret and change in deployment
+  annotations:
+    opencloudhub.org/description: "Demo application (frontend, backend)"
+    opencloudhub.org/mesh-reason: "User-facing APIs, handles student data, frontend-backend traffic"
+
+# =============================================================================
+# NON-MESHED: Model Inference
+# =============================================================================
+# Latency-sensitive workloads where mesh overhead causes failures.
+# Security via: NetworkPolicy restricting ingress to gateway only.
+# =============================================================================
+
 ---
-# Not part of mesh for faster serving, no need for secure communication with other pods in cluster
+# Model serving - KServe inference endpoints
+# Mesh overhead caused 50% request failures (503 errors)
 apiVersion: v1
 kind: Namespace
 metadata:
   name: models
   labels:
+    istio.io/dataplane-mode: none
     opencloudhub.org/secret-minio: "true"
+  annotations:
+    opencloudhub.org/description: "Model serving (KServe inference services)"
+    opencloudhub.org/mesh-reason: "Latency-sensitive - mesh overhead caused 503 errors on inference"

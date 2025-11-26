@@ -99,7 +99,10 @@ echo "Public Key:" && cat ~/.ssh/opencloudhub/argocd_gitops_ed25519.pub
   - title: argocd_gitops_ed25519
   - allow write access: true
 
-6. Update the .env file
+6. Create deploy token for argo and data registry connection:
+   ssh-keygen -t ed25519 -C "argo\_data_registry@opencloudhub.com" -f ~/.ssh/opencloudhub/argo_data_registry_ed25519 -N ""
+
+1. Update the .env file
 
 1. Start dev:
 

@@ -27,8 +27,8 @@ helmCharts:
         enabled: true
       admin:
         existingSecret: grafana-admin-secret
-        userKey: username
-        passwordKey: password
+        userKey: admin-user
+        passwordKey: admin-password
       service:
         enabled: true
         type: ClusterIP

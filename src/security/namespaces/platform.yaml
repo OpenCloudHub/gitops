@@ -1,63 +1,66 @@
-# Core service namespaces
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: argocd
-  labels:
-    opencloudhub.org/secret-registry: "true"
-    opencloudhub.org/secret-gitops: "true"
-  # ArgoCD should stay outside the mesh
+# src/security/namespaces/platform.yaml
+# =============================================================================
+# Platform Namespaces - Core Infrastructure
+# =============================================================================
+#
+# MESH STRATEGY: Defense in Depth
+# --------------------------------
+# Istio ambient mesh applied selectively based on workload characteristics.
+# Non-meshed namespaces protected via NetworkPolicies, RBAC, credentials.
+#
+# MESHED: Long-running services handling sensitive data
+# NON-MESHED: Controllers, operators, ephemeral workloads
+#
+# =============================================================================
+
+# =============================================================================
+# ISTIO: Service Mesh Infrastructure
+# =============================================================================
+
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: cert-manager
-  labels:
-    istio.io/dataplane-mode: ambient
----
+# Istio control plane - manages the mesh
 apiVersion: v1
 kind: Namespace
 metadata:
   name: istio-system
-  # No ambient label - this is the control plane
+  annotations:
+    opencloudhub.org/description: "Istio control plane (istiod)"
+    opencloudhub.org/mesh-reason: "Control plane cannot be part of mesh it manages"
 
 ---
+# Istio ingress gateway - external traffic entry point
 apiVersion: v1
 kind: Namespace
 metadata:
   name: istio-ingress
   labels:
     istio.io/dataplane-mode: ambient
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: external-secrets
-  labels:
-    istio.io/dataplane-mode: ambient
+  annotations:
+    opencloudhub.org/description: "Istio ingress gateway"
+    opencloudhub.org/mesh-reason: "Gateway - terminates external TLS, routes to services"
 
-# Auth service namespaces
+# =============================================================================
+# MESHED: Sensitive Data Storage
+# =============================================================================
+# Long-running services storing sensitive data (student data, credentials).
+# mTLS encryption enforced, AuthorizationPolicies restrict access.
+# =============================================================================
+
 ---
+# Authentication - Keycloak handles user credentials and sessions
 apiVersion: v1
 kind: Namespace
 metadata:
   name: auth
   labels:
     istio.io/dataplane-mode: ambient
+  annotations:
+    opencloudhub.org/description: "Authentication services (Keycloak)"
+    opencloudhub.org/mesh-reason: "Handles user credentials, OAuth flows, session tokens"
 
-# Observability service namespaces
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: observability
-  labels:
-    istio.io/dataplane-mode: ambient
-    opencloudhub.org/secret-minio: "true"
-    opencloudhub.org/secret-grafana: "true"
-
-# Storage service namespaces
----
+# Storage - CNPG PostgreSQL clusters
+# Contains student data, ML metadata, application state
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -67,7 +70,13 @@ metadata:
     opencloudhub.org/secret-pgadmin: "true"
     opencloudhub.org/secret-mlflow-db: "true"
     opencloudhub.org/secret-demo-app-db: "true"
+  annotations:
+    opencloudhub.org/description: "Database clusters (CNPG PostgreSQL)"
+    opencloudhub.org/mesh-reason: "Stores sensitive student data, enforces mTLS on DB connections"
+
 ---
+# MinIO tenant - object storage for datasets and artifacts
+# May contain student data in datasets
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -75,25 +84,109 @@ metadata:
   labels:
     istio.io/dataplane-mode: ambient
     opencloudhub.org/secret-minio: "true"
+  annotations:
+    opencloudhub.org/description: "MinIO object storage - datasets, model artifacts, DVC remote"
+    opencloudhub.org/mesh-reason: "Stores potentially sensitive datasets and training data"
+
+# =============================================================================
+# NON-MESHED: Controllers & Operators
+# =============================================================================
+# Infrastructure controllers that reconcile K8s resources.
+# No inbound service traffic - mesh causes startup issues.
+# Security via: RBAC, service accounts, NetworkPolicies
+# =============================================================================
+
 ---
+# ArgoCD - GitOps controller
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    istio.io/dataplane-mode: none
+    opencloudhub.org/secret-registry: "true"
+    opencloudhub.org/secret-gitops: "true"
+  annotations:
+    opencloudhub.org/description: "GitOps controller (ArgoCD)"
+    opencloudhub.org/mesh-reason: "Controller - reconciles Git to K8s, no inbound service traffic"
+
+---
+# Cert-manager - certificate controller
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    istio.io/dataplane-mode: none
+  annotations:
+    opencloudhub.org/description: "Certificate management (cert-manager)"
+    opencloudhub.org/mesh-reason: "Controller - mesh causes CrashLoopBackOff on startup"
+
+---
+# External Secrets - secret synchronization
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+  labels:
+    istio.io/dataplane-mode: none
+  annotations:
+    opencloudhub.org/description: "Secret synchronization (External Secrets Operator)"
+    opencloudhub.org/mesh-reason: "Controller - mesh causes CrashLoopBackOff on startup"
+
+---
+# MinIO operator - manages MinIO tenants
 apiVersion: v1
 kind: Namespace
 metadata:
   name: minio-operator
   labels:
-    istio.io/dataplane-mode: ambient
+    istio.io/dataplane-mode: none
+  annotations:
+    opencloudhub.org/description: "MinIO Operator"
+    opencloudhub.org/mesh-reason: "Operator - reconciles CRDs, no service traffic"
 
-# MLOps namespace
+# =============================================================================
+# NON-MESHED: Observability
+# =============================================================================
+# Prometheus scraping incompatible with mesh mTLS.
+# Internal tooling, not user-facing.
+# =============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    istio.io/dataplane-mode: none
+    opencloudhub.org/secret-minio: "true"
+    opencloudhub.org/secret-grafana: "true"
+  annotations:
+    opencloudhub.org/description: "Monitoring stack (Prometheus, Grafana, Loki, Tempo)"
+    opencloudhub.org/mesh-reason: "Prometheus scraping breaks with mesh mTLS"
+
+# =============================================================================
+# NON-MESHED: MLOps Platform
+# =============================================================================
+# Mixed workloads: MLflow (long-running) + training jobs (ephemeral).
+# Mesh on ephemeral pods causes startup delays and job failures.
+# MLflow protected via Gateway + NetworkPolicy.
+# =============================================================================
+
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: mlops
   labels:
-    istio.io/dataplane-mode: ambient
+    istio.io/dataplane-mode: none
     opencloudhub.org/secret-registry: "true"
     opencloudhub.org/secret-gitops: "true"
     opencloudhub.org/secret-minio: "true"
     opencloudhub.org/secret-dvc: "true"
     opencloudhub.org/secret-mlflow-db: "true"
     opencloudhub.org/secret-demo-app-db: "true"
+  annotations:
+    opencloudhub.org/description: "MLOps platform (MLflow, Argo Workflows, Ray)"
+    opencloudhub.org/mesh-reason: "Ephemeral training jobs - mesh startup delay causes failures"
