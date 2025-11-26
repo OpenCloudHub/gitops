@@ -3,6 +3,9 @@ kind: WorkflowTemplate
 metadata:
   name: data-pipeline
   namespace: mlops
+  annotations:
+    workflows.argoproj.io/title: '**Data Pipeline**'
+    workflows.argoproj.io/description: 'Data pipeline: run selected dvc tracked data pipelines in parallel.'
 spec:
   serviceAccountName: workflow-executor
 
