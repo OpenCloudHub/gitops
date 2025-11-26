@@ -5,7 +5,7 @@ metadata:
   namespace: mlops
   annotations:
     workflows.argoproj.io/title: '**Data Pipeline**'
-    workflows.argoproj.io/description: 'Data pipeline: run selected dvc tracked data pipelines in parallel.'
+    workflows.argoproj.io/description: 'Run DVC pipelines, push, commit, tag, and trigger embeddings.'
 spec:
   serviceAccountName: workflow-executor
 
@@ -13,14 +13,14 @@ spec:
     parameters:
       - name: pipelines
         value: '["emotion","fashion-mnist","wine-quality","opencloudhub-readmes-download"]'
+      - name: force
+        value: "false"
       - name: bump_type
         value: "patch"
       - name: is_automated
         value: "false"
       - name: trigger_embeddings
         value: "true"
-      - name: force
-        value: "false"
       - name: image
         value: "opencloudhuborg/data-registry-pipelines:latest"
 
@@ -29,7 +29,7 @@ spec:
   templates:
     - name: main
       steps:
-        # 1. Run pipelines
+        # 1. Run pipelines in parallel
         - - name: run-pipelines
             templateRef:
               name: data-templates
@@ -54,51 +54,55 @@ spec:
                 - name: image
                   value: "{{workflow.parameters.image}}"
 
-        # 3. Commit dvc.lock changes
+        # 3. Detect changes
+        - - name: detect-changes
+            templateRef:
+              name: data-templates
+              template: detect-dvc-changes
+
+        # 4. Commit if changes
         - - name: commit
             templateRef:
               name: git-templates
               template: commit-and-push
+            arguments:
+              parameters:
+                - name: message
+                  value: "chore: update data [skip ci]"
+            when: "{{steps.detect-changes.outputs.parameters.has_changes}} == true"
 
-        # 4. Create tags for datasets that were run
+        # 5. Create tags for changed datasets
         - - name: create-tags
-            template: create-dataset-tags
-
-        # 5. Trigger embeddings if enabled and readmes was run
-        - - name: embeddings
-            template: maybe-run-embeddings
-
-    - name: create-dataset-tags
-      steps:
-        - - name: tag
             templateRef:
               name: git-templates
               template: create-tag
             arguments:
               parameters:
                 - name: tag_prefix
-                  value: "{{item.dataset}}"
+                  value: "{{item}}"
                 - name: bump_type
                   value: "{{workflow.parameters.bump_type}}"
                 - name: is_automated
                   value: "{{workflow.parameters.is_automated}}"
-            withItems:
-              - { dataset: "emotion" }
-              - { dataset: "fashion-mnist" }
-              - { dataset: "wine-quality" }
-              - { dataset: "opencloudhub-readmes" }
+            withParam: "{{steps.detect-changes.outputs.parameters.changed_datasets}}"
+            when: "{{steps.detect-changes.outputs.parameters.has_changes}} == true"
 
-    - name: maybe-run-embeddings
+        # 6. Run embeddings if readmes changed
+        - - name: embeddings
+            template: run-embeddings
+            when: "{{workflow.parameters.trigger_embeddings}} == true && {{steps.detect-changes.outputs.parameters.has_changes}} == true"
+
+    - name: run-embeddings
       steps:
-        # Check if readmes pipeline was requested
-        - - name: check
-            template: contains-pipeline
+        # Check if opencloudhub-readmes is in changed datasets
+        - - name: check-readmes
+            template: contains-dataset
             arguments:
               parameters:
-                - name: pipelines
-                  value: "{{workflow.parameters.pipelines}}"
+                - name: datasets
+                  value: "{{workflow.outputs.parameters.changed_datasets}}"
                 - name: target
-                  value: "opencloudhub-readmes-download"
+                  value: "opencloudhub-readmes"
 
         # Get the tag we just created
         - - name: get-tag
@@ -109,9 +113,9 @@ spec:
               parameters:
                 - name: tag_prefix
                   value: "opencloudhub-readmes"
-            when: "{{steps.check.outputs.result}} == true && {{workflow.parameters.trigger_embeddings}} == true"
+            when: "{{steps.check-readmes.outputs.result}} == true"
 
-        # Run embeddings
+        # Run embeddings pipeline
         - - name: run
             templateRef:
               name: embeddings-pipeline
@@ -124,16 +128,16 @@ spec:
                   value: "cpu-small"
                 - name: image
                   value: "{{workflow.parameters.image}}"
-            when: "{{steps.check.outputs.result}} == true && {{workflow.parameters.trigger_embeddings}} == true"
+            when: "{{steps.check-readmes.outputs.result}} == true"
 
-    - name: contains-pipeline
+    - name: contains-dataset
       inputs:
         parameters:
-          - name: pipelines
+          - name: datasets
           - name: target
       script:
         image: alpine:latest
         command: [sh]
         source: |
           apk add --no-cache jq >/dev/null 2>&1
-          echo '{{inputs.parameters.pipelines}}' | jq -e 'index("{{inputs.parameters.target}}") != null' >/dev/null && echo -n "true" || echo -n "false"
+          echo '{{inputs.parameters.datasets}}' | jq -e 'index("{{inputs.parameters.target}}") != null' >/dev/null && echo -n "true" || echo -n "false"

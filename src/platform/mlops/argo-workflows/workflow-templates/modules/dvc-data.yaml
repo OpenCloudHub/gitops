@@ -37,7 +37,7 @@ spec:
             FORCE_FLAG=""
             if [ "{{inputs.parameters.force}}" = "true" ]; then
               FORCE_FLAG="--force"
-              echo "⚠️  Force mode enabled - ignoring cache"
+              echo "⚠️  Force mode enabled"
             fi
 
             dvc repro $FORCE_FLAG pipelines/{{inputs.parameters.pipeline_name}}/dvc.yaml
@@ -78,13 +78,10 @@ spec:
           - |
             set -e
             echo "📤 Pushing data to remote storage..."
-
             dvc remote modify minio endpointurl $AWS_ENDPOINT_URL
             dvc remote modify minio access_key_id $AWS_ACCESS_KEY_ID
             dvc remote modify minio secret_access_key $AWS_SECRET_ACCESS_KEY
-
             dvc push
-
             echo "✅ Data pushed to MinIO"
         env:
           - name: AWS_ACCESS_KEY_ID
@@ -106,3 +103,71 @@ spec:
           limits:
             cpu: "1"
             memory: "1Gi"
+
+    # ----------------------------------------------------------------------
+    # Detect changed DVC pipelines (outputs JSON array of datasets)
+    # ----------------------------------------------------------------------
+    - name: detect-dvc-changes
+      inputs:
+        parameters:
+          - name: repo_url
+            default: "git@github.com:OpenCloudHub/data-registry.git"
+          - name: pipeline_map
+            # JSON: pipeline_name -> dataset_name
+            default: '{"opencloudhub-readmes-download":"opencloudhub-readmes"}'
+      outputs:
+        parameters:
+          - name: changed_datasets
+            valueFrom:
+              path: /tmp/changed_datasets.json
+          - name: has_changes
+            valueFrom:
+              path: /tmp/has_changes.txt
+      volumes:
+        - name: git-secret
+          secret:
+            secretName: data-registry-repo
+      script:
+        image: alpine/git:latest
+        command: [sh]
+        volumeMounts:
+          - name: git-secret
+            mountPath: /mnt/secrets
+            readOnly: true
+        source: |
+          set -e
+          apk add --no-cache jq >/dev/null 2>&1
+
+          echo "[]" > /tmp/changed_datasets.json
+          echo "false" > /tmp/has_changes.txt
+
+          mkdir -p ~/.ssh
+          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+          echo "" >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+          git clone "{{inputs.parameters.repo_url}}" /tmp/repo
+          cd /tmp/repo
+
+          PIPELINE_MAP='{{inputs.parameters.pipeline_map}}'
+          CHANGED=$(git status --porcelain | grep "dvc.lock" || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "ℹ️  No dvc.lock changes"
+            exit 0
+          fi
+
+          echo "true" > /tmp/has_changes.txt
+          echo "📝 Changes detected:"
+          echo "$CHANGED"
+
+          DATASETS="[]"
+          for lock_file in $(echo "$CHANGED" | awk '{print $2}'); do
+            PIPELINE=$(echo "$lock_file" | cut -d'/' -f2)
+            DATASET=$(echo "$PIPELINE_MAP" | jq -r ".\"$PIPELINE\" // \"$PIPELINE\"")
+            DATASETS=$(echo "$DATASETS" | jq --arg d "$DATASET" '. + [$d] | unique')
+          done
+
+          echo "$DATASETS" > /tmp/changed_datasets.json
+          echo "Changed datasets: $DATASETS"

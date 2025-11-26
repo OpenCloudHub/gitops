@@ -4,11 +4,66 @@ metadata:
   name: git-templates
   namespace: mlops
   annotations:
-    workflows.argoproj.io/description: 'Git utilities for commits, pushes and tags.'
+    workflows.argoproj.io/description: 'Generic git utilities.'
 spec:
   serviceAccountName: workflow-executor
 
   templates:
+    # ----------------------------------------------------------------------
+    # Commit and push changes
+    # ----------------------------------------------------------------------
+    - name: commit-and-push
+      inputs:
+        parameters:
+          - name: repo_url
+            default: "git@github.com:OpenCloudHub/data-registry.git"
+          - name: branch
+            default: "main"
+          - name: message
+            default: "chore: update [skip ci]"
+      outputs:
+        parameters:
+          - name: has_changes
+            valueFrom:
+              path: /tmp/has_changes.txt
+      volumes:
+        - name: git-secret
+          secret:
+            secretName: data-registry-repo
+      script:
+        image: alpine/git:latest
+        command: [sh]
+        volumeMounts:
+          - name: git-secret
+            mountPath: /mnt/secrets
+            readOnly: true
+        source: |
+          set -e
+          echo "false" > /tmp/has_changes.txt
+
+          mkdir -p ~/.ssh
+          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+          echo "" >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+          git clone "{{inputs.parameters.repo_url}}" /tmp/repo
+          cd /tmp/repo
+          git checkout "{{inputs.parameters.branch}}"
+
+          git config user.name "Argo Workflow"
+          git config user.email "workflow@opencloudhub.org"
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "{{inputs.parameters.message}}"
+            git push origin "{{inputs.parameters.branch}}"
+            echo "true" > /tmp/has_changes.txt
+            echo "✅ Pushed"
+          else
+            echo "ℹ️  No changes"
+          fi
+
     # ----------------------------------------------------------------------
     # Create a version tag
     # ----------------------------------------------------------------------
@@ -42,6 +97,7 @@ spec:
             readOnly: true
         source: |
           set -e
+          echo "" > /tmp/new_tag.txt
 
           mkdir -p ~/.ssh
           cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
@@ -81,10 +137,17 @@ spec:
           NEW_TAG="${TAG_PREFIX}-v${VERSION}${SUFFIX}"
           [ -z "$MESSAGE" ] && MESSAGE="${TAG_PREFIX} v${VERSION}"
 
+          # Skip if exists
+          if git tag -l "$NEW_TAG" | grep -q "$NEW_TAG"; then
+            echo "ℹ️  Tag $NEW_TAG already exists"
+            echo "$NEW_TAG" > /tmp/new_tag.txt
+            exit 0
+          fi
+
           git tag -a "$NEW_TAG" -m "$MESSAGE"
           git push origin "$NEW_TAG"
 
-          echo "✅ $NEW_TAG"
+          echo "✅ Created: $NEW_TAG"
           echo "$NEW_TAG" > /tmp/new_tag.txt
 
     # ----------------------------------------------------------------------
@@ -104,7 +167,7 @@ spec:
       volumes:
         - name: git-secret
           secret:
-            secretName: gitops-repo
+            secretName: data-registry-repo
       script:
         image: alpine/git:latest
         command: [sh]
@@ -114,6 +177,7 @@ spec:
             readOnly: true
         source: |
           set -e
+          echo "" > /tmp/latest_tag.txt
 
           mkdir -p ~/.ssh
           cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
@@ -127,51 +191,3 @@ spec:
           TAG=$(git tag -l "{{inputs.parameters.tag_prefix}}-v*" --sort=-version:refname | head -n1 || echo "")
           echo "$TAG" > /tmp/latest_tag.txt
           echo "Latest: ${TAG:-none}"
-
-    # ----------------------------------------------------------------------
-    # Commit and push changes
-    # ----------------------------------------------------------------------
-    - name: commit-and-push
-      inputs:
-        parameters:
-          - name: repo_url
-            default: "git@github.com:OpenCloudHub/data-registry.git"
-          - name: branch
-            default: "main"
-          - name: message
-            default: "chore: update data [skip ci]"
-      volumes:
-        - name: git-secret
-          secret:
-            secretName: gitops-repo
-      script:
-        image: alpine/git:latest
-        command: [sh]
-        volumeMounts:
-          - name: git-secret
-            mountPath: /mnt/secrets
-            readOnly: true
-        source: |
-          set -e
-
-          mkdir -p ~/.ssh
-          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
-          echo "" >> ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-          git clone "{{inputs.parameters.repo_url}}" /tmp/repo
-          cd /tmp/repo
-          git checkout "{{inputs.parameters.branch}}"
-
-          git config user.name "Argo Workflow"
-          git config user.email "workflow@opencloudhub.org"
-
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "{{inputs.parameters.message}}"
-            git push origin "{{inputs.parameters.branch}}"
-            echo "✅ Pushed"
-          else
-            echo "ℹ️  No changes"
-          fi
