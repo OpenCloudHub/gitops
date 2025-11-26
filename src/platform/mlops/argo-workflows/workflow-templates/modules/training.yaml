@@ -4,6 +4,7 @@ kind: WorkflowTemplate
 metadata:
   name: training-templates
   namespace: mlops
+  workflows.argoproj.io/description: 'Execute model training run on Ray.'
 spec:
   serviceAccountName: workflow-executor
 

@@ -3,6 +3,7 @@ kind: WorkflowTemplate
 metadata:
   name: git-templates
   namespace: mlops
+  workflows.argoproj.io/description: 'Git utilities for commits, pushes and tags.'
 spec:
   serviceAccountName: workflow-executor
 
