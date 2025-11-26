@@ -76,6 +76,8 @@ helmCharts:
         opencost:
           enabled: true
           metricsSource: prometheus
+          metricsTuning:
+            useDefaultAllowList: false
           opencost:
             exporter:
               defaultClusterId: "minikube"  # FIXME: change in prod

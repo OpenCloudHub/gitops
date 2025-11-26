@@ -152,6 +152,14 @@ helmCharts:
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/ray
+            - name: 'storage'
+              orgId: 1
+              folder: 'Storage'
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /var/lib/grafana/dashboards/storage
       sidecar:
         dashboards:
           enabled: true
@@ -179,7 +187,9 @@ helmCharts:
             gnetId: 22208
             datasource: Prometheus
         storage:
-
+          cnpg:
+            gnetId: 20417
+            datasource: Prometheus
         ray:
           # Ray default dashboard
           ray-default:
