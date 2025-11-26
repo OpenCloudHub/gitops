@@ -32,7 +32,7 @@ spec:
       volumes:
         - name: git-secret
           secret:
-            secretName: gitops-repo
+            secretName: data-registry-repo
       script:
         image: alpine/git:latest
         command: [sh]

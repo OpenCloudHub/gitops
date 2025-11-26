@@ -49,3 +49,39 @@ spec:
           conversionStrategy: Default
           decodingStrategy: None
           metadataPolicy: None
+---
+# src/platform/security/external-secrets/cluster-external-secrets/data-registry-repo.yaml
+apiVersion: external-secrets.io/v1
+kind: ClusterExternalSecret
+metadata:
+  name: data-registry-repo
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  externalSecretName: data-registry-repo-es
+  namespaceSelectors:
+    matchLabels:
+      opencloudhub.org/secret-gitops: "true"
+  refreshTime: 1h
+  externalSecretSpec:
+    refreshInterval: 1h
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    target:
+      name: data-registry-repo
+      creationPolicy: Owner
+      deletionPolicy: Retain
+    data:
+      - secretKey: url
+        remoteRef:
+          key: platform/gitops/repos/data-registry
+          property: url
+      - secretKey: type
+        remoteRef:
+          key: platform/gitops/repos/data-registry
+          property: type
+      - secretKey: sshPrivateKey
+        remoteRef:
+          key: platform/gitops/repos/data-registry
+          property: sshPrivateKey

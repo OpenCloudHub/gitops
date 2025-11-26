@@ -47,18 +47,35 @@ VAULT_EXTERNAL_ADDR="http://${VAULT_HOST_IP}:${VAULT_HOST_PORT}"
 
 # File paths
 SECRETS_FILE="${SCRIPT_DIR}/.env.secrets"
-SSH_KEY_FILE="${SSH_KEYS_BASE_PATH:-${HOME}/.ssh/opencloudhub}/argocd_gitops_ed25519"
+SSH_KEYS_BASE_PATH="${SSH_KEYS_BASE_PATH:-${HOME}/.ssh/opencloudhub}"
 SUMMARY_OUTPUT_DIR="${SCRIPT_DIR}/output"
 
 # Dry run mode
 DRY_RUN="${DRY_RUN:-false}"
+
+# -----------------------------------------------------------------------------
+# SSH Key Configuration for Git Repositories
+# -----------------------------------------------------------------------------
+# Format: "vault_path|env_var_for_url|ssh_key_filename"
+# - vault_path: Path in Vault (under kv/)
+# - env_var_for_url: Environment variable name containing the repo URL
+# - ssh_key_filename: Name of the SSH private key file in SSH_KEYS_BASE_PATH
+#
+GIT_REPO_SECRETS=(
+  "platform/gitops/repos/gitops|GITOPS_REPO_URL|argocd_gitops_ed25519"
+  "platform/gitops/repos/data-registry|DATA_REGISTRY_REPO_URL|argo_data_registry_ed25519"
+  # Add more repos here as needed:
+  # "ai/repos/ml-models|ML_MODELS_REPO_URL|ml_models_ed25519"
+)
 
 # =============================================================================
 # Runtime Variables (populated from .env.secrets)
 # =============================================================================
 
 VAULT_ROOT_TOKEN=""
-GITOPS_SSH_PRIVATE_KEY=""
+
+# Associative array for loaded SSH keys: [vault_path]=key_content
+declare -A SSH_KEYS
 
 # =============================================================================
 # Helper Functions
@@ -91,6 +108,7 @@ load_secrets_file() {
   local required_vars=(
     # GitOps
     "GITOPS_REPO_URL"
+    "DATA_REGISTRY_REPO_URL"
     "ARGO_WORKFLOWS_GITHUB_SERVICE_ACCOUNT_TOKEN"
     # Docker
     "DOCKERHUB_USERNAME"
@@ -153,22 +171,28 @@ load_secrets_file() {
   log_success "Loaded configuration from: $SECRETS_FILE"
 }
 
-load_ssh_key() {
-  if [[ ! -f "$SSH_KEY_FILE" ]]; then
-    log_error "SSH key not found: $SSH_KEY_FILE"
-    log_info "This key is required for ArgoCD to access the gitops repository"
-    log_info "Set SSH_KEYS_BASE_PATH in root .env or ensure key exists at default location"
+load_ssh_keys() {
+  if [[ ! -d "$SSH_KEYS_BASE_PATH" ]]; then
+    log_error "SSH keys directory not found: $SSH_KEYS_BASE_PATH"
     return 1
   fi
 
-  GITOPS_SSH_PRIVATE_KEY=$(<"$SSH_KEY_FILE")
+  for repo_config in "${GIT_REPO_SECRETS[@]}"; do
+    IFS='|' read -r vault_path url_var key_file <<< "$repo_config"
 
-  if [[ -z "$GITOPS_SSH_PRIVATE_KEY" ]]; then
-    log_error "SSH key file is empty: $SSH_KEY_FILE"
-    return 1
-  fi
+    local key_path="${SSH_KEYS_BASE_PATH}/${key_file}"
 
-  log_success "Loaded SSH key: $SSH_KEY_FILE"
+    if [[ ! -f "$key_path" ]]; then
+      log_error "SSH key not found: $key_path"
+      log_info "Required for Vault path: $vault_path"
+      return 1
+    fi
+
+    SSH_KEYS["$vault_path"]=$(<"$key_path")
+    log_debug "Loaded SSH key: $key_file"
+  done
+
+  log_success "Loaded ${#SSH_KEYS[@]} SSH keys from: $SSH_KEYS_BASE_PATH"
 }
 
 # =============================================================================
@@ -180,7 +204,7 @@ step_check_prerequisites() {
 
   validate_command_exists docker "https://docs.docker.com/get-docker/"
   load_secrets_file
-  load_ssh_key
+  load_ssh_keys  # Renamed from load_ssh_key
 
   if [[ "$DRY_RUN" == "true" ]]; then
     log_warning "DRY RUN MODE - No changes will be applied"
@@ -248,13 +272,23 @@ step_seed_secrets() {
     return 0
   fi
 
-  # ===== Platform Secrets ===== #
-  # GitOps / ArgoCD
-  log_info "Seeding GitOps secrets..."
-  vault_cmd kv put kv/platform/gitops/repos/gitops \
-    url="$GITOPS_REPO_URL" \
-    type="git" \
-    sshPrivateKey="$GITOPS_SSH_PRIVATE_KEY"
+  # ===== Git Repository Secrets ===== #
+  log_info "Seeding Git repository secrets..."
+  for repo_config in "${GIT_REPO_SECRETS[@]}"; do
+    IFS='|' read -r vault_path url_var key_file <<< "$repo_config"
+
+    local repo_url="${!url_var}"  # Indirect expansion to get URL from env var
+    local ssh_key="${SSH_KEYS[$vault_path]}"
+
+    vault_cmd kv put "kv/${vault_path}" \
+      url="$repo_url" \
+      type="git" \
+      sshPrivateKey="$ssh_key"
+
+    log_debug "Seeded: $vault_path"
+  done
+
+  # Argo Workflows GitHub token (not an SSH key, separate)
   vault_cmd kv put kv/platform/gitops/argo-workflows/github-service-account-token \
     token="$ARGO_WORKFLOWS_GITHUB_SERVICE_ACCOUNT_TOKEN"
 
