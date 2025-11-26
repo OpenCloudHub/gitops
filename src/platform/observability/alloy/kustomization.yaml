@@ -48,6 +48,24 @@ helmCharts:
         destinations:
           - loki
 
+      # Automatic annotations
+      annotationAutodiscovery:
+        enabled: true
+        destinations:
+          - prometheus
+
+      # Auto-instrumentation with Beyla (eBPF-based, zero code changes)
+      autoInstrumentation:
+        enabled: true
+        destinations:
+          - tempo
+        beyla:
+          config:
+            data:
+              attributes:
+                kubernetes:
+                  enable: true
+
       # Enable metrics collection with OpenCost integration
       clusterMetrics:
         enabled: true
