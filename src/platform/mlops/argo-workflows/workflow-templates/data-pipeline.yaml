@@ -90,9 +90,16 @@ spec:
         # 6. Run embeddings if readmes changed
         - - name: embeddings
             template: run-embeddings
+            arguments:
+              parameters:
+                - name: changed_datasets
+                  value: "{{steps.detect-changes.outputs.parameters.changed_datasets}}"
             when: "{{workflow.parameters.trigger_embeddings}} == true && {{steps.detect-changes.outputs.parameters.has_changes}} == true"
 
     - name: run-embeddings
+      inputs:
+        parameters:
+          - name: changed_datasets
       steps:
         # Check if opencloudhub-readmes is in changed datasets
         - - name: check-readmes
@@ -100,7 +107,7 @@ spec:
             arguments:
               parameters:
                 - name: datasets
-                  value: "{{workflow.outputs.parameters.changed_datasets}}"
+                  value: "{{inputs.parameters.changed_datasets}}"
                 - name: target
                   value: "opencloudhub-readmes"
 
