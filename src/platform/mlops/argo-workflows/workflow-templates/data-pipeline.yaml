@@ -9,7 +9,7 @@ spec:
   arguments:
     parameters:
       - name: pipelines
-        value: '["emotion","fashion-mnist","wine-quality","opencloudhub-readmes-download"]'
+        value: '["opencloudhub-readmes-download"]'
       - name: force
         value: "false"
       - name: bump_type
@@ -23,99 +23,176 @@ spec:
 
   entrypoint: main
 
-  volumeClaimTemplates:
-    - metadata:
-        name: workspace
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 5Gi
-
   templates:
     - name: main
       steps:
-        - - name: clone-repo
-            template: clone-repo
-        - - name: run-pipelines
-            template: run-single-pipeline
+        - - name: run-pipeline
+            template: run-pipeline
             arguments:
               parameters:
                 - name: pipeline_name
                   value: "{{item}}"
             withParam: "{{workflow.parameters.pipelines}}"
-        - - name: push-data
-            template: push-data
-        - - name: detect-changes
-            template: detect-changes
-        - - name: commit-and-tag
-            template: commit-and-tag
-            when: "{{steps.detect-changes.outputs.parameters.has_changes}} == true"
-        - - name: embeddings
-            template: run-embeddings
+
+        - - name: trigger-embeddings
+            template: trigger-embeddings
             arguments:
               parameters:
-                - name: changed_datasets
-                  value: "{{steps.detect-changes.outputs.parameters.changed_datasets}}"
-            when: "{{workflow.parameters.trigger_embeddings}} == true && {{steps.detect-changes.outputs.parameters.has_changes}} == true"
+                - name: results
+                  value: "{{steps.run-pipeline.outputs.parameters}}"
+            when: "{{workflow.parameters.trigger_embeddings}} == true"
 
-    - name: clone-repo
+    # --------------------------------------------------------------------------
+    # Single pipeline: clone, run, push, commit, tag - fully self-contained
+    # --------------------------------------------------------------------------
+    - name: run-pipeline
+      inputs:
+        parameters:
+          - name: pipeline_name
+      outputs:
+        parameters:
+          - name: dataset
+            valueFrom:
+              path: /tmp/outputs/dataset.txt
+          - name: tag
+            valueFrom:
+              path: /tmp/outputs/tag.txt
+          - name: changed
+            valueFrom:
+              path: /tmp/outputs/changed.txt
       volumes:
         - name: git-secret
           secret:
             secretName: data-registry-repo
-      script:
-        image: alpine/git:latest
-        command: [sh]
+      container:
+        image: "{{workflow.parameters.image}}"
+        command: [bash, -c]
+        args:
+          - |
+            set -e
+
+            PIPELINE="{{inputs.parameters.pipeline_name}}"
+            FORCE="{{workflow.parameters.force}}"
+            BUMP_TYPE="{{workflow.parameters.bump_type}}"
+            IS_AUTOMATED="{{workflow.parameters.is_automated}}"
+
+            # Map pipeline -> dataset
+            case "$PIPELINE" in
+              opencloudhub-readmes-download) DATASET="opencloudhub-readmes" ;;
+              *) DATASET="$PIPELINE" ;;
+            esac
+
+            # Initialize outputs
+            mkdir -p /tmp/outputs
+            echo "$DATASET" > /tmp/outputs/dataset.txt
+            echo "" > /tmp/outputs/tag.txt
+            echo "false" > /tmp/outputs/changed.txt
+
+            echo "════════════════════════════════════════════════════════════"
+            echo "🚀 Pipeline: $PIPELINE → Dataset: $DATASET"
+            echo "════════════════════════════════════════════════════════════"
+
+            # Setup SSH
+            mkdir -p ~/.ssh
+            cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+            echo "" >> ~/.ssh/id_ed25519
+            chmod 600 ~/.ssh/id_ed25519
+            ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+            # Clone
+            echo "📥 Cloning..."
+            git clone git@github.com:OpenCloudHub/data-registry.git /tmp/repo
+            cd /tmp/repo
+            git config user.name "Argo Workflow"
+            git config user.email "workflow@opencloudhub.org"
+
+            # Configure DVC
+            dvc remote modify minio endpointurl "$AWS_ENDPOINT_URL"
+            dvc remote modify minio access_key_id "$AWS_ACCESS_KEY_ID"
+            dvc remote modify minio secret_access_key "$AWS_SECRET_ACCESS_KEY"
+
+            # Hash before
+            LOCK_FILE="pipelines/${PIPELINE}/dvc.lock"
+            HASH_BEFORE="none"
+            [ -f "$LOCK_FILE" ] && HASH_BEFORE=$(md5sum "$LOCK_FILE" | cut -d' ' -f1)
+
+            # Run DVC
+            echo "🔄 Running DVC..."
+            FORCE_FLAG=""
+            [ "$FORCE" = "true" ] && FORCE_FLAG="--force" && echo "⚠️ Force mode"
+            dvc repro $FORCE_FLAG "pipelines/${PIPELINE}/dvc.yaml"
+
+            # Push data
+            echo "📤 Pushing data..."
+            dvc push
+
+            # Check if changed
+            HASH_AFTER="none"
+            [ -f "$LOCK_FILE" ] && HASH_AFTER=$(md5sum "$LOCK_FILE" | cut -d' ' -f1)
+
+            if [ "$HASH_BEFORE" = "$HASH_AFTER" ]; then
+              echo "✅ No changes"
+              exit 0
+            fi
+
+            echo "true" > /tmp/outputs/changed.txt
+            echo "📝 dvc.lock changed"
+
+            # Commit with retry
+            git add "pipelines/${PIPELINE}/"
+            git commit -m "chore(${DATASET}): update dvc.lock [skip ci]"
+
+            for attempt in 1 2 3; do
+              echo "🔄 Push attempt $attempt..."
+              if git push origin main; then
+                echo "✅ Pushed"
+                break
+              fi
+              if [ $attempt -eq 3 ]; then
+                echo "❌ Failed after 3 attempts"
+                exit 1
+              fi
+              echo "⚠️ Conflict, rebasing..."
+              git pull --rebase origin main
+            done
+
+            # Create tag
+            [ "$IS_AUTOMATED" = "true" ] && SUFFIX="-automated" || SUFFIX=""
+
+            LATEST=$(git tag -l "${DATASET}-v*" --sort=-version:refname | head -n1 || echo "")
+            if [ -z "$LATEST" ]; then
+              VERSION="1.0.0"
+            else
+              CURRENT=$(echo "$LATEST" | sed "s/${DATASET}-v//" | sed 's/-automated//')
+              MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+              MINOR=$(echo "$CURRENT" | cut -d. -f2)
+              PATCH=$(echo "$CURRENT" | cut -d. -f3)
+              case "$BUMP_TYPE" in
+                major) VERSION="$((MAJOR + 1)).0.0" ;;
+                minor) VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
+                *) VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+              esac
+            fi
+
+            NEW_TAG="${DATASET}-v${VERSION}${SUFFIX}"
+
+            if git tag -l "$NEW_TAG" | grep -q .; then
+              echo "ℹ️ Tag $NEW_TAG exists"
+              echo "$NEW_TAG" > /tmp/outputs/tag.txt
+            else
+              git tag -a "$NEW_TAG" -m "${DATASET} v${VERSION}"
+              git push origin "$NEW_TAG"
+              echo "🏷️ Created: $NEW_TAG"
+              echo "$NEW_TAG" > /tmp/outputs/tag.txt
+            fi
+
+            echo "════════════════════════════════════════════════════════════"
+            echo "✅ Complete: $NEW_TAG"
+            echo "════════════════════════════════════════════════════════════"
         volumeMounts:
-          - name: workspace
-            mountPath: /workspace
           - name: git-secret
             mountPath: /mnt/secrets
             readOnly: true
-        source: |
-          set -e
-          mkdir -p ~/.ssh
-          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
-          echo "" >> ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-          git clone git@github.com:OpenCloudHub/data-registry.git /workspace/repo
-          cd /workspace/repo
-          git config user.name "Argo Workflow"
-          git config user.email "workflow@opencloudhub.org"
-          echo "✅ Cloned to /workspace/repo"
-
-    - name: run-single-pipeline
-      inputs:
-        parameters:
-          - name: pipeline_name
-      container:
-        image: "{{workflow.parameters.image}}"
-        command: ["/bin/bash", "-c"]
-        workingDir: /workspace/repo
-        args:
-          - |
-            source /app/.venv/bin/activate
-            set -e
-
-            echo "════════════════════════════════════════════════════════════"
-            echo "🚀 Running: {{inputs.parameters.pipeline_name}}"
-            echo "════════════════════════════════════════════════════════════"
-
-            dvc remote modify minio endpointurl $AWS_ENDPOINT_URL
-            dvc remote modify minio access_key_id $AWS_ACCESS_KEY_ID
-            dvc remote modify minio secret_access_key $AWS_SECRET_ACCESS_KEY
-
-            FORCE_FLAG=""
-            [ "{{workflow.parameters.force}}" = "true" ] && FORCE_FLAG="--force" && echo "⚠️ Force mode"
-
-            dvc repro $FORCE_FLAG pipelines/{{inputs.parameters.pipeline_name}}/dvc.yaml
-            echo "✅ Complete"
-        volumeMounts:
-          - name: workspace
-            mountPath: /workspace
         env:
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
@@ -137,210 +214,56 @@ spec:
             cpu: "2"
             memory: "4Gi"
 
-    - name: push-data
-      container:
-        image: "{{workflow.parameters.image}}"
-        command: ["/bin/bash", "-c"]
-        workingDir: /workspace/repo
-        args:
-          - |
-            source /app/.venv/bin/activate
-            set -e
-            echo "📤 Pushing to MinIO..."
-            dvc remote modify minio endpointurl $AWS_ENDPOINT_URL
-            dvc remote modify minio access_key_id $AWS_ACCESS_KEY_ID
-            dvc remote modify minio secret_access_key $AWS_SECRET_ACCESS_KEY
-            dvc push
-            echo "✅ Pushed"
-        volumeMounts:
-          - name: workspace
-            mountPath: /workspace
-        env:
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: minio-tenant-secret
-                key: accesskey
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: minio-tenant-secret
-                key: secretkey
-          - name: AWS_ENDPOINT_URL
-            value: "https://minio-api.internal.opencloudhub.org"
-
-    - name: detect-changes
-      outputs:
-        parameters:
-          - name: changed_datasets
-            valueFrom:
-              path: /tmp/changed_datasets.json
-          - name: has_changes
-            valueFrom:
-              path: /tmp/has_changes.txt
-      script:
-        image: alpine/git:latest
-        command: [sh]
-        workingDir: /workspace/repo
-        volumeMounts:
-          - name: workspace
-            mountPath: /workspace
-        source: |
-          set -e
-          apk add --no-cache jq >/dev/null 2>&1
-
-          echo "[]" > /tmp/changed_datasets.json
-          echo "false" > /tmp/has_changes.txt
-
-          PIPELINE_MAP='{"opencloudhub-readmes-download":"opencloudhub-readmes"}'
-
-          echo "════════════════════════════════════════════════════════════"
-          echo "🔍 Detecting changes..."
-          echo "════════════════════════════════════════════════════════════"
-
-          GIT_STATUS=$(git status --porcelain | grep "dvc.lock" || true)
-          echo "${GIT_STATUS:-No changes}"
-
-          [ -z "$GIT_STATUS" ] && echo "ℹ️ No changes" && exit 0
-
-          echo "true" > /tmp/has_changes.txt
-
-          DATASETS="[]"
-          for f in $(echo "$GIT_STATUS" | awk '{print $2}'); do
-            PIPELINE=$(echo "$f" | cut -d'/' -f2)
-            DATASET=$(echo "$PIPELINE_MAP" | jq -r ".\"$PIPELINE\" // \"$PIPELINE\"")
-            DATASETS=$(echo "$DATASETS" | jq --arg d "$DATASET" '. + [$d] | unique')
-          done
-
-          echo "$DATASETS" > /tmp/changed_datasets.json
-          echo "📝 Changed: $DATASETS"
-
-    - name: commit-and-tag
-      outputs:
-        parameters:
-          - name: readmes_tag
-            valueFrom:
-              path: /tmp/readmes_tag.txt
-      volumes:
-        - name: git-secret
-          secret:
-            secretName: data-registry-repo
-      script:
-        image: alpine/git:latest
-        command: [sh]
-        workingDir: /workspace/repo
-        volumeMounts:
-          - name: workspace
-            mountPath: /workspace
-          - name: git-secret
-            mountPath: /mnt/secrets
-            readOnly: true
-        source: |
-          set -e
-          apk add --no-cache jq >/dev/null 2>&1
-          echo "" > /tmp/readmes_tag.txt
-
-          mkdir -p ~/.ssh
-          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
-          echo "" >> ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-          BUMP_TYPE="{{workflow.parameters.bump_type}}"
-          IS_AUTOMATED="{{workflow.parameters.is_automated}}"
-          [ "$IS_AUTOMATED" = "true" ] && SUFFIX="-automated" || SUFFIX=""
-          PIPELINE_MAP='{"opencloudhub-readmes-download":"opencloudhub-readmes"}'
-
-          echo "════════════════════════════════════════════════════════════"
-          echo "💾 Committing..."
-          echo "════════════════════════════════════════════════════════════"
-
-          CHANGED=$(git status --porcelain | grep "dvc.lock" || true)
-          git add .
-          git commit -m "chore: update data [skip ci]"
-          git push origin main
-          echo "✅ Committed"
-
-          echo ""
-          echo "🏷️ Creating tags..."
-
-          for f in $(echo "$CHANGED" | awk '{print $2}'); do
-            PIPELINE=$(echo "$f" | cut -d'/' -f2)
-            DATASET=$(echo "$PIPELINE_MAP" | jq -r ".\"$PIPELINE\" // \"$PIPELINE\"")
-
-            LATEST=$(git tag -l "${DATASET}-v*" --sort=-version:refname | head -n1 || echo "")
-
-            if [ -z "$LATEST" ]; then
-              VERSION="1.0.0"
-            else
-              CURRENT=$(echo "$LATEST" | sed "s/${DATASET}-v//" | sed 's/-automated//')
-              MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-              MINOR=$(echo "$CURRENT" | cut -d. -f2)
-              PATCH=$(echo "$CURRENT" | cut -d. -f3)
-              case "$BUMP_TYPE" in
-                major) VERSION="$((MAJOR + 1)).0.0" ;;
-                minor) VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
-                patch) VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
-              esac
-            fi
-
-            NEW_TAG="${DATASET}-v${VERSION}${SUFFIX}"
-
-            if git tag -l "$NEW_TAG" | grep -q .; then
-              echo "ℹ️ $NEW_TAG exists"
-            else
-              git tag -a "$NEW_TAG" -m "${DATASET} v${VERSION}"
-              git push origin "$NEW_TAG"
-              echo "✅ $NEW_TAG"
-            fi
-
-            [ "$DATASET" = "opencloudhub-readmes" ] && echo "$NEW_TAG" > /tmp/readmes_tag.txt
-          done
-
-    - name: run-embeddings
+    # --------------------------------------------------------------------------
+    # Trigger embeddings if opencloudhub-readmes changed
+    # --------------------------------------------------------------------------
+    - name: trigger-embeddings
       inputs:
         parameters:
-          - name: changed_datasets
+          - name: results
       steps:
-        - - name: check
-            template: contains-dataset
+        - - name: extract-tag
+            template: extract-readmes-tag
             arguments:
               parameters:
-                - name: datasets
-                  value: "{{inputs.parameters.changed_datasets}}"
-                - name: target
-                  value: "opencloudhub-readmes"
-        - - name: get-tag
-            templateRef:
-              name: git-templates
-              template: get-latest-tag
-            arguments:
-              parameters:
-                - name: tag_prefix
-                  value: "opencloudhub-readmes"
-            when: "{{steps.check.outputs.result}} == true"
-        - - name: run
+                - name: results
+                  value: "{{inputs.parameters.results}}"
+        - - name: run-embeddings
             templateRef:
               name: embeddings-pipeline
               template: main
             arguments:
               parameters:
                 - name: data_version
-                  value: "{{steps.get-tag.outputs.parameters.latest_tag}}"
+                  value: "{{steps.extract-tag.outputs.parameters.tag}}"
                 - name: compute_type
                   value: "cpu-small"
                 - name: image
                   value: "{{workflow.parameters.image}}"
-            when: "{{steps.check.outputs.result}} == true"
+            when: "'{{steps.extract-tag.outputs.parameters.tag}}' != ''"
 
-    - name: contains-dataset
+    - name: extract-readmes-tag
       inputs:
         parameters:
-          - name: datasets
-          - name: target
+          - name: results
+      outputs:
+        parameters:
+          - name: tag
+            valueFrom:
+              path: /tmp/tag.txt
       script:
         image: alpine:latest
         command: [sh]
         source: |
           apk add --no-cache jq >/dev/null 2>&1
-          echo '{{inputs.parameters.datasets}}' | jq -e 'index("{{inputs.parameters.target}}") != null' >/dev/null && echo -n "true" || echo -n "false"
+          echo "" > /tmp/tag.txt
+
+          RESULTS='{{inputs.parameters.results}}'
+          TAG=$(echo "$RESULTS" | jq -r '.[] | select(.dataset == "opencloudhub-readmes" and .changed == "true") | .tag' 2>/dev/null | head -1 || echo "")
+
+          if [ -n "$TAG" ] && [ "$TAG" != "null" ]; then
+            echo "$TAG" > /tmp/tag.txt
+            echo "🎯 Found: $TAG"
+          else
+            echo "ℹ️ No readmes changes"
+          fi
