@@ -1,0 +1,101 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: data-templates
+  namespace: mlops
+  annotations:
+    workflows.argoproj.io/description: "Reusable templates for DVC data pipeline operations"
+spec:
+  serviceAccountName: workflow-executor
+
+  templates:
+    # ----------------------------------------------------------------------
+    # Run a single DVC pipeline
+    # ----------------------------------------------------------------------
+    - name: run-dvc-pipeline
+      inputs:
+        parameters:
+          - name: pipeline_name
+          - name: image
+            default: "opencloudhuborg/data-registry-pipelines:latest"
+      container:
+        image: "{{inputs.parameters.image}}"
+        command: ["bash", "-c"]
+        args:
+          - |
+            set -e
+            echo "════════════════════════════════════════════════════════════"
+            echo "🚀 Running DVC pipeline: {{inputs.parameters.pipeline_name}}"
+            echo "════════════════════════════════════════════════════════════"
+
+            dvc remote modify minio endpointurl $AWS_ENDPOINT_URL
+            dvc remote modify minio access_key_id $AWS_ACCESS_KEY_ID
+            dvc remote modify minio secret_access_key $AWS_SECRET_ACCESS_KEY
+
+            dvc repro pipelines/{{inputs.parameters.pipeline_name}}/dvc.yaml
+
+            echo "✅ Pipeline {{inputs.parameters.pipeline_name}} complete"
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: accesskey
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: secretkey
+          - name: AWS_ENDPOINT_URL
+            value: "https://minio-api.internal.opencloudhub.org"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+
+    # ----------------------------------------------------------------------
+    # Push data to DVC remote
+    # ----------------------------------------------------------------------
+    - name: dvc-push
+      inputs:
+        parameters:
+          - name: image
+            default: "opencloudhuborg/data-registry-pipelines:latest"
+      container:
+        image: "{{inputs.parameters.image}}"
+        command: ["bash", "-c"]
+        args:
+          - |
+            set -e
+            echo "📤 Pushing data to remote storage..."
+
+            dvc remote modify minio endpointurl $AWS_ENDPOINT_URL
+            dvc remote modify minio access_key_id $AWS_ACCESS_KEY_ID
+            dvc remote modify minio secret_access_key $AWS_SECRET_ACCESS_KEY
+
+            dvc push
+
+            echo "✅ Data pushed to MinIO"
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: accesskey
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: secretkey
+          - name: AWS_ENDPOINT_URL
+            value: "https://minio-api.internal.opencloudhub.org"
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"

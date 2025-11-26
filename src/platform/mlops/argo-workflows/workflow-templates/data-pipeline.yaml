@@ -1,0 +1,128 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: data-pipeline
+  namespace: mlops
+spec:
+  serviceAccountName: workflow-executor
+
+  arguments:
+    parameters:
+      - name: pipelines
+        value: '["emotion","fashion-mnist","wine-quality","opencloudhub-readmes-download"]'
+      - name: bump_type
+        value: "patch"
+      - name: is_automated
+        value: "false"
+      - name: trigger_embeddings
+        value: "true"
+      - name: image
+        value: "opencloudhuborg/data-registry-pipelines:latest"
+
+  entrypoint: main
+
+  templates:
+    - name: main
+      steps:
+        # 1. Run pipelines
+        - - name: run-pipelines
+            templateRef:
+              name: data-templates
+              template: run-dvc-pipeline
+            arguments:
+              parameters:
+                - name: pipeline_name
+                  value: "{{item}}"
+                - name: image
+                  value: "{{workflow.parameters.image}}"
+            withParam: "{{workflow.parameters.pipelines}}"
+
+        # 2. Push to remote
+        - - name: push-data
+            templateRef:
+              name: data-templates
+              template: dvc-push
+            arguments:
+              parameters:
+                - name: image
+                  value: "{{workflow.parameters.image}}"
+
+        # 3. Commit dvc.lock changes
+        - - name: commit
+            templateRef:
+              name: git-templates
+              template: commit-and-push
+
+        # 4. Create tags for datasets that were run
+        - - name: create-tags
+            template: create-dataset-tags
+
+        # 5. Trigger embeddings if enabled and readmes was run
+        - - name: embeddings
+            template: maybe-run-embeddings
+
+    - name: create-dataset-tags
+      steps:
+        - - name: tag
+            templateRef:
+              name: git-templates
+              template: create-tag
+            arguments:
+              parameters:
+                - name: tag_prefix
+                  value: "{{item.dataset}}"
+                - name: bump_type
+                  value: "{{workflow.parameters.bump_type}}"
+                - name: is_automated
+                  value: "{{workflow.parameters.is_automated}}"
+            withItems:
+              - { dataset: "emotion" }
+              - { dataset: "fashion-mnist" }
+              - { dataset: "wine-quality" }
+              - { dataset: "opencloudhub-readmes" }
+
+    - name: maybe-run-embeddings
+      steps:
+        # Check if readmes pipeline was requested
+        - - name: check
+            template: contains-pipeline
+            arguments:
+              parameters:
+                - name: pipelines
+                  value: "{{workflow.parameters.pipelines}}"
+                - name: target
+                  value: "opencloudhub-readmes-download"
+
+        # Get the tag we just created
+        - - name: get-tag
+            templateRef:
+              name: git-templates
+              template: get-latest-tag
+            arguments:
+              parameters:
+                - name: tag_prefix
+                  value: "opencloudhub-readmes"
+            when: "{{steps.check.outputs.result}} == true && {{workflow.parameters.trigger_embeddings}} == true"
+
+        # Run embeddings
+        - - name: run
+            templateRef:
+              name: embeddings-pipeline
+              template: main
+            arguments:
+              parameters:
+                - name: data_version
+                  value: "{{steps.get-tag.outputs.parameters.latest_tag}}"
+            when: "{{steps.check.outputs.result}} == true && {{workflow.parameters.trigger_embeddings}} == true"
+
+    - name: contains-pipeline
+      inputs:
+        parameters:
+          - name: pipelines
+          - name: target
+      script:
+        image: alpine:latest
+        command: [sh]
+        source: |
+          apk add --no-cache jq >/dev/null 2>&1
+          echo '{{inputs.parameters.pipelines}}' | jq -e 'index("{{inputs.parameters.target}}") != null' >/dev/null && echo -n "true" || echo -n "false"
