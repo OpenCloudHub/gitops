@@ -131,6 +131,8 @@ spec:
           - name: workspace
             mountPath: /workspace
         env:
+          - name: PATH
+            value: "/app/.venv/bin:/usr/local/bin:/usr/bin:/bin"
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -172,6 +174,8 @@ spec:
           - name: workspace
             mountPath: /workspace
         env:
+          - name: PATH
+            value: "/app/.venv/bin:/usr/local/bin:/usr/bin:/bin"
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -211,6 +215,9 @@ spec:
         volumeMounts:
           - name: workspace
             mountPath: /workspace
+        env:
+        - name: PATH
+          value: "/app/.venv/bin:/usr/local/bin:/usr/bin:/bin"
         source: |
           set -e
 
