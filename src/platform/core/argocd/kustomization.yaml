@@ -5,7 +5,7 @@ namespace: argocd
 # - https://github.com/argoproj-labs/argocd-extensions/manifests
 resources:
 - base/
-- external-secrets.yaml
+#- external-secrets.yaml
 - http-route.yaml
 - service-monitors.yaml
 - root-app-meta.yaml

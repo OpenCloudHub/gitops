@@ -1,0 +1,79 @@
+apiVersion: external-secrets.io/v1
+kind: ClusterExternalSecret
+metadata:
+  name: mlflow-db-user
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  externalSecretName: mlflow-db-user-es
+  refreshTime: 1h
+  namespaceSelectors:
+    - matchLabels:
+        opencloudhub.org/secret-mlflow-db: "true"
+  externalSecretSpec:
+    refreshInterval: 1h
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    target:
+      name: mlflow-db-user
+      creationPolicy: Owner
+      deletionPolicy: Retain
+      template:
+        type: kubernetes.io/basic-auth
+        metadata:
+          labels:
+            app: mlflow-db-cluster
+            cnpg.io/reload: "true"
+        data:
+          username: "{{ .username }}"
+          password: "{{ .password }}"
+    data:
+      - secretKey: username
+        remoteRef:
+          key: ai/storage/cnpg/mlflow
+          property: username
+      - secretKey: password
+        remoteRef:
+          key: ai/storage/cnpg/mlflow
+          property: password
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterExternalSecret
+metadata:
+  name: demo-app-db-user
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  externalSecretName: demo-app-db-user-es
+  refreshTime: 1h
+  namespaceSelectors:
+    - matchLabels:
+        opencloudhub.org/secret-demo-app-db: "true"
+  externalSecretSpec:
+    refreshInterval: 1h
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    target:
+      name: demo-app-db-user
+      creationPolicy: Owner
+      deletionPolicy: Retain
+      template:
+        type: kubernetes.io/basic-auth
+        metadata:
+          labels:
+            app: demo-app-db-cluster
+            cnpg.io/reload: "true"
+        data:
+          username: "{{ .username }}"
+          password: "{{ .password }}"
+    data:
+      - secretKey: username
+        remoteRef:
+          key: demo-app/storage/cnpg/demo-app
+          property: username
+      - secretKey: password
+        remoteRef:
+          key: demo-app/storage/cnpg/demo-app
+          property: password

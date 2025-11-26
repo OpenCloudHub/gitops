@@ -3,6 +3,6 @@ kind: Kustomization
 namespace: models
 
 resources:
-  - external-secrets.yaml
+  #- external-secrets.yaml
   - wine-classifier-service.yaml
   - fashion-mnist-classifier-service.yaml

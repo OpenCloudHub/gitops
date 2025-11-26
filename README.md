@@ -63,17 +63,7 @@
 
 <!-- GETTING STARTED -->
 
-# TODO: mlflow not coming up automaticallyd
-
-# TODO: Ray grafan connection
-
-# TODO: metrics in grafan for ray
-
-# TODO: start dev /etc/hosts doesn't work
-
-# TODO: follow issues with fedora and nvkind: https://github.com/NVIDIA/nvkind/issues/57
-
-# TODO: make argo workflow run in different namespace than ai team to isolate rights and secrets etc
+# TODO: use cluster external secrets
 
 <h2 id="getting-started">🚀 Getting Started</h2>
 

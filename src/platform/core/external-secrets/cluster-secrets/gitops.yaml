@@ -1,0 +1,42 @@
+apiVersion: external-secrets.io/v1
+kind: ClusterExternalSecret
+metadata:
+  name: gitops-repo
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  externalSecretName: gitops-repo-es
+  refreshTime: 1h
+  namespaceSelectors:
+    - matchLabels:
+        opencloudhub.org/secret-gitops: "true"
+  externalSecretSpec:
+    refreshInterval: 1h
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    target:
+      name: gitops-repo
+      creationPolicy: Owner
+      deletionPolicy: Retain
+      template:
+        metadata:
+          labels:
+            argocd.argoproj.io/secret-type: repository
+        data:
+          url: "{{ .url }}"
+          type: "{{ .type }}"
+          sshPrivateKey: "{{ .sshPrivateKey }}"
+    data:
+      - secretKey: url
+        remoteRef:
+          key: platform/gitops/repos/gitops
+          property: url
+      - secretKey: type
+        remoteRef:
+          key: platform/gitops/repos/gitops
+          property: type
+      - secretKey: sshPrivateKey
+        remoteRef:
+          key: platform/gitops/repos/gitops
+          property: sshPrivateKey

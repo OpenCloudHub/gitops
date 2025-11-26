@@ -1,0 +1,34 @@
+apiVersion: external-secrets.io/v1
+kind: ClusterExternalSecret
+metadata:
+  name: grafana-admin-secret
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  externalSecretName: grafana-admin-es
+  refreshTime: 1h
+  namespaceSelectors:
+    - matchLabels:
+        opencloudhub.org/secret-grafana: "true"
+  externalSecretSpec:
+    refreshInterval: 1h
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    target:
+      name: grafana-admin-secret
+      creationPolicy: Owner
+      deletionPolicy: Retain
+      template:
+        data:
+          admin-user: "{{ .username }}"
+          admin-password: "{{ .password }}"
+    data:
+      - secretKey: username
+        remoteRef:
+          key: platform/observability/grafana/credentials
+          property: username
+      - secretKey: password
+        remoteRef:
+          key: platform/observability/grafana/credentials
+          property: password

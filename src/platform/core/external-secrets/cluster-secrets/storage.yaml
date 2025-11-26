@@ -1,0 +1,102 @@
+apiVersion: external-secrets.io/v1
+kind: ClusterExternalSecret
+metadata:
+  name: minio-tenant-secret
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  externalSecretName: minio-tenant-secret-es
+  refreshTime: 1h
+  namespaceSelectors:
+    - matchLabels:
+        opencloudhub.org/secret-minio: "true"
+  externalSecretSpec:
+    refreshInterval: 1h
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    target:
+      name: minio-tenant-secret
+      creationPolicy: Owner
+      deletionPolicy: Retain
+      template:
+        data:
+          accesskey: "{{ .accesskey }}"
+          secretkey: "{{ .secretkey }}"
+    data:
+      - secretKey: accesskey
+        remoteRef:
+          key: platform/storage/minio-tenant/credentials
+          property: accesskey
+      - secretKey: secretkey
+        remoteRef:
+          key: platform/storage/minio-tenant/credentials
+          property: secretkey
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterExternalSecret
+metadata:
+  name: pgadmin-admin-secret
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  externalSecretName: pgadmin-admin-es
+  refreshTime: 1h
+  namespaceSelectors:
+    - matchLabels:
+        opencloudhub.org/secret-pgadmin: "true"
+  externalSecretSpec:
+    refreshInterval: 1h
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    target:
+      name: pgadmin-admin-secret
+      creationPolicy: Owner
+      deletionPolicy: Retain
+      template:
+        data:
+          password: "{{ .password }}"
+    data:
+      - secretKey: password
+        remoteRef:
+          key: platform/storage/pgadmin/credentials
+          property: password
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterExternalSecret
+metadata:
+  name: dvc-config
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  externalSecretName: dvc-config-es
+  refreshTime: 1h
+  namespaceSelectors:
+    - matchLabels:
+        opencloudhub.org/secret-dvc: "true"
+  externalSecretSpec:
+    refreshInterval: 1h
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    target:
+      name: dvc-config
+      creationPolicy: Owner
+      deletionPolicy: Retain
+      template:
+        engineVersion: v2
+        data:
+          config: |
+            ['remote "minio"']
+                access_key_id = {{ .accesskey }}
+                secret_access_key = {{ .secretkey }}
+    data:
+      - secretKey: accesskey
+        remoteRef:
+          key: platform/storage/minio-tenant/credentials
+          property: accesskey
+      - secretKey: secretkey
+        remoteRef:
+          key: platform/storage/minio-tenant/credentials
+          property: secretkey

@@ -3,8 +3,8 @@ kind: Kustomization
 namespace: observability
 
 
-resources:
-  - external-secrets.yaml
+# resources:
+  #- external-secrets.yaml
 
 
 helmCharts:

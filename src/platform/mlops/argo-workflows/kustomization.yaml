@@ -6,7 +6,7 @@ namespace: mlops
 resources:
 - https://github.com/argoproj/argo-workflows/releases/download/v3.7.3/namespace-install.yaml
 - http-route.yaml
-- external-secrets.yaml
+#- external-secrets.yaml
 - workflow-templates
 - artifact-repository-config.yaml
 - workflow-executor.yaml
