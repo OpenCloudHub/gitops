@@ -110,11 +110,33 @@ spec:
               headGroupSpec:
                 rayStartParams:
                   dashboard-host: "0.0.0.0"
+                  num-cpus: "0"
                 template:
                   spec:
                     containers:
                       - name: ray-head
                         image: ${IMAGE}
+                        ports:
+                          - containerPort: 6379
+                            name: gcs
+                          - containerPort: 8265
+                            name: dashboard
+                          - containerPort: 10001
+                            name: client
+                        livenessProbe:
+                          exec:
+                            command: ["ray", "status"]
+                          initialDelaySeconds: 30
+                          periodSeconds: 10
+                          timeoutSeconds: 10
+                          failureThreshold: 12
+                        readinessProbe:
+                          exec:
+                            command: ["ray", "status"]
+                          initialDelaySeconds: 10
+                          periodSeconds: 5
+                          timeoutSeconds: 5
+                          failureThreshold: 12
                         resources:
                           requests:
                             cpu: "{{inputs.parameters.cpu_request}}"
@@ -153,6 +175,20 @@ spec:
                       containers:
                         - name: ray-worker
                           image: ${IMAGE}
+                          livenessProbe:
+                            exec:
+                              command: ["ray", "status"]
+                            initialDelaySeconds: 30
+                            periodSeconds: 10
+                            timeoutSeconds: 10
+                            failureThreshold: 12
+                          readinessProbe:
+                            exec:
+                              command: ["ray", "status"]
+                            initialDelaySeconds: 10
+                            periodSeconds: 5
+                            timeoutSeconds: 5
+                            failureThreshold: 12
                           resources:
                             requests:
                               cpu: "{{inputs.parameters.cpu_request}}"
