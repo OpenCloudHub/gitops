@@ -37,7 +37,13 @@ spec:
         remoteRef:
           key: platform/docker/registry
           property: username
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
       - secretKey: password
         remoteRef:
           key: platform/docker/registry
           property: password
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None

@@ -33,6 +33,9 @@ spec:
         remoteRef:
           key: ai/storage/cnpg/mlflow
           property: username
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
       - secretKey: password
         remoteRef:
           key: ai/storage/cnpg/mlflow
@@ -73,7 +76,13 @@ spec:
         remoteRef:
           key: demo-app/storage/cnpg/demo-app
           property: username
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
       - secretKey: password
         remoteRef:
           key: demo-app/storage/cnpg/demo-app
           property: password
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None

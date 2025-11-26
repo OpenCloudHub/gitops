@@ -28,7 +28,13 @@ spec:
         remoteRef:
           key: platform/observability/grafana/credentials
           property: username
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
       - secretKey: password
         remoteRef:
           key: platform/observability/grafana/credentials
           property: password
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None

@@ -28,10 +28,16 @@ spec:
         remoteRef:
           key: platform/storage/minio-tenant/credentials
           property: accesskey
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
       - secretKey: secretkey
         remoteRef:
           key: platform/storage/minio-tenant/credentials
           property: secretkey
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
 ---
 apiVersion: external-secrets.io/v1
 kind: ClusterExternalSecret
@@ -62,6 +68,9 @@ spec:
         remoteRef:
           key: platform/storage/pgadmin/credentials
           property: password
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
 ---
 apiVersion: external-secrets.io/v1
 kind: ClusterExternalSecret
@@ -96,7 +105,13 @@ spec:
         remoteRef:
           key: platform/storage/minio-tenant/credentials
           property: accesskey
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
       - secretKey: secretkey
         remoteRef:
           key: platform/storage/minio-tenant/credentials
           property: secretkey
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
