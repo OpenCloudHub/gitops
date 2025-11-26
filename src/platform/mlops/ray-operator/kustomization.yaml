@@ -26,3 +26,7 @@ helmCharts:
     repo: https://ray-project.github.io/kuberay-helm/
     namespace: mlops
     includeCRDs: true
+    valuesInline:
+      security: null  # Disable security proxy
+      cors:
+        allowOrigin: "*"
