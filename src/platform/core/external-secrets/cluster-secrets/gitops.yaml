@@ -50,7 +50,6 @@ spec:
           decodingStrategy: None
           metadataPolicy: None
 ---
-# src/platform/security/external-secrets/cluster-external-secrets/data-registry-repo.yaml
 apiVersion: external-secrets.io/v1
 kind: ClusterExternalSecret
 metadata:
@@ -60,8 +59,8 @@ metadata:
 spec:
   externalSecretName: data-registry-repo-es
   namespaceSelectors:
-    matchLabels:
-      opencloudhub.org/secret-gitops: "true"
+    - matchLabels:
+        opencloudhub.org/secret-gitops: "true"
   refreshTime: 1h
   externalSecretSpec:
     refreshInterval: 1h
@@ -77,11 +76,20 @@ spec:
         remoteRef:
           key: platform/gitops/repos/data-registry
           property: url
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
       - secretKey: type
         remoteRef:
           key: platform/gitops/repos/data-registry
           property: type
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
       - secretKey: sshPrivateKey
         remoteRef:
           key: platform/gitops/repos/data-registry
           property: sshPrivateKey
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
