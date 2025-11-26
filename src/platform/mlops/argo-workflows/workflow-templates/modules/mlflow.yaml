@@ -3,7 +3,8 @@ kind: WorkflowTemplate
 metadata:
   name: mlflow-templates
   namespace: mlops
-  workflows.argoproj.io/description: 'Templates to interact with MLflow.'
+  annotations:
+    workflows.argoproj.io/description: 'Templates to interact with MLflow.'
 spec:
   templates:
   - name: compare-and-promote-staging

@@ -4,7 +4,8 @@ kind: WorkflowTemplate
 metadata:
   name: deployment-templates
   namespace: mlops
-  workflows.argoproj.io/description: 'Templates for model deployment.'
+  annotations:
+    workflows.argoproj.io/description: 'Templates for model deployment.'
 spec:
   serviceAccountName: workflow-executor
 

@@ -3,7 +3,8 @@ kind: WorkflowTemplate
 metadata:
   name: embeddings-pipeline
   namespace: mlops
-  workflows.argoproj.io/description: 'Use Ray Data to create embeddings for Readmes and store them in pgvector.'
+  annotations:
+    workflows.argoproj.io/description: 'Use Ray Data to create embeddings for Readmes and store them in pgvector.'
 spec:
   serviceAccountName: workflow-executor
 

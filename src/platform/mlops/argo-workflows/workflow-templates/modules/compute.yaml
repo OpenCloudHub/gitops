@@ -3,7 +3,8 @@ kind: WorkflowTemplate
 metadata:
   name: compute-templates
   namespace: mlops
-  workflows.argoproj.io/description: 'Map compute resource configs.'
+  annotations:
+    workflows.argoproj.io/description: 'Map compute resource configs.'
 spec:
   templates:
   - name: map-compute-config
