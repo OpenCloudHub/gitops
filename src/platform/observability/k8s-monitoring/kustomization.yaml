@@ -97,16 +97,16 @@ helmCharts:
               createConfigmap: true
               provider: custom
               costModel:
-                description: Modified pricing configuration for local development.
-                CPU: 1.25
-                spotCPU: 0.006655
-                RAM: 0.50
-                spotRAM: 0.000892
-                GPU: 0.95
-                storage: 0.25
+                description: AWS us-east-1 equivalent pricing
+                CPU: 0.048        # ~AWS m5 per vCPU/hr
+                spotCPU: 0.015
+                RAM: 0.006        # per GB/hr
+                spotRAM: 0.002
+                GPU: 1.00         # ~A10G equivalent/hr
+                storage: 0.00014  # ~EBS gp3 per GB/hr
                 zoneNetworkEgress: 0.01
-                regionNetworkEgress: 0.01
-                internetNetworkEgress: 0.12
+                regionNetworkEgress: 0.02
+                internetNetworkEgress: 0.09
 
       # Enable Prometheus Operator Objects
       prometheusOperatorObjects:
