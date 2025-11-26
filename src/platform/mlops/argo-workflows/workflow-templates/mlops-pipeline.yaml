@@ -128,7 +128,7 @@ spec:
         template: approval-gate
         when: "{{workflow.parameters.approval_mode}} == manual && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
 
-    # Phase 6: Promote to production (only if tests passed)
+    # Phase 6: Promote to production (only if promoted and tests passed)
     - - name: promote-production
         templateRef:
           name: mlflow-templates
@@ -141,7 +141,7 @@ spec:
             value: "{{steps.compare-promote-staging.outputs.parameters.staging_version}}"
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
-        when: "({{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approve}}' == 'YES') && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
+        when: "'{{steps.compare-promote-staging.outputs.parameters.promoted}}' == 'true' && ({{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approve}}' == 'YES') && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
 
     # Phase 7: Deploy to production (atomic: GitOps + MLflow tagging)
     - - name: deploy-to-production
