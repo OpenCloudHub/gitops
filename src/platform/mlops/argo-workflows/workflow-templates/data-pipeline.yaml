@@ -38,11 +38,8 @@ spec:
   templates:
     - name: main
       steps:
-        # 1. Clone repo to shared workspace
         - - name: clone-repo
             template: clone-repo
-
-        # 2. Run pipelines in parallel (all use shared workspace)
         - - name: run-pipelines
             template: run-single-pipeline
             arguments:
@@ -50,21 +47,13 @@ spec:
                 - name: pipeline_name
                   value: "{{item}}"
             withParam: "{{workflow.parameters.pipelines}}"
-
-        # 3. Push to remote
         - - name: push-data
             template: push-data
-
-        # 4. Detect changes with dvc diff
         - - name: detect-changes
             template: detect-changes
-
-        # 5. Commit and tag if changes
         - - name: commit-and-tag
             template: commit-and-tag
             when: "{{steps.detect-changes.outputs.parameters.has_changes}} == true"
-
-        # 6. Run embeddings if readmes changed
         - - name: embeddings
             template: run-embeddings
             arguments:
@@ -74,16 +63,9 @@ spec:
             when: "{{workflow.parameters.trigger_embeddings}} == true && {{steps.detect-changes.outputs.parameters.has_changes}} == true"
 
     # ----------------------------------------------------------------------
-    # Clone repo to shared workspace
+    # Clone repo - just volumeMounts, no volumes declaration
     # ----------------------------------------------------------------------
     - name: clone-repo
-      volumes:
-        - name: workspace
-          persistentVolumeClaim:
-            claimName: workspace
-        - name: git-secret
-          secret:
-            secretName: data-registry-repo
       script:
         image: alpine/git:latest
         command: [sh]
@@ -110,18 +92,18 @@ spec:
           git config user.email "workflow@opencloudhub.org"
 
           echo "✅ Repository cloned to /workspace/repo"
+      volumes:
+        - name: git-secret
+          secret:
+            secretName: data-registry-repo
 
     # ----------------------------------------------------------------------
-    # Run single DVC pipeline (uses shared workspace)
+    # Run single pipeline
     # ----------------------------------------------------------------------
     - name: run-single-pipeline
       inputs:
         parameters:
           - name: pipeline_name
-      volumes:
-        - name: workspace
-          persistentVolumeClaim:
-            claimName: workspace
       container:
         image: "{{workflow.parameters.image}}"
         command: ["bash", "-c"]
@@ -170,13 +152,9 @@ spec:
             memory: "4Gi"
 
     # ----------------------------------------------------------------------
-    # Push data to DVC remote
+    # Push data
     # ----------------------------------------------------------------------
     - name: push-data
-      volumes:
-        - name: workspace
-          persistentVolumeClaim:
-            claimName: workspace
       container:
         image: "{{workflow.parameters.image}}"
         command: ["bash", "-c"]
@@ -215,7 +193,7 @@ spec:
             memory: "1Gi"
 
     # ----------------------------------------------------------------------
-    # Detect changes using dvc diff
+    # Detect changes
     # ----------------------------------------------------------------------
     - name: detect-changes
       outputs:
@@ -226,10 +204,6 @@ spec:
           - name: has_changes
             valueFrom:
               path: /tmp/has_changes.txt
-      volumes:
-        - name: workspace
-          persistentVolumeClaim:
-            claimName: workspace
       script:
         image: "{{workflow.parameters.image}}"
         command: [bash]
@@ -249,14 +223,7 @@ spec:
           echo "🔍 Detecting DVC changes..."
           echo "════════════════════════════════════════════════════════════"
 
-          # Use dvc diff to detect changes
-          DVC_DIFF=$(dvc diff --json 2>/dev/null || echo '{"added":[],"deleted":[],"modified":[]}')
-          echo "DVC diff output:"
-          echo "$DVC_DIFF" | jq .
-
-          # Also check git status for dvc.lock changes
           GIT_STATUS=$(git status --porcelain | grep "dvc.lock" || true)
-          echo ""
           echo "Git status (dvc.lock files):"
           echo "${GIT_STATUS:-No changes}"
 
@@ -268,7 +235,6 @@ spec:
 
           echo "true" > /tmp/has_changes.txt
 
-          # Extract changed datasets from dvc.lock paths
           DATASETS="[]"
           for lock_file in $(echo "$GIT_STATUS" | awk '{print $2}'); do
             PIPELINE=$(echo "$lock_file" | cut -d'/' -f2)
@@ -284,7 +250,7 @@ spec:
           echo "════════════════════════════════════════════════════════════"
 
     # ----------------------------------------------------------------------
-    # Commit and tag changes
+    # Commit and tag
     # ----------------------------------------------------------------------
     - name: commit-and-tag
       outputs:
@@ -293,9 +259,6 @@ spec:
             valueFrom:
               path: /tmp/readmes_tag.txt
       volumes:
-        - name: workspace
-          persistentVolumeClaim:
-            claimName: workspace
         - name: git-secret
           secret:
             secretName: data-registry-repo
@@ -330,7 +293,6 @@ spec:
           echo "📝 Committing changes..."
           echo "════════════════════════════════════════════════════════════"
 
-          # Get changed lock files before committing
           CHANGED=$(git status --porcelain | grep "dvc.lock" || true)
 
           git add .
@@ -366,7 +328,6 @@ spec:
 
             NEW_TAG="${DATASET}-v${VERSION}${SUFFIX}"
 
-            # Skip if exists
             if git tag -l "$NEW_TAG" | grep -q "$NEW_TAG"; then
               echo "ℹ️  Tag $NEW_TAG already exists"
             else
@@ -381,12 +342,10 @@ spec:
           done
 
           echo ""
-          echo "════════════════════════════════════════════════════════════"
           echo "✅ All done!"
-          echo "════════════════════════════════════════════════════════════"
 
     # ----------------------------------------------------------------------
-    # Run embeddings sub-workflow
+    # Run embeddings
     # ----------------------------------------------------------------------
     - name: run-embeddings
       inputs:
@@ -427,7 +386,7 @@ spec:
             when: "{{steps.check-readmes.outputs.result}} == true"
 
     # ----------------------------------------------------------------------
-    # Helper: check if dataset in list
+    # Helper
     # ----------------------------------------------------------------------
     - name: contains-dataset
       inputs:
