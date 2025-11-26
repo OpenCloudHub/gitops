@@ -26,65 +26,42 @@ spec:
 
   entrypoint: main
 
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+
   templates:
     - name: main
       steps:
-        # 1. Run pipelines in parallel
+        # 1. Clone repo to shared workspace
+        - - name: clone-repo
+            template: clone-repo
+
+        # 2. Run pipelines in parallel (all use shared workspace)
         - - name: run-pipelines
-            templateRef:
-              name: data-templates
-              template: run-dvc-pipeline
+            template: run-single-pipeline
             arguments:
               parameters:
                 - name: pipeline_name
                   value: "{{item}}"
-                - name: image
-                  value: "{{workflow.parameters.image}}"
-                - name: force
-                  value: "{{workflow.parameters.force}}"
             withParam: "{{workflow.parameters.pipelines}}"
 
-        # 2. Push to remote
+        # 3. Push to remote
         - - name: push-data
-            templateRef:
-              name: data-templates
-              template: dvc-push
-            arguments:
-              parameters:
-                - name: image
-                  value: "{{workflow.parameters.image}}"
+            template: push-data
 
-        # 3. Detect changes
+        # 4. Detect changes with dvc diff
         - - name: detect-changes
-            templateRef:
-              name: data-templates
-              template: detect-dvc-changes
+            template: detect-changes
 
-        # 4. Commit if changes
-        - - name: commit
-            templateRef:
-              name: git-templates
-              template: commit-and-push
-            arguments:
-              parameters:
-                - name: message
-                  value: "chore: update data [skip ci]"
-            when: "{{steps.detect-changes.outputs.parameters.has_changes}} == true"
-
-        # 5. Create tags for changed datasets
-        - - name: create-tags
-            templateRef:
-              name: git-templates
-              template: create-tag
-            arguments:
-              parameters:
-                - name: tag_prefix
-                  value: "{{item}}"
-                - name: bump_type
-                  value: "{{workflow.parameters.bump_type}}"
-                - name: is_automated
-                  value: "{{workflow.parameters.is_automated}}"
-            withParam: "{{steps.detect-changes.outputs.parameters.changed_datasets}}"
+        # 5. Commit and tag if changes
+        - - name: commit-and-tag
+            template: commit-and-tag
             when: "{{steps.detect-changes.outputs.parameters.has_changes}} == true"
 
         # 6. Run embeddings if readmes changed
@@ -96,12 +73,326 @@ spec:
                   value: "{{steps.detect-changes.outputs.parameters.changed_datasets}}"
             when: "{{workflow.parameters.trigger_embeddings}} == true && {{steps.detect-changes.outputs.parameters.has_changes}} == true"
 
+    # ----------------------------------------------------------------------
+    # Clone repo to shared workspace
+    # ----------------------------------------------------------------------
+    - name: clone-repo
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: workspace
+        - name: git-secret
+          secret:
+            secretName: data-registry-repo
+      script:
+        image: alpine/git:latest
+        command: [sh]
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: git-secret
+            mountPath: /mnt/secrets
+            readOnly: true
+        source: |
+          set -e
+
+          mkdir -p ~/.ssh
+          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+          echo "" >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+          echo "📥 Cloning repository..."
+          git clone git@github.com:OpenCloudHub/data-registry.git /workspace/repo
+          cd /workspace/repo
+
+          git config user.name "Argo Workflow"
+          git config user.email "workflow@opencloudhub.org"
+
+          echo "✅ Repository cloned to /workspace/repo"
+
+    # ----------------------------------------------------------------------
+    # Run single DVC pipeline (uses shared workspace)
+    # ----------------------------------------------------------------------
+    - name: run-single-pipeline
+      inputs:
+        parameters:
+          - name: pipeline_name
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: workspace
+      container:
+        image: "{{workflow.parameters.image}}"
+        command: ["bash", "-c"]
+        workingDir: /workspace/repo
+        args:
+          - |
+            set -e
+            echo "════════════════════════════════════════════════════════════"
+            echo "🚀 Running DVC pipeline: {{inputs.parameters.pipeline_name}}"
+            echo "════════════════════════════════════════════════════════════"
+
+            dvc remote modify minio endpointurl $AWS_ENDPOINT_URL
+            dvc remote modify minio access_key_id $AWS_ACCESS_KEY_ID
+            dvc remote modify minio secret_access_key $AWS_SECRET_ACCESS_KEY
+
+            FORCE_FLAG=""
+            if [ "{{workflow.parameters.force}}" = "true" ]; then
+              FORCE_FLAG="--force"
+              echo "⚠️  Force mode enabled"
+            fi
+
+            dvc repro $FORCE_FLAG pipelines/{{inputs.parameters.pipeline_name}}/dvc.yaml
+            echo "✅ Pipeline {{inputs.parameters.pipeline_name}} complete"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: accesskey
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: secretkey
+          - name: AWS_ENDPOINT_URL
+            value: "https://minio-api.internal.opencloudhub.org"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+
+    # ----------------------------------------------------------------------
+    # Push data to DVC remote
+    # ----------------------------------------------------------------------
+    - name: push-data
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: workspace
+      container:
+        image: "{{workflow.parameters.image}}"
+        command: ["bash", "-c"]
+        workingDir: /workspace/repo
+        args:
+          - |
+            set -e
+            echo "📤 Pushing data to remote storage..."
+            dvc remote modify minio endpointurl $AWS_ENDPOINT_URL
+            dvc remote modify minio access_key_id $AWS_ACCESS_KEY_ID
+            dvc remote modify minio secret_access_key $AWS_SECRET_ACCESS_KEY
+            dvc push
+            echo "✅ Data pushed to MinIO"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: accesskey
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: secretkey
+          - name: AWS_ENDPOINT_URL
+            value: "https://minio-api.internal.opencloudhub.org"
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+
+    # ----------------------------------------------------------------------
+    # Detect changes using dvc diff
+    # ----------------------------------------------------------------------
+    - name: detect-changes
+      outputs:
+        parameters:
+          - name: changed_datasets
+            valueFrom:
+              path: /tmp/changed_datasets.json
+          - name: has_changes
+            valueFrom:
+              path: /tmp/has_changes.txt
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: workspace
+      script:
+        image: "{{workflow.parameters.image}}"
+        command: [bash]
+        workingDir: /workspace/repo
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        source: |
+          set -e
+
+          echo "[]" > /tmp/changed_datasets.json
+          echo "false" > /tmp/has_changes.txt
+
+          PIPELINE_MAP='{"opencloudhub-readmes-download":"opencloudhub-readmes"}'
+
+          echo "════════════════════════════════════════════════════════════"
+          echo "🔍 Detecting DVC changes..."
+          echo "════════════════════════════════════════════════════════════"
+
+          # Use dvc diff to detect changes
+          DVC_DIFF=$(dvc diff --json 2>/dev/null || echo '{"added":[],"deleted":[],"modified":[]}')
+          echo "DVC diff output:"
+          echo "$DVC_DIFF" | jq .
+
+          # Also check git status for dvc.lock changes
+          GIT_STATUS=$(git status --porcelain | grep "dvc.lock" || true)
+          echo ""
+          echo "Git status (dvc.lock files):"
+          echo "${GIT_STATUS:-No changes}"
+
+          if [ -z "$GIT_STATUS" ]; then
+            echo ""
+            echo "ℹ️  No dvc.lock changes detected"
+            exit 0
+          fi
+
+          echo "true" > /tmp/has_changes.txt
+
+          # Extract changed datasets from dvc.lock paths
+          DATASETS="[]"
+          for lock_file in $(echo "$GIT_STATUS" | awk '{print $2}'); do
+            PIPELINE=$(echo "$lock_file" | cut -d'/' -f2)
+            DATASET=$(echo "$PIPELINE_MAP" | jq -r ".\"$PIPELINE\" // \"$PIPELINE\"")
+            DATASETS=$(echo "$DATASETS" | jq --arg d "$DATASET" '. + [$d] | unique')
+          done
+
+          echo "$DATASETS" > /tmp/changed_datasets.json
+
+          echo ""
+          echo "════════════════════════════════════════════════════════════"
+          echo "📝 Changed datasets: $DATASETS"
+          echo "════════════════════════════════════════════════════════════"
+
+    # ----------------------------------------------------------------------
+    # Commit and tag changes
+    # ----------------------------------------------------------------------
+    - name: commit-and-tag
+      outputs:
+        parameters:
+          - name: readmes_tag
+            valueFrom:
+              path: /tmp/readmes_tag.txt
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: workspace
+        - name: git-secret
+          secret:
+            secretName: data-registry-repo
+      script:
+        image: alpine/git:latest
+        command: [sh]
+        workingDir: /workspace/repo
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: git-secret
+            mountPath: /mnt/secrets
+            readOnly: true
+        source: |
+          set -e
+          apk add --no-cache jq >/dev/null 2>&1
+
+          echo "" > /tmp/readmes_tag.txt
+
+          mkdir -p ~/.ssh
+          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+          echo "" >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+          PIPELINE_MAP='{"opencloudhub-readmes-download":"opencloudhub-readmes"}'
+          BUMP_TYPE="{{workflow.parameters.bump_type}}"
+          IS_AUTOMATED="{{workflow.parameters.is_automated}}"
+          [ "$IS_AUTOMATED" = "true" ] && SUFFIX="-automated" || SUFFIX=""
+
+          echo "════════════════════════════════════════════════════════════"
+          echo "📝 Committing changes..."
+          echo "════════════════════════════════════════════════════════════"
+
+          # Get changed lock files before committing
+          CHANGED=$(git status --porcelain | grep "dvc.lock" || true)
+
+          git add .
+          git commit -m "chore: update data [skip ci]"
+          git push origin main
+          echo "✅ Committed and pushed"
+
+          echo ""
+          echo "════════════════════════════════════════════════════════════"
+          echo "🏷️  Creating tags..."
+          echo "════════════════════════════════════════════════════════════"
+
+          for lock_file in $(echo "$CHANGED" | awk '{print $2}'); do
+            PIPELINE=$(echo "$lock_file" | cut -d'/' -f2)
+            DATASET=$(echo "$PIPELINE_MAP" | jq -r ".\"$PIPELINE\" // \"$PIPELINE\"")
+
+            LATEST=$(git tag -l "${DATASET}-v*" --sort=-version:refname | head -n1 || echo "")
+
+            if [ -z "$LATEST" ]; then
+              VERSION="1.0.0"
+            else
+              CURRENT=$(echo "$LATEST" | sed "s/${DATASET}-v//" | sed 's/-automated//')
+              MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+              MINOR=$(echo "$CURRENT" | cut -d. -f2)
+              PATCH=$(echo "$CURRENT" | cut -d. -f3)
+
+              case "$BUMP_TYPE" in
+                major) VERSION="$((MAJOR + 1)).0.0" ;;
+                minor) VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
+                patch) VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+              esac
+            fi
+
+            NEW_TAG="${DATASET}-v${VERSION}${SUFFIX}"
+
+            # Skip if exists
+            if git tag -l "$NEW_TAG" | grep -q "$NEW_TAG"; then
+              echo "ℹ️  Tag $NEW_TAG already exists"
+            else
+              git tag -a "$NEW_TAG" -m "${DATASET} v${VERSION}"
+              git push origin "$NEW_TAG"
+              echo "✅ Created: $NEW_TAG"
+            fi
+
+            if [ "$DATASET" = "opencloudhub-readmes" ]; then
+              echo "$NEW_TAG" > /tmp/readmes_tag.txt
+            fi
+          done
+
+          echo ""
+          echo "════════════════════════════════════════════════════════════"
+          echo "✅ All done!"
+          echo "════════════════════════════════════════════════════════════"
+
+    # ----------------------------------------------------------------------
+    # Run embeddings sub-workflow
+    # ----------------------------------------------------------------------
     - name: run-embeddings
       inputs:
         parameters:
           - name: changed_datasets
       steps:
-        # Check if opencloudhub-readmes is in changed datasets
         - - name: check-readmes
             template: contains-dataset
             arguments:
@@ -111,7 +402,6 @@ spec:
                 - name: target
                   value: "opencloudhub-readmes"
 
-        # Get the tag we just created
         - - name: get-tag
             templateRef:
               name: git-templates
@@ -122,7 +412,6 @@ spec:
                   value: "opencloudhub-readmes"
             when: "{{steps.check-readmes.outputs.result}} == true"
 
-        # Run embeddings pipeline
         - - name: run
             templateRef:
               name: embeddings-pipeline
@@ -137,6 +426,9 @@ spec:
                   value: "{{workflow.parameters.image}}"
             when: "{{steps.check-readmes.outputs.result}} == true"
 
+    # ----------------------------------------------------------------------
+    # Helper: check if dataset in list
+    # ----------------------------------------------------------------------
     - name: contains-dataset
       inputs:
         parameters:
