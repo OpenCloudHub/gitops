@@ -116,6 +116,7 @@ spec:
                     containers:
                       - name: ray-head
                         image: ${IMAGE}
+                        imagePullPolicy: Always
                         ports:
                           - containerPort: 6379
                             name: gcs
@@ -175,6 +176,7 @@ spec:
                       containers:
                         - name: ray-worker
                           image: ${IMAGE}
+                          imagePullPolicy: Always
                           livenessProbe:
                             exec:
                               command: ["ray", "status"]
@@ -224,14 +226,67 @@ spec:
           JOB=$(kubectl get rayjobs -n mlops -l run-id="${RUN_ID}" -o jsonpath='{.items[0].metadata.name}')
           echo "RayJob: $JOB"
 
+          # Wait for job to be submitted
+          echo "⏳ Waiting for job submission..."
+          MAX_WAIT=600
+          ELAPSED=0
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            STATUS=$(kubectl get rayjob -n mlops $JOB -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
+            if [ "$STATUS" = "Running" ] || [ "$STATUS" = "Complete" ]; then
+              echo "✅ Job submitted"
+              break
+            fi
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+            echo "⏳ Deployment status: $STATUS"
+          done
+
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "❌ Timeout waiting for submission"
+            kubectl describe rayjob -n mlops $JOB
+            exit 1
+          fi
+
+          # Find submitter pod and stream logs
+          SUBMITTER=$(kubectl get pods -n mlops --no-headers | grep "${JOB}" | grep -v head | grep -v worker | awk '{print $1}' | head -1)
+
+          if [ -n "$SUBMITTER" ]; then
+            echo "📋 Streaming logs from: $SUBMITTER"
+            kubectl logs -n mlops $SUBMITTER -f 2>/dev/null &
+            LOG_PID=$!
+          fi
+
+          # Wait for completion
           TIMEOUT=1800
           ELAPSED=0
           while [ $ELAPSED -lt $TIMEOUT ]; do
             STATUS=$(kubectl get rayjob -n mlops $JOB -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "PENDING")
             case "$STATUS" in
-              SUCCEEDED) echo "✅ Done"; exit 0 ;;
-              FAILED|STOPPED) echo "❌ $STATUS"; exit 1 ;;
-              *) echo "⏳ $STATUS"; sleep 15; ELAPSED=$((ELAPSED + 15)) ;;
+              SUCCEEDED)
+                sleep 5
+                [ -n "$LOG_PID" ] && kill $LOG_PID 2>/dev/null || true
+                echo "✅ Done"
+                exit 0
+                ;;
+              FAILED|STOPPED)
+                [ -n "$LOG_PID" ] && kill $LOG_PID 2>/dev/null || true
+                echo "❌ $STATUS"
+                kubectl describe rayjob -n mlops $JOB
+                # Try to get head pod logs
+                HEAD_POD=$(kubectl get pods -n mlops -l ray.io/cluster=$JOB -l ray.io/node-type=head -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+                if [ -n "$HEAD_POD" ]; then
+                  echo "=== Head pod logs ==="
+                  kubectl logs -n mlops $HEAD_POD --tail=100 2>/dev/null || true
+                fi
+                exit 1
+                ;;
+              *)
+                sleep 15
+                ELAPSED=$((ELAPSED + 15))
+                ;;
             esac
           done
-          echo "❌ Timeout"; exit 1
+
+          [ -n "$LOG_PID" ] && kill $LOG_PID 2>/dev/null || true
+          echo "❌ Timeout"
+          exit 1
