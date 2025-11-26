@@ -20,6 +20,14 @@ spec:
 
   templates:
     - name: main
+      inputs:
+        parameters:
+          - name: data_version
+            default: "{{workflow.parameters.data_version}}"
+          - name: compute_type
+            default: "{{workflow.parameters.compute_type}}"
+          - name: image
+            default: "{{workflow.parameters.image}}"
       steps:
         - - name: map-compute
             templateRef:
@@ -28,12 +36,16 @@ spec:
             arguments:
               parameters:
                 - name: compute_type
-                  value: "{{workflow.parameters.compute_type}}"
+                  value: "{{inputs.parameters.compute_type}}"
 
         - - name: run-embeddings
             template: run-ray-job
             arguments:
               parameters:
+                - name: data_version
+                  value: "{{inputs.parameters.data_version}}"
+                - name: image
+                  value: "{{inputs.parameters.image}}"
                 - name: cpu_request
                   value: "{{steps.map-compute.outputs.parameters.cpu_request}}"
                 - name: cpu_limit
@@ -54,11 +66,13 @@ spec:
                 - name: tag_prefix
                   value: "opencloudhub-readmes-embeddings"
                 - name: message
-                  value: "Embeddings from {{workflow.parameters.data_version}}"
+                  value: "Embeddings from {{inputs.parameters.data_version}}"
 
     - name: run-ray-job
       inputs:
         parameters:
+          - name: data_version
+          - name: image
           - name: cpu_request
           - name: cpu_limit
           - name: memory_request
@@ -70,8 +84,8 @@ spec:
         source: |
           set -e
 
-          DATA_VERSION="{{workflow.parameters.data_version}}"
-          IMAGE="{{workflow.parameters.image}}"
+          DATA_VERSION="{{inputs.parameters.data_version}}"
+          IMAGE="{{inputs.parameters.image}}"
           RUN_ID="emb-$(date +%s)"
 
           echo "🧠 Embeddings: ${DATA_VERSION}"

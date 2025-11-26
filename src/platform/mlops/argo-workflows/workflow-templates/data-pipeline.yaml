@@ -116,6 +116,10 @@ spec:
               parameters:
                 - name: data_version
                   value: "{{steps.get-tag.outputs.parameters.latest_tag}}"
+                - name: compute_type
+                  value: "cpu-small"
+                - name: image
+                  value: "{{workflow.parameters.image}}"
             when: "{{steps.check.outputs.result}} == true && {{workflow.parameters.trigger_embeddings}} == true"
 
     - name: contains-pipeline
