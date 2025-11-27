@@ -7,7 +7,18 @@ resources:
 - demo-app-backend.yaml
 - wine-classifier.yaml
 
+# Exclude the Namespace from the remote install.yaml since it's managed by security-namespaces
 patches:
+- target:
+    kind: Namespace
+    name: argocd
+  patch: |-
+    $patch: delete
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: argocd
+
 - target:
     kind: ConfigMap
     name: argocd-image-updater-config
