@@ -137,11 +137,17 @@ spec:
         git config user.name "Argo Workflow"
         git config user.email "workflow@opencloudhub.org"
         git add "$SERVICE_FILE"
-        git commit -m "🚀 Deploy ${MODEL_NAME} v${VERSION} (${SERVING_IMAGE##*:})"
-        git push
 
-        echo ""
-        echo "✅ GitOps updated!"
+        # Only commit if there are changes
+        if git diff --cached --quiet; then
+          echo ""
+          echo "ℹ️  No changes to commit - already up to date"
+        else
+          git commit -m "🚀 Deploy ${MODEL_NAME} v${VERSION} (${SERVING_IMAGE##*:})"
+          git push
+          echo ""
+          echo "✅ GitOps updated!"
+        fi
 
   # Sub-template: MLflow tagging
   - name: tag-deployment-in-mlflow
