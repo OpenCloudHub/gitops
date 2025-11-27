@@ -5,8 +5,4 @@ namespace: mlops
 
 resources:
 - compute.yaml
-- training.yaml
-- mlflow.yaml
-- deployment.yaml
 - git-templates.yaml
-- dvc-data.yaml

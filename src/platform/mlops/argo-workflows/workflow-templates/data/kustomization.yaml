@@ -4,6 +4,6 @@ kind: Kustomization
 namespace: mlops
 
 resources:
-- _utils
-- mlops
-- data
+- base-data-pipeline.yaml
+- readmes-embeddings-pipeline.yaml
+- modules/dvc-data.yaml

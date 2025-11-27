@@ -1,11 +1,10 @@
-# modules/training.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: training-templates
   namespace: mlops
   annotations:
-    workflows.argoproj.io/description: 'Execute model training run on Ray.'
+    workflows.argoproj.io/description: 'Submit model training run to Ray.'
 spec:
   serviceAccountName: workflow-executor
 
@@ -122,7 +121,10 @@ spec:
                           name: minio-tenant-secret
                           key: secretkey
                     - name: AWS_ENDPOINT_URL
-                      value: "https://minio-api.internal.opencloudhub.org"
+                      valueFrom:
+                        secretKeyRef:
+                          name: minio-tenant-secret
+                          key: endpoint-url
             workerGroupSpecs:
             - replicas: {{inputs.parameters.replicas}}
               groupName: worker

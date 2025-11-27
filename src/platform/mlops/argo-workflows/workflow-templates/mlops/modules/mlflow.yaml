@@ -7,7 +7,7 @@ metadata:
     workflows.argoproj.io/description: 'Templates to interact with MLflow.'
 spec:
   templates:
-  - name: compare-and-promote-staging
+  - name: compare-to-production-and-promote-to-staging
     inputs:
       parameters:
       - name: model_name
@@ -173,7 +173,9 @@ spec:
         champion_value = None
         improvement = None
 
+        # Do the comparison
         try:
+            # Get the current champion
             champion = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
             champion_version = champion.version
             print(f"   Found champion: v{champion_version}")
@@ -181,13 +183,17 @@ spec:
             report["champion_model_uri"] = f"models:/prod.{model_name}/{champion_version}"
 
             champ_run = client.get_run(champion.run_id)
+            # Check if metrics are in champion model
             if metric_name not in champ_run.data.metrics:
-                reason = f"Champion missing metric '{metric_name}', promoting CI model as replacement"
-                print(f"   {reason}")
-                should_promote = True
-                improvement = "N/A"
-                report["improvement"] = improvement
+                reason = f"Champion v{champion_version} missing metric '{metric_name}' - cannot compare. Investigate champion model before promoting."
+                print(f"❌ {reason}")
+                client.set_model_version_tag(f"ci.{model_name}", ci_version, "promotion_status", "blocked")
+                client.set_model_version_tag(f"ci.{model_name}", ci_version, "block_reason", reason)
+                report["champion_metric_value"] = None
+                report["improvement"] = "N/A"
                 report["reason"] = reason
+                write_failure_outputs(reason, report)
+                sys.exit(1)
             else:
                 champion_value = champ_run.data.metrics[metric_name]
                 print(f"   Champion {metric_name}: {champion_value}")
@@ -313,100 +319,7 @@ spec:
 
         print(f"\n✅ Comparison complete - model promoted to staging")
 
-  - name: test-staging-model
-    inputs:
-      parameters:
-      - name: model_name
-      - name: staging_version
-      - name: mlflow_tracking_uri
-    outputs:
-      parameters:
-      - name: test_passed
-        valueFrom:
-          path: /tmp/test_passed.txt
-      artifacts:
-      - name: test-report
-        path: /tmp/test-report.md
-        archive:
-          none: {}
-    script:
-      image: ghcr.io/mlflow/mlflow:v2.18.0
-      command: [python]
-      source: |
-        from mlflow import MlflowClient
-        from datetime import datetime
-        import random
-
-        client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
-        model_name = "{{inputs.parameters.model_name}}"
-        staging_version = "{{inputs.parameters.staging_version}}"
-
-        print(f"🧪 Testing staging model: {model_name}/v{staging_version}")
-
-        # Simulate test execution
-        test_results = {
-            "model_loading": True,
-            "prediction_latency": random.uniform(10, 50),  # ms
-            "prediction_accuracy_sample": random.uniform(0.85, 0.95),
-            "schema_validation": True,
-            "smoke_test": True
-        }
-
-        all_passed = all([
-            test_results["model_loading"],
-            test_results["prediction_latency"] < 100,
-            test_results["prediction_accuracy_sample"] > 0.8,
-            test_results["schema_validation"],
-            test_results["smoke_test"]
-        ])
-
-        # Create test report
-        with open("/tmp/test-report.md", "w") as f:
-            f.write(f"# 🧪 Staging Model Test Report\n\n")
-            f.write(f"**Model:** `staging.{model_name}/v{staging_version}`  \n")
-            f.write(f"**Tested:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC  \n")
-            f.write(f"**Status:** {'✅ PASSED' if all_passed else '❌ FAILED'}\n\n")
-
-            f.write(f"## Test Suite\n\n")
-            f.write(f"### 1. Model Loading\n")
-            f.write(f"- **Result:** {'✅ Pass' if test_results['model_loading'] else '❌ Fail'}\n")
-            f.write(f"- **Details:** Model successfully loaded from MLflow registry\n\n")
-
-            f.write(f"### 2. Prediction Latency\n")
-            f.write(f"- **Result:** {'✅ Pass' if test_results['prediction_latency'] < 100 else '❌ Fail'}\n")
-            f.write(f"- **Latency:** {test_results['prediction_latency']:.2f}ms (threshold: <100ms)\n\n")
-
-            f.write(f"### 3. Sample Prediction Accuracy\n")
-            f.write(f"- **Result:** {'✅ Pass' if test_results['prediction_accuracy_sample'] > 0.8 else '❌ Fail'}\n")
-            f.write(f"- **Accuracy:** {test_results['prediction_accuracy_sample']:.2%} (threshold: >80%)\n\n")
-
-            f.write(f"### 4. Schema Validation\n")
-            f.write(f"- **Result:** {'✅ Pass' if test_results['schema_validation'] else '❌ Fail'}\n")
-            f.write(f"- **Details:** Input/output schemas validated\n\n")
-
-            f.write(f"### 5. Smoke Test\n")
-            f.write(f"- **Result:** {'✅ Pass' if test_results['smoke_test'] else '❌ Fail'}\n")
-            f.write(f"- **Details:** Basic inference working correctly\n\n")
-
-            f.write(f"---\n\n")
-            f.write(f"## Integration Points\n\n")
-            f.write(f"This is a **placeholder test suite**. Replace with:\n\n")
-            f.write(f"- **Load testing:** Use Locust or K6 for realistic traffic simulation\n")
-            f.write(f"- **A/B testing:** Compare against current production model\n")
-            f.write(f"- **Data drift detection:** Validate model performance on recent data\n")
-            f.write(f"- **Integration tests:** Test full prediction pipeline end-to-end\n")
-            f.write(f"- **Shadow deployment:** Route production traffic to staging for comparison\n\n")
-
-        with open("/tmp/test_passed.txt", "w") as f:
-            f.write("true" if all_passed else "false")
-
-        if all_passed:
-            print(f"✅ All tests passed!")
-        else:
-            print(f"❌ Some tests failed")
-            exit(1)
-
-  - name: promote-to-production
+  - name: promote-staging-to-production
     inputs:
       parameters:
       - name: model_name
@@ -449,35 +362,65 @@ spec:
         with open("/tmp/prod_version.txt", "w") as f:
             f.write(prod_mv.version)
 
-  - name: tag-mlflow-prod-model
+  - name: tag-deployment-info
     inputs:
       parameters:
-      - name: model_name
-      - name: prod_version
-      - name: staging_version
-      - name: ci_version
-      - name: approval_mode
+      - name: model_uri
+      - name: serving_image
+      - name: deployed_by
+        value: "manual"
       - name: mlflow_tracking_uri
+        value: "http://mlflow.mlops.svc.cluster.local:80"
     script:
       image: ghcr.io/mlflow/mlflow:v2.18.0
       command: [python]
+      env:
+      - name: MODEL_URI
+        value: "{{inputs.parameters.model_uri}}"
+      - name: SERVING_IMAGE
+        value: "{{inputs.parameters.serving_image}}"
+      - name: DEPLOYED_BY
+        value: "{{inputs.parameters.deployed_by}}"
+      - name: MLFLOW_TRACKING_URI
+        value: "{{inputs.parameters.mlflow_tracking_uri}}"
+      - name: WORKFLOW_UID
+        value: "{{workflow.uid}}"
+      - name: WORKFLOW_NAME
+        value: "{{workflow.name}}"
       source: |
         from mlflow import MlflowClient
         from datetime import datetime
+        import re
+        import os
 
-        tracking_uri = "{{inputs.parameters.mlflow_tracking_uri}}"
-        client = MlflowClient(tracking_uri)
-        model_name = "{{inputs.parameters.model_name}}"
-        prod_version = "{{inputs.parameters.prod_version}}"
+        client = MlflowClient(os.environ["MLFLOW_TRACKING_URI"])
+        model_uri = os.environ["MODEL_URI"].strip()
+
+        # Parse: models:/prod.wine-classifier/1
+        match = re.match(r'models:/([^.]+)\.([^/]+)/(\d+)', model_uri)
+        if not match:
+            print(f"❌ Invalid model URI format: '{model_uri}'")  # ← Add quotes to see whitespace
+            exit(1)
+
+        registry_prefix = match.group(1)
+        model_name = match.group(2)
+        version = match.group(3)
+        full_name = f"{registry_prefix}.{model_name}"
+
+        print(f"🏷️  Tagging deployment in MLflow")
+        print(f"   Model: {full_name}/v{version}")
 
         tags = {
-            "argo_workflow_name": "{{workflow.name}}",
-            "argo_workflow_uid": "{{workflow.uid}}",
-            "deployment_timestamp": datetime.utcnow().isoformat(),
-            "approval_mode": "{{inputs.parameters.approval_mode}}",
+            "deployment_status": "deployed",
+            "deployed_at": datetime.utcnow().isoformat(),
+            "deployed_by": os.environ["DEPLOYED_BY"].strip(),
+            "serving_image": os.environ["SERVING_IMAGE"].strip(),
+            "kubernetes_namespace": "ai",
+            "argo_workflow_uid": os.environ["WORKFLOW_UID"].strip(),
+            "argo_workflow_name": os.environ["WORKFLOW_NAME"].strip()
         }
 
         for key, value in tags.items():
-            client.set_model_version_tag(f"prod.{model_name}", prod_version, key, value)
+            client.set_model_version_tag(full_name, version, key, value)
 
-        print("✅ Deployment info tagged!")
+        print(f"✅ Tagged: {full_name}/v{version}")

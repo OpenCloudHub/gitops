@@ -1,4 +1,3 @@
-# mlops-pipeline.yaml - Main orchestration
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -9,7 +8,6 @@ metadata:
     workflows.argoproj.io/description: 'End-to-end MLOps pipeline: trains, evaluates, promotes, and deploys ML models with manual/automatic approval and full lineage tracking.'
 spec:
   serviceAccountName: workflow-executor
-
   arguments:
     parameters:
     - name: model_name
@@ -44,9 +42,12 @@ spec:
   entrypoint: main
 
   templates:
+  # ==============================================
+  # 🔹 SECTION: Main Execition Flow
+  # ==============================================
   - name: main
     steps:
-    # Phase 1: Map compute and submit training
+    # Phase 1: Map compute
     - - name: map-compute
         templateRef:
           name: compute-templates
@@ -90,11 +91,11 @@ spec:
           - name: mlflow_tracking_uri
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
 
-    # Phase 3: Compare and promote to staging
-    - - name: compare-promote-staging
+    # Phase 3: Compare and promote to staging if better, stop otherwise
+    - - name: compare-to-production-and-promote-to-staging
         templateRef:
           name: mlflow-templates
-          template: compare-and-promote-staging
+          template: compare-to-production-and-promote-to-staging
         arguments:
           parameters:
           - name: model_name
@@ -111,8 +112,8 @@ spec:
         # Phase 4: Running Tests
     - - name: test-staging
         templateRef:
-          name: mlflow-templates
-          template: test-staging-model
+          name: testing-templates
+          template: dummy-test-staging-model
         arguments:
           parameters:
           - name: model_name
@@ -128,11 +129,11 @@ spec:
         template: approval-gate
         when: "{{workflow.parameters.approval_mode}} == manual && '{{steps.compare-promote-staging.outputs.parameters.promoted}}' == 'true' && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
 
-    # Phase 6: Promote to production (only if promoted and tests passed)
+    # Phase 6: Promote to production (only if promoted and tests passed and approved or auto)
     - - name: promote-production
         templateRef:
           name: mlflow-templates
-          template: promote-to-production
+          template: promote-staging-to-production
         arguments:
           parameters:
           - name: model_name
@@ -162,6 +163,9 @@ spec:
             value: "{{workflow.parameters.mlflow_tracking_uri}}"
         when: "'{{steps.compare-promote-staging.outputs.parameters.promoted}}' == 'true'"
 
+  # ==============================================
+  # 🔹 SECTION: Additional Template Definitions
+  # ==============================================
   # Approval gate template
   - name: approval-gate
     inputs:

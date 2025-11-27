@@ -1,4 +1,3 @@
-# modules/deployment.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -35,8 +34,10 @@ spec:
             value: "{{inputs.parameters.serving_image}}"
 
     # Step 2: Tag deployment in MLflow
-    - - name: tag-mlflow-deployment
-        template: tag-deployment-in-mlflow
+    - - name: tag-mlflow-deployment-info
+        templateRef:
+          name: mlflow-templates
+          template: tag-deployment-info
         arguments:
           parameters:
           - name: model_uri
@@ -148,67 +149,3 @@ spec:
           echo ""
           echo "✅ GitOps updated!"
         fi
-
-  # Sub-template: MLflow tagging
-  - name: tag-deployment-in-mlflow
-    inputs:
-      parameters:
-      - name: model_uri
-      - name: serving_image
-      - name: deployed_by
-        value: "manual"
-      - name: mlflow_tracking_uri
-        value: "http://mlflow.mlops.svc.cluster.local:80"
-    script:
-      image: ghcr.io/mlflow/mlflow:v2.18.0
-      command: [python]
-      env:
-      - name: MODEL_URI
-        value: "{{inputs.parameters.model_uri}}"
-      - name: SERVING_IMAGE
-        value: "{{inputs.parameters.serving_image}}"
-      - name: DEPLOYED_BY
-        value: "{{inputs.parameters.deployed_by}}"
-      - name: MLFLOW_TRACKING_URI
-        value: "{{inputs.parameters.mlflow_tracking_uri}}"
-      - name: WORKFLOW_UID
-        value: "{{workflow.uid}}"
-      - name: WORKFLOW_NAME
-        value: "{{workflow.name}}"
-      source: |
-        from mlflow import MlflowClient
-        from datetime import datetime
-        import re
-        import os
-
-        client = MlflowClient(os.environ["MLFLOW_TRACKING_URI"])
-        model_uri = os.environ["MODEL_URI"].strip()
-
-        # Parse: models:/prod.wine-classifier/1
-        match = re.match(r'models:/([^.]+)\.([^/]+)/(\d+)', model_uri)
-        if not match:
-            print(f"❌ Invalid model URI format: '{model_uri}'")  # ← Add quotes to see whitespace
-            exit(1)
-
-        registry_prefix = match.group(1)
-        model_name = match.group(2)
-        version = match.group(3)
-        full_name = f"{registry_prefix}.{model_name}"
-
-        print(f"🏷️  Tagging deployment in MLflow")
-        print(f"   Model: {full_name}/v{version}")
-
-        tags = {
-            "deployment_status": "deployed",
-            "deployed_at": datetime.utcnow().isoformat(),
-            "deployed_by": os.environ["DEPLOYED_BY"].strip(),
-            "serving_image": os.environ["SERVING_IMAGE"].strip(),
-            "kubernetes_namespace": "ai",
-            "argo_workflow_uid": os.environ["WORKFLOW_UID"].strip(),
-            "argo_workflow_name": os.environ["WORKFLOW_NAME"].strip()
-        }
-
-        for key, value in tags.items():
-            client.set_model_version_tag(full_name, version, key, value)
-
-        print(f"✅ Tagged: {full_name}/v{version}")

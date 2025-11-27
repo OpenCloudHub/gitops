@@ -20,6 +20,10 @@ spec:
             default: "opencloudhuborg/data-registry-pipelines:latest"
           - name: force
             default: "false"
+          - name: cpu_request
+          - name: cpu_limit
+          - name: memory_request
+          - name: memory_limit
       container:
         image: "{{inputs.parameters.image}}"
         imagePullPolicy: Always
@@ -55,14 +59,17 @@ spec:
                 name: minio-tenant-secret
                 key: secretkey
           - name: AWS_ENDPOINT_URL
-            value: "https://minio-api.internal.opencloudhub.org"
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: endpoint-url
         resources:
           requests:
-            cpu: "500m"
-            memory: "1Gi"
+            cpu: "{{inputs.parameters.cpu_request}}"
+            memory: "{{inputs.parameters.memory_request}}"
           limits:
-            cpu: "2"
-            memory: "4Gi"
+            cpu: "{{inputs.parameters.cpu_limit}}"
+            memory: "{{inputs.parameters.memory_limit}}"
 
     # ----------------------------------------------------------------------
     # Push data to DVC remote
