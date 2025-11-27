@@ -5,7 +5,6 @@ namespace: mlops
 
 resources:
 - mlops-pipeline.yaml
-- modules/compute.yaml
 - modules/training.yaml
 - modules/mlflow.yaml
 - modules/deployment.yaml
