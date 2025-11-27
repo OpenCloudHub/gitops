@@ -2,7 +2,6 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: minio-tenant
 resources:
-  #- external-secrets.yaml
   - http-route.yaml
   - service-monitor.yaml
 helmCharts:

@@ -14,7 +14,7 @@ spec:
     parameters:
     - name: model_name
       description: "Model name (e.g., wine-classifier)"
-    - name: dvc_data_version
+    - name: dvc_data_version_tag
       description: "Data version to use for training"
     - name: experiment_name
       description: "MLflow experiment name"
@@ -27,15 +27,15 @@ spec:
     - name: serving_image
       description: "Container image with serving code"
     - name: compute_type
-      enum: [cpu-small, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
+      enum: [cpu-small, cpu-small-distributed, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
       description: "Compute configuration"
     - name: approval_mode
       value: "manual"
       enum: [manual, automatic]
     - name: comparison_metric
-      value: "val_acc"
+      description: "Metric to compare to prod version"
     - name: comparison_higher_is_better
-      value: "true"
+      description: "Is a higehr metric better"
     - name: comparison_threshold
       value: "0.05"
     - name: mlflow_tracking_uri
@@ -65,8 +65,8 @@ spec:
           parameters:
           - name: model_name
             value: "{{workflow.parameters.model_name}}"
-          - name: dvc_data_version
-            value: "{{workflow.parameters.dvc_data_version}}"
+          - name: dvc_data_version_tag
+            value: "{{workflow.parameters.dvc_data_version_tag}}"
           - name: experiment_name
             value: "{{workflow.parameters.experiment_name}}"
           - name: training_image

@@ -14,7 +14,7 @@ spec:
     inputs:
       parameters:
       - name: model_name
-      - name: dvc_data_version
+      - name: dvc_data_version_tag
       - name: experiment_name
       - name: training_image
       - name: training_entrypoint
@@ -38,7 +38,7 @@ spec:
         set -e
 
         MODEL_NAME="{{inputs.parameters.model_name}}"
-        DVC_DATA_VERSION="{{inputs.parameters.dvc_data_version}}"
+        DVC_DATA_VERSION_TAG="{{inputs.parameters.dvc_data_version_tag}}"
         TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
         GPU="{{inputs.parameters.gpu}}"
@@ -51,7 +51,7 @@ spec:
           node.opencloudhub.org/gpu: \"true\""
         fi
 
-        RUN_LABEL="${MODEL_NAME}-${DVC_DATA_VERSION}-${TIMESTAMP}"
+        RUN_LABEL="${MODEL_NAME}-${DVC_DATA_VERSION_TAG}-${TIMESTAMP}"
 
         TRAINING_ARGS="{{inputs.parameters.training_args}}"
 
@@ -105,8 +105,8 @@ spec:
                       value: {{inputs.parameters.experiment_name}}
                     - name: MLFLOW_REGISTERED_MODEL_NAME
                       value: "ci.{{inputs.parameters.model_name}}"
-                    - name: DVC_DATA_VERSION
-                      value: {{inputs.parameters.dvc_data_version}}
+                    - name: DVC_DATA_VERSION_TAG
+                      value: {{inputs.parameters.dvc_data_version_tag}}
                     - name: DOCKER_IMAGE_TAG
                       value: {{inputs.parameters.training_image}}
                     - name: ARGO_WORKFLOW_UID
@@ -174,7 +174,10 @@ spec:
                           name: minio-tenant-secret
                           key: secretkey
                     - name: AWS_ENDPOINT_URL
-                      value: "https://minio-api.internal.opencloudhub.org"
+                      valueFrom:
+                        secretKeyRef:
+                          name: minio-tenant-secret
+                          key: endpoint-url
         EOF
 
         echo "⏳ Waiting for RayJob..."
