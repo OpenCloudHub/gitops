@@ -3,7 +3,7 @@ apiVersion: argocd-image-updater.argoproj.io/v1alpha1
 kind: ImageUpdater
 metadata:
   name: wine-classifier-updater
-  namespace: argocd
+  namespace: argocd-image-updater-system
 spec:
   namespace: argocd
   writeBackConfig:

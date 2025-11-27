@@ -1,23 +1,23 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: argocd
+namespace: argocd-image-updater-system
 
 resources:
 - https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/config/install.yaml
 - demo-app-backend.yaml
 - wine-classifier.yaml
 
-# Exclude the Namespace from the remote install.yaml since it's managed by security-namespaces
 patches:
+# Exclude the Namespace - managed by security-namespaces app
 - target:
     kind: Namespace
-    name: argocd
+    name: argocd-image-updater-system
   patch: |-
     $patch: delete
     apiVersion: v1
     kind: Namespace
     metadata:
-      name: argocd
+      name: argocd-image-updater-system
 
 - target:
     kind: ConfigMap
@@ -31,5 +31,5 @@ patches:
           - name: Docker Hub
             api_url: https://registry-1.docker.io
             prefix: docker.io
-            credentials: pullsecret:argocd/dockerhub-secret
+            credentials: pullsecret:argocd-image-updater-system/dockerhub-secret
             defaultns: library

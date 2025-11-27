@@ -111,6 +111,20 @@ metadata:
     opencloudhub.org/mesh-reason: "Controller - reconciles Git to K8s, no inbound service traffic"
 
 ---
+# ArgoCD Image Updater - automatic image updates
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd-image-updater-system
+  labels:
+    istio.io/dataplane-mode: none
+    opencloudhub.org/secret-registry: "true"
+    opencloudhub.org/secret-gitops: "true"
+  annotations:
+    opencloudhub.org/description: "ArgoCD Image Updater controller"
+    opencloudhub.org/mesh-reason: "Controller - watches images and updates Git, no inbound service traffic"
+
+---
 # Cert-manager - certificate controller
 apiVersion: v1
 kind: Namespace
