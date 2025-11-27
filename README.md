@@ -63,7 +63,9 @@
 
 <!-- GETTING STARTED -->
 
-# TODO: use cluster external secrets
+# TODO: make sure gateway and tunnel are timed better when services are actually there
+
+# Make gpu test be ignored by argocd
 
 <h2 id="getting-started">🚀 Getting Started</h2>
 
@@ -107,7 +109,7 @@ echo "Public Key:" && cat ~/.ssh/opencloudhub/argocd_gitops_ed25519.pub
 1. Start dev:
 
 ```bash
-bash scripts/bootstrap/local-development/start-dev.sh
+bash local-development/start-dev.sh
 ```
 
 #### Connect PGAdmin

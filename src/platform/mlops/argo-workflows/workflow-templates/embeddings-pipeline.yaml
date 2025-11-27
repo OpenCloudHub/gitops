@@ -12,7 +12,7 @@ spec:
     parameters:
       - name: data_version
       - name: compute_type
-        value: "cpu-small"
+        value: "cpu-medium"
       - name: image
         value: "opencloudhuborg/data-registry-pipelines:latest"
 

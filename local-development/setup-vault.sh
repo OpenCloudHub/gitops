@@ -143,6 +143,7 @@ load_secrets_file() {
     "DB_MLFLOW_PASSWORD"
     "DB_DEMO_APP_USER"
     "DB_DEMO_APP_PASSWORD"
+    "DB_DEMO_APP_CONNECTION_STRING"
     # pgAdmin
     "PGADMIN_PASSWORD"
     # MinIO
@@ -311,7 +312,8 @@ step_seed_secrets() {
     password="$DB_MLFLOW_PASSWORD"
   vault_cmd kv put kv/demo-app/storage/cnpg/demo-app \
     username="$DB_DEMO_APP_USER" \
-    password="$DB_DEMO_APP_PASSWORD"
+    password="$DB_DEMO_APP_PASSWORD" \
+    connectionString="$DB_DEMO_APP_CONNECTION_STRING"
   vault_cmd kv put kv/platform/storage/pgadmin/credentials \
     password="$PGADMIN_PASSWORD"
 
