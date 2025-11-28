@@ -157,7 +157,7 @@ spec:
           # Build entrypoint command
           FORCE_FLAG=""
           [ "$FORCE" = "true" ] && FORCE_FLAG="--force"
-          ENTRYPOINT="sed -i 's|version: \".*\"|version: \"${DATA_VERSION}\"|' pipelines/opencloudhub-readmes-embeddings/params.yaml && /workspace/project/.venv/bin/dvc repro ${FORCE_FLAG} pipelines/opencloudhub-readmes-embeddings/dvc.yaml"
+          ENTRYPOINT="cd /workspace/project && sed -i 's/DATA_VERSION = .*/DATA_VERSION = \"${DATA_VERSION}\"/' pipelines/opencloudhub-readmes-embeddings/params.py && /workspace/project/.venv/bin/dvc repro ${FORCE_FLAG} pipelines/opencloudhub-readmes-embeddings/dvc.yaml"
 
           # Build substitutions JSON
           jq -n \
