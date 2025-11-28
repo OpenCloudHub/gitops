@@ -24,16 +24,18 @@ data:
           serviceType: ClusterIP
           template:
             spec:
-              containers:
-              - name: ray-head
-                image: "${IMAGE}"
-                resources:
-                  requests:
-                    cpu: "${CPU_REQUEST}"
-                    memory: "${MEMORY_REQUEST}"
-                  limits:
-                    cpu: "${CPU_LIMIT}"
-                    memory: "${MEMORY_LIMIT}"
+              entrypoint: "${ENTRYPOINT}"
+              submitterPodTemplate:
+                spec:
+                  containers:
+                    - name: ray-job-submitter
+                      resources:
+                        limits:
+                          cpu: "1"
+                          memory: "2Gi"
+                        requests:
+                          cpu: "500m"
+                          memory: "1Gi"
                 env:
                 - name: AWS_ACCESS_KEY_ID
                   valueFrom:
