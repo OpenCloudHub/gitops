@@ -32,12 +32,8 @@ spec:
   entrypoint: main
 
   templates:
-    # --------------------------------------------------------------------------
-    # Main flow
-    # --------------------------------------------------------------------------
     - name: main
       steps:
-        # Step 1: Map compute
         - - name: map-compute
             templateRef:
               name: compute-templates
@@ -47,7 +43,6 @@ spec:
                 - name: compute_type
                   value: "{{workflow.parameters.compute_type}}"
 
-        # Step 2: Submit Ray job
         - - name: run-embeddings
             template: submit-ray-embeddings
             arguments:
@@ -71,7 +66,6 @@ spec:
                 - name: gpu
                   value: "{{steps.map-compute.outputs.parameters.gpu}}"
 
-        # Step 3: Commit and tag (only on success)
         - - name: commit-and-tag
             template: git-commit-tag
             arguments:
@@ -83,9 +77,6 @@ spec:
                 - name: is_automated
                   value: "{{workflow.parameters.is_automated}}"
 
-    # --------------------------------------------------------------------------
-    # Submit Ray embeddings job
-    # --------------------------------------------------------------------------
     - name: submit-ray-embeddings
       inputs:
         parameters:
@@ -122,7 +113,6 @@ spec:
 
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
-          # Build force flag
           FORCE_FLAG=""
           [ "$FORCE" = "true" ] && FORCE_FLAG="--force"
 
@@ -133,16 +123,7 @@ spec:
           echo "  Data version: ${DATA_VERSION}"
           echo "  Force: ${FORCE_FLAG:-none}"
 
-          # Build GPU sections if needed
-          GPU_RESOURCES_LINE=""
-          GPU_NODE_SELECTOR=""
-          if [ "$GPU" != "0" ]; then
-            GPU_RESOURCES_LINE="nvidia.com/gpu: $GPU"
-            GPU_NODE_SELECTOR="node.opencloudhub.org/gpu: \"true\""
-          fi
-
-          # Write YAML to file (using heredoc with variable expansion)
-          cat > /tmp/rayjob.yaml << ENDOFYAML
+          cat <<EOF | kubectl create -f -
           apiVersion: ray.io/v1
           kind: RayJob
           metadata:
@@ -152,7 +133,7 @@ spec:
               workflow-run: ${RUN_LABEL}
               pipeline: embeddings
           spec:
-            entrypoint: cd pipelines/opencloudhub-readmes-embeddings && sed -i "s/version:.*/version: ${DATA_VERSION}/" params.yaml && dvc repro ${FORCE_FLAG}
+            entrypoint: "cd pipelines/opencloudhub-readmes-embeddings && sed -i 's/version:.*/version: ${DATA_VERSION}/' params.yaml && dvc repro ${FORCE_FLAG}"
             shutdownAfterJobFinishes: true
             ttlSecondsAfterFinished: 300
             rayClusterSpec:
@@ -166,25 +147,28 @@ spec:
                       image: ${IMAGE}
                       readinessProbe:
                         exec:
-                          command: ["bash", "-c", "wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success && wget --tries 1 -T 10 -q -O- http://localhost:8265/api/gcs_healthz | grep success"]
+                          command:
+                            - bash
+                            - -c
+                            - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success && wget --tries 1 -T 10 -q -O- http://localhost:8265/api/gcs_healthz | grep success
                         initialDelaySeconds: 45
                         periodSeconds: 5
                         timeoutSeconds: 5
                         failureThreshold: 10
                       resources:
                         requests:
-                          cpu: "${CPU_REQUEST}"
-                          memory: "${MEMORY_REQUEST}"
+                          cpu: ${CPU_REQUEST}
+                          memory: ${MEMORY_REQUEST}
                         limits:
-                          cpu: "${CPU_LIMIT}"
-                          memory: "${MEMORY_LIMIT}"
+                          cpu: ${CPU_LIMIT}
+                          memory: ${MEMORY_LIMIT}
                       env:
                       - name: DVC_DATA_VERSION
-                        value: "${DATA_VERSION}"
+                        value: ${DATA_VERSION}
                       - name: DVC_REPO
-                        value: "https://github.com/OpenCloudHub/data-registry"
+                        value: https://github.com/OpenCloudHub/data-registry
                       - name: ARGO_WORKFLOW_UID
-                        value: "${WORKFLOW_UID}"
+                        value: ${WORKFLOW_UID}
                       - name: AWS_ACCESS_KEY_ID
                         valueFrom:
                           secretKeyRef:
@@ -201,7 +185,7 @@ spec:
                             name: minio-tenant-secret
                             key: endpoint-url
                       - name: PGVECTOR_HOST
-                        value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                        value: cnpg-cluster-rw.storage.svc.cluster.local
                       - name: POSTGRES_DEMO_APP_DB_PASSWORD
                         valueFrom:
                           secretKeyRef:
@@ -217,25 +201,28 @@ spec:
                       image: ${IMAGE}
                       readinessProbe:
                         exec:
-                          command: ["bash", "-c", "wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success"]
+                          command:
+                            - bash
+                            - -c
+                            - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
                         initialDelaySeconds: 30
                         periodSeconds: 5
                         timeoutSeconds: 5
                         failureThreshold: 10
                       resources:
                         requests:
-                          cpu: "${CPU_REQUEST}"
-                          memory: "${MEMORY_REQUEST}"
+                          cpu: ${CPU_REQUEST}
+                          memory: ${MEMORY_REQUEST}
                         limits:
-                          cpu: "${CPU_LIMIT}"
-                          memory: "${MEMORY_LIMIT}"
+                          cpu: ${CPU_LIMIT}
+                          memory: ${MEMORY_LIMIT}
                       env:
                       - name: DVC_DATA_VERSION
-                        value: "${DATA_VERSION}"
+                        value: ${DATA_VERSION}
                       - name: DVC_REPO
-                        value: "https://github.com/OpenCloudHub/data-registry"
+                        value: https://github.com/OpenCloudHub/data-registry
                       - name: ARGO_WORKFLOW_UID
-                        value: "${WORKFLOW_UID}"
+                        value: ${WORKFLOW_UID}
                       - name: AWS_ACCESS_KEY_ID
                         valueFrom:
                           secretKeyRef:
@@ -252,16 +239,13 @@ spec:
                             name: minio-tenant-secret
                             key: endpoint-url
                       - name: PGVECTOR_HOST
-                        value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                        value: cnpg-cluster-rw.storage.svc.cluster.local
                       - name: POSTGRES_DEMO_APP_DB_PASSWORD
                         valueFrom:
                           secretKeyRef:
                             name: demo-app-db-user
                             key: password
-          ENDOFYAML
-
-          # Apply the YAML
-          kubectl create -f /tmp/rayjob.yaml
+          EOF
 
           echo "⏳ Waiting for RayJob..."
           sleep 3
@@ -299,29 +283,22 @@ spec:
             exit 1
           fi
 
-          # Find the submitter pod
           SUBMITTER_POD=$(kubectl get pods -n mlops -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
 
           echo "✅ Submitter pod: $SUBMITTER_POD"
-          echo ""
-          echo "Waiting for submitter pod to become ready..."
-
           kubectl wait --for=condition=Ready pod/$SUBMITTER_POD -n mlops --timeout=300s || true
 
           echo ""
           echo "🔍 Streaming embeddings logs..."
           echo "================================"
 
-          # Stream logs in the background
           kubectl logs -n mlops $SUBMITTER_POD -f 2>/dev/null &
           LOG_PID=$!
 
-          # Wait for RayJob to complete
           while true; do
             STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null)
 
             if [ -z "$STATUS" ]; then
-              echo "⏳ Waiting for job to start..."
               sleep 10
               continue
             fi
@@ -343,19 +320,12 @@ spec:
                 kubectl describe rayjob -n mlops $JOB_NAME
                 exit 1
                 ;;
-              "PENDING"|"RUNNING")
-                sleep 10
-                ;;
               *)
-                echo "⏳ Job status: $STATUS"
                 sleep 10
                 ;;
             esac
           done
 
-    # --------------------------------------------------------------------------
-    # Git commit and tag on success
-    # --------------------------------------------------------------------------
     - name: git-commit-tag
       inputs:
         parameters:
@@ -387,21 +357,18 @@ spec:
           IS_AUTOMATED="{{inputs.parameters.is_automated}}"
           TAG_PREFIX="opencloudhub-readmes-embeddings"
 
-          # Setup SSH
           mkdir -p ~/.ssh
           cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
           echo "" >> ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
 
-          # Clone
           echo "📥 Cloning..."
           git clone git@github.com:OpenCloudHub/data-registry.git /tmp/repo
           cd /tmp/repo
           git config user.name "Argo Workflow"
           git config user.email "workflow@opencloudhub.org"
 
-          # Create tag
           [ "$IS_AUTOMATED" = "true" ] && SUFFIX="-automated" || SUFFIX=""
 
           LATEST=$(git tag -l "${TAG_PREFIX}-v*" --sort=-version:refname | head -n1 || echo "")
@@ -424,7 +391,6 @@ spec:
           if git tag -l "$NEW_TAG" | grep -q .; then
             echo "ℹ️ Tag $NEW_TAG exists"
           else
-            # Tag message includes source data version for lineage
             git tag -a "$NEW_TAG" -m "Embeddings v${VERSION} (source: ${DATA_VERSION})"
             git push origin "$NEW_TAG"
             echo "🏷️ Created: $NEW_TAG"
