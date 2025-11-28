@@ -1,0 +1,21 @@
+# src/platform/testing/k6-operator/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: k6-testing
+
+helmCharts:
+  - name: k6-operator
+    releaseName: k6-operator
+    version: 4.1.1
+    repo: https://grafana.github.io/helm-charts
+    namespace: k6-testing
+    valuesInline:
+      manager:
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi

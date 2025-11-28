@@ -204,3 +204,22 @@ metadata:
   annotations:
     opencloudhub.org/description: "MLOps platform (MLflow, Argo Workflows, Ray)"
     opencloudhub.org/mesh-reason: "Ephemeral training jobs - mesh startup delay causes failures"
+
+
+# =============================================================================
+# NON-MESHED: K6s Testing
+# =============================================================================
+# No sensitive data, just calling endpoints
+# =============================================================================
+
+---
+# k6 Testing - performance testing operator
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k6-testing
+  labels:
+    istio.io/dataplane-mode: none
+  annotations:
+    opencloudhub.org/description: "k6 performance testing operator and test runs"
+    opencloudhub.org/mesh-reason: "Ephemeral test pods - mesh adds overhead to short-lived tests"
