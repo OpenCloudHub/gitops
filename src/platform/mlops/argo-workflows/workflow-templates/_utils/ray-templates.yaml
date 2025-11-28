@@ -3,18 +3,14 @@ kind: WorkflowTemplate
 metadata:
   name: ray-templates
   namespace: mlops
-  annotations:
-    description: "Reusable templates for Ray job submission and monitoring"
 spec:
   templates:
-    # ==========================================================================
-    # CREATE RAYJOB USING ARGO RESOURCE TEMPLATE (no shell substitution)
-    # ==========================================================================
     - name: create-rayjob-resource
       inputs:
         parameters:
           - name: run_label
-          - name: entrypoint
+          - name: data_version
+          - name: force
           - name: image
           - name: cpu_request
           - name: cpu_limit
@@ -38,9 +34,9 @@ spec:
             namespace: mlops
             labels:
               run: "{{inputs.parameters.run_label}}"
-              pipeline: "embeddings"
+              pipeline: embeddings
           spec:
-            entrypoint: "{{inputs.parameters.entrypoint}}"
+            entrypoint: "python /workspace/project/pipelines/opencloudhub-readmes-embeddings/run_pipeline.py"
             submissionMode: HTTPMode
             shutdownAfterJobFinishes: true
             ttlSecondsAfterFinished: 300
@@ -62,6 +58,10 @@ spec:
                           cpu: "{{inputs.parameters.cpu_limit}}"
                           memory: "{{inputs.parameters.memory_limit}}"
                       env:
+                      - name: DATA_VERSION
+                        value: "{{inputs.parameters.data_version}}"
+                      - name: FORCE_RUN
+                        value: "{{inputs.parameters.force}}"
                       - name: AWS_ACCESS_KEY_ID
                         valueFrom:
                           secretKeyRef:
@@ -84,8 +84,6 @@ spec:
                           secretKeyRef:
                             name: demo-app-db-user
                             key: password
-                      - name: DVC_REPO
-                        value: "https://github.com/OpenCloudHub/data-registry"
               workerGroupSpecs:
               - replicas: {{inputs.parameters.replicas}}
                 groupName: worker
@@ -103,6 +101,10 @@ spec:
                           cpu: "{{inputs.parameters.cpu_limit}}"
                           memory: "{{inputs.parameters.memory_limit}}"
                       env:
+                      - name: DATA_VERSION
+                        value: "{{inputs.parameters.data_version}}"
+                      - name: FORCE_RUN
+                        value: "{{inputs.parameters.force}}"
                       - name: AWS_ACCESS_KEY_ID
                         valueFrom:
                           secretKeyRef:
@@ -125,12 +127,7 @@ spec:
                           secretKeyRef:
                             name: demo-app-db-user
                             key: password
-                      - name: DVC_REPO
-                        value: "https://github.com/OpenCloudHub/data-registry"
 
-    # ==========================================================================
-    # WAIT FOR RAYJOB - RAY CLI AS PRIMARY (no kubectl polling for status)
-    # ==========================================================================
     - name: wait-for-rayjob
       inputs:
         parameters:
@@ -147,94 +144,46 @@ spec:
         command: [bash]
         source: |
           set -e
-
           JOB_NAME="{{inputs.parameters.job_name}}"
           TIMEOUT="{{inputs.parameters.timeout_seconds}}"
-
           echo "PENDING" > /tmp/job-status.txt
 
-          # Install kubectl (only needed to get job ID and cluster name from CR)
           curl -sLO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
           chmod +x kubectl && mv kubectl /tmp/kubectl
 
-          echo "=========================================="
-          echo "Waiting for RayJob $JOB_NAME to initialize..."
-          echo "=========================================="
-
-          # Wait for Ray to assign job ID and cluster name
           ELAPSED=0
           while [ $ELAPSED -lt 300 ]; do
             RAY_JOB_ID=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
             CLUSTER_NAME=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}' 2>/dev/null || echo "")
             DEPLOY_STATUS=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
             
-            # Check for early failure (before job even submitted)
             if [ "$DEPLOY_STATUS" = "Failed" ]; then
-              echo "ERROR: RayJob deployment failed before job submission"
+              echo "ERROR: RayJob deployment failed"
               /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
               echo "FAILED" > /tmp/job-status.txt
               exit 1
             fi
             
-            # Got what we need
             if [ -n "$RAY_JOB_ID" ] && [ -n "$CLUSTER_NAME" ]; then
               break
             fi
-            
-            echo "  Waiting for job ID and cluster... (${ELAPSED}s)"
             sleep 5
             ELAPSED=$((ELAPSED + 5))
           done
 
           if [ -z "$RAY_JOB_ID" ] || [ -z "$CLUSTER_NAME" ]; then
-            echo "ERROR: Timeout waiting for Ray job ID or cluster name"
-            /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
+            echo "ERROR: Timeout waiting for job"
             echo "FAILED" > /tmp/job-status.txt
             exit 1
           fi
 
           RAY_ADDRESS="http://${CLUSTER_NAME}-head-svc.mlops.svc.cluster.local:8265"
+          echo "Job ID: $RAY_JOB_ID | Cluster: $CLUSTER_NAME"
 
-          echo "=========================================="
-          echo "Ray Job ID:    $RAY_JOB_ID"
-          echo "Ray Cluster:   $CLUSTER_NAME"
-          echo "Ray Address:   $RAY_ADDRESS"
-          echo "=========================================="
-          echo ""
-
-          # =====================================================================
-          # USE RAY CLI - this is the authoritative source
-          # ray job logs -f: streams logs AND exits with correct status code
-          # =====================================================================
-          
-          echo "Streaming job logs via Ray CLI..."
-          echo ""
-          
           if timeout "$TIMEOUT" ray job logs -f "$RAY_JOB_ID" --address "$RAY_ADDRESS"; then
-            # ray job logs -f exits 0 only if job SUCCEEDED
-            echo ""
-            echo "=========================================="
-            echo "SUCCESS: Job completed successfully"
-            echo "=========================================="
             echo "SUCCEEDED" > /tmp/job-status.txt
             exit 0
           else
-            EXIT_CODE=$?
-            echo ""
-            echo "=========================================="
-            
-            if [ $EXIT_CODE -eq 124 ]; then
-              echo "TIMEOUT: Job did not complete within ${TIMEOUT}s"
-            else
-              echo "FAILED: Job failed (exit code: $EXIT_CODE)"
-            fi
-            
-            # Get final status for debugging
-            echo ""
-            echo "Final job status:"
-            ray job status "$RAY_JOB_ID" --address "$RAY_ADDRESS" 2>/dev/null || true
-            echo "=========================================="
-            
             echo "FAILED" > /tmp/job-status.txt
             exit 1
           fi
