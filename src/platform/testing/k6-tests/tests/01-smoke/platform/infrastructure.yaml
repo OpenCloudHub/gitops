@@ -14,7 +14,7 @@ spec:
   arguments: --insecure-skip-tls-verify
   cleanup: post
   runner:
-    image: docker.io/opencloudorghub/k6-tests:latest
+    image: docker.io/opencloudhuborg/k6-tests:latest
     env:
       - name: TEST_ENV
         value: "dev"
