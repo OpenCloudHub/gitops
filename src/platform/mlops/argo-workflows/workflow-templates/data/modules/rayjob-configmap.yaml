@@ -15,7 +15,6 @@ data:
         pipeline: "embeddings"
     spec:
       entrypoint: "${ENTRYPOINT}"
-      runtimeEnvYAML: "working_dir: /workspace/project"
       shutdownAfterJobFinishes: true
       ttlSecondsAfterFinished: 300
       submitterPodTemplate:
