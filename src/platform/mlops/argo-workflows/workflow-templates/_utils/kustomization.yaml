@@ -6,3 +6,5 @@ namespace: mlops
 resources:
 - compute.yaml
 - git-templates.yaml
+- ray-templates.yaml
+- rayjobconfigmap.yaml

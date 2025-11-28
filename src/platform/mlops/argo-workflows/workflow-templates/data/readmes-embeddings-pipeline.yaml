@@ -3,28 +3,39 @@ kind: WorkflowTemplate
 metadata:
   name: embeddings-pipeline
   namespace: mlops
+  annotations:
+    description: "Generate embeddings from downloaded data and store in pgvector"
 spec:
   serviceAccountName: workflow-executor
 
   arguments:
     parameters:
       - name: data_version
+        description: "Source data version tag (e.g., opencloudhub-readmes-download-v1.0.0)"
       - name: force
         value: "false"
+        description: "Force re-run even if DVC cache exists"
       - name: compute_type
         value: "cpu-medium"
+        enum: [cpu-small, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
+        description: "Compute configuration for Ray cluster"
       - name: image
         value: "opencloudhuborg/data-registry-pipelines:latest"
+        description: "Docker image for embeddings pipeline"
       - name: bump_type
         value: "patch"
+        enum: [major, minor, patch]
+        description: "Version bump type for output tag"
       - name: is_automated
         value: "false"
+        description: "Add -automated suffix to output tag"
 
   entrypoint: main
 
   templates:
     - name: main
       steps:
+        # Step 1: Map compute type to resource specs
         - - name: map-compute
             templateRef:
               name: compute-templates
@@ -34,8 +45,9 @@ spec:
                 - name: compute_type
                   value: "{{workflow.parameters.compute_type}}"
 
-        - - name: run-embeddings
-            template: submit-ray-embeddings
+        # Step 2: Prepare RayJob parameters (trim whitespace, build JSON)
+        - - name: prepare-rayjob
+            template: prepare-rayjob-params
             arguments:
               parameters:
                 - name: data_version
@@ -55,19 +67,54 @@ spec:
                 - name: replicas
                   value: "{{steps.map-compute.outputs.parameters.replicas}}"
 
-        - - name: commit-and-tag
-            template: git-commit-tag
-            when: "{{steps.run-embeddings.exitCode}} == 0"
+        # Step 3: Create RayJob from ConfigMap template
+        - - name: create-rayjob
+            templateRef:
+              name: ray-templates
+              template: create-rayjob-from-template
             arguments:
               parameters:
-                - name: data_version
-                  value: "{{workflow.parameters.data_version}}"
+                - name: configmap_name
+                  value: "embeddings-rayjob-template"
+                - name: run_label
+                  value: "{{steps.prepare-rayjob.outputs.parameters.run_label}}"
+                - name: substitutions
+                  value: "{{steps.prepare-rayjob.outputs.parameters.substitutions}}"
+
+        # Step 4: Wait for job completion with Ray CLI log streaming
+        - - name: wait-for-rayjob
+            templateRef:
+              name: ray-templates
+              template: wait-for-rayjob
+            arguments:
+              parameters:
+                - name: job_name
+                  value: "{{steps.create-rayjob.outputs.parameters.job_name}}"
+                - name: timeout_seconds
+                  value: "3600"
+
+        # Step 5: Tag the successful run (only on success)
+        - - name: git-tag
+            templateRef:
+              name: git-templates
+              template: git-tag-version
+            when: "{{steps.wait-for-rayjob.outputs.parameters.job_status}} == SUCCEEDED"
+            arguments:
+              parameters:
+                - name: tag_prefix
+                  value: "opencloudhub-readmes-embeddings"
                 - name: bump_type
                   value: "{{workflow.parameters.bump_type}}"
                 - name: is_automated
                   value: "{{workflow.parameters.is_automated}}"
+                - name: message
+                  value: "Embeddings generated from {{workflow.parameters.data_version}}"
 
-    - name: submit-ray-embeddings
+    # ==========================================================================
+    # PREPARE RAYJOB PARAMETERS
+    # Trims whitespace from all inputs and builds substitution JSON
+    # ==========================================================================
+    - name: prepare-rayjob-params
       inputs:
         parameters:
           - name: data_version
@@ -80,226 +127,67 @@ spec:
           - name: replicas
       outputs:
         parameters:
-          - name: job-name
+          - name: run_label
             valueFrom:
-              path: /tmp/job-name.txt
-      volumes:
-        - name: rayjob-template
-          configMap:
-            name: embeddings-rayjob-template
+              path: /tmp/run-label.txt
+          - name: substitutions
+            valueFrom:
+              path: /tmp/substitutions.json
       script:
-        image: alpine/k8s:1.30.4
+        image: alpine:3.19
         command: [sh]
-        volumeMounts:
-          - name: rayjob-template
-            mountPath: /templates
         source: |
           set -e
+          apk add --no-cache jq > /dev/null 2>&1
 
-          # Export variables for envsubst
-          export DATA_VERSION="{{inputs.parameters.data_version}}"
-          export IMAGE="{{inputs.parameters.image}}"
-          export CPU_REQUEST="{{inputs.parameters.cpu_request}}"
-          export CPU_LIMIT="{{inputs.parameters.cpu_limit}}"
-          export MEMORY_REQUEST="{{inputs.parameters.memory_request}}"
-          export MEMORY_LIMIT="{{inputs.parameters.memory_limit}}"
-          export REPLICAS="{{inputs.parameters.replicas}}"
-          export RUN_LABEL="emb$(date +%Y%m%d%H%M%S)"
+          # Trim all inputs (remove leading/trailing whitespace and newlines)
+          DATA_VERSION=$(printf '%s' "{{inputs.parameters.data_version}}" | xargs)
+          FORCE=$(printf '%s' "{{inputs.parameters.force}}" | xargs)
+          IMAGE=$(printf '%s' "{{inputs.parameters.image}}" | xargs)
+          CPU_REQUEST=$(printf '%s' "{{inputs.parameters.cpu_request}}" | xargs)
+          CPU_LIMIT=$(printf '%s' "{{inputs.parameters.cpu_limit}}" | xargs)
+          MEMORY_REQUEST=$(printf '%s' "{{inputs.parameters.memory_request}}" | xargs)
+          MEMORY_LIMIT=$(printf '%s' "{{inputs.parameters.memory_limit}}" | xargs)
+          REPLICAS=$(printf '%s' "{{inputs.parameters.replicas}}" | xargs)
 
-          FORCE="{{inputs.parameters.force}}"
-          export FORCE_FLAG=""
-          [ "$FORCE" = "true" ] && export FORCE_FLAG="--force"
+          # Generate unique run label
+          RUN_LABEL="emb$(date +%Y%m%d%H%M%S)"
+          echo "$RUN_LABEL" > /tmp/run-label.txt
+
+          # Build entrypoint command
+          FORCE_FLAG=""
+          [ "$FORCE" = "true" ] && FORCE_FLAG="--force"
+          ENTRYPOINT="sed -i s/version:.*/version:${DATA_VERSION}/ pipelines/opencloudhub-readmes-embeddings/params.yaml && dvc repro ${FORCE_FLAG} pipelines/opencloudhub-readmes-embeddings/dvc.yaml"
+
+          # Build substitutions JSON
+          jq -n \
+            --arg image "$IMAGE" \
+            --arg entrypoint "$ENTRYPOINT" \
+            --arg cpu_request "$CPU_REQUEST" \
+            --arg cpu_limit "$CPU_LIMIT" \
+            --arg memory_request "$MEMORY_REQUEST" \
+            --arg memory_limit "$MEMORY_LIMIT" \
+            --arg replicas "$REPLICAS" \
+            '{
+              IMAGE: $image,
+              ENTRYPOINT: $entrypoint,
+              CPU_REQUEST: $cpu_request,
+              CPU_LIMIT: $cpu_limit,
+              MEMORY_REQUEST: $memory_request,
+              MEMORY_LIMIT: $memory_limit,
+              REPLICAS: $replicas
+            }' > /tmp/substitutions.json
 
           echo "=========================================="
-          echo "Creating RayJob"
-          echo "  Label:        ${RUN_LABEL}"
-          echo "  Data version: ${DATA_VERSION}"
-          echo "  Image:        ${IMAGE}"
-          echo "  Force:        ${FORCE_FLAG:-no}"
+          echo "PREPARED RAYJOB PARAMETERS"
+          echo "  Run Label:  $RUN_LABEL"
+          echo "  Data:       $DATA_VERSION"
+          echo "  Image:      $IMAGE"
+          echo "  Force:      $FORCE"
+          echo "  CPU:        $CPU_REQUEST / $CPU_LIMIT"
+          echo "  Memory:     $MEMORY_REQUEST / $MEMORY_LIMIT"
+          echo "  Replicas:   $REPLICAS"
           echo "=========================================="
-
-          # Substitute variables in template
-          envsubst < /templates/rayjob.yaml > /tmp/rayjob.yaml
-
-          echo "Generated YAML:"
-          cat /tmp/rayjob.yaml
           echo ""
-
-          # Create the RayJob
-          kubectl create -f /tmp/rayjob.yaml
-
-          # Wait for job to appear
-          sleep 3
-          JOB_NAME=$(kubectl get rayjobs -n mlops -l run=${RUN_LABEL} -o jsonpath='{.items[0].metadata.name}')
-
-          if [ -z "$JOB_NAME" ]; then
-            echo "ERROR: Failed to find RayJob with label run=${RUN_LABEL}"
-            kubectl get rayjobs -n mlops
-            exit 1
-          fi
-
-          echo "$JOB_NAME" > /tmp/job-name.txt
-          echo "RayJob created: $JOB_NAME"
-
-          # Wait for cluster to be ready
-          echo "Waiting for Ray cluster..."
-          TIMEOUT=300
-          ELAPSED=0
-          while [ $ELAPSED -lt $TIMEOUT ]; do
-            DEPLOY_STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
-
-            case "$DEPLOY_STATUS" in
-              Running|Complete)
-                echo "Ray cluster ready, job is $DEPLOY_STATUS"
-                break
-                ;;
-              Failed)
-                echo "ERROR: RayJob deployment failed"
-                kubectl describe rayjob -n mlops $JOB_NAME
-                kubectl get pods -n mlops -l ray.io/cluster --show-labels
-                exit 1
-                ;;
-              *)
-                echo "Waiting... status: ${DEPLOY_STATUS:-pending}"
-                sleep 5
-                ELAPSED=$((ELAPSED + 5))
-                ;;
-            esac
-          done
-
-          if [ $ELAPSED -ge $TIMEOUT ]; then
-            echo "ERROR: Timeout waiting for Ray cluster"
-            kubectl describe rayjob -n mlops $JOB_NAME
-            exit 1
-          fi
-
-          # Get cluster name for finding pods
-          CLUSTER_NAME=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.rayClusterName}')
-          echo "Ray cluster: $CLUSTER_NAME"
-
-          # Find head pod and stream its logs (the job runs on head)
-          sleep 5
-          HEAD_POD=$(kubectl get pods -n mlops -l ray.io/cluster=$CLUSTER_NAME,ray.io/node-type=head -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-
-          if [ -n "$HEAD_POD" ]; then
-            echo "Streaming logs from head pod: $HEAD_POD"
-            echo "=========================================="
-            # Stream logs in background
-            kubectl logs -n mlops $HEAD_POD -f 2>/dev/null &
-            LOG_PID=$!
-          else
-            echo "WARNING: Could not find head pod"
-          fi
-
-          # Monitor job status until completion
-          echo "Monitoring job status..."
-          while true; do
-            JOB_STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "")
-            DEPLOY_STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
-
-            case "$JOB_STATUS" in
-              SUCCEEDED)
-                [ -n "$LOG_PID" ] && kill $LOG_PID 2>/dev/null || true
-                echo ""
-                echo "=========================================="
-                echo "SUCCESS: RayJob completed successfully"
-                echo "=========================================="
-                exit 0
-                ;;
-              FAILED|STOPPED)
-                [ -n "$LOG_PID" ] && kill $LOG_PID 2>/dev/null || true
-                echo ""
-                echo "=========================================="
-                echo "ERROR: RayJob failed with status: $JOB_STATUS"
-                echo "=========================================="
-                echo ""
-                echo "RayJob details:"
-                kubectl describe rayjob -n mlops $JOB_NAME
-                echo ""
-                echo "Head pod logs:"
-                [ -n "$HEAD_POD" ] && kubectl logs -n mlops $HEAD_POD --tail=100 2>/dev/null || echo "No head pod"
-                exit 1
-                ;;
-            esac
-
-            # Also check if deployment failed
-            if [ "$DEPLOY_STATUS" = "Failed" ]; then
-              [ -n "$LOG_PID" ] && kill $LOG_PID 2>/dev/null || true
-              echo "ERROR: Deployment failed"
-              kubectl describe rayjob -n mlops $JOB_NAME
-              exit 1
-            fi
-
-            sleep 5
-          done
-
-    - name: git-commit-tag
-      inputs:
-        parameters:
-          - name: data_version
-          - name: bump_type
-          - name: is_automated
-      outputs:
-        parameters:
-          - name: tag
-            valueFrom:
-              path: /tmp/tag.txt
-      volumes:
-        - name: git-secret
-          secret:
-            secretName: data-registry-repo
-      script:
-        image: alpine/git:latest
-        command: [sh]
-        volumeMounts:
-          - name: git-secret
-            mountPath: /mnt/secrets
-            readOnly: true
-        source: |
-          set -e
-          echo "" > /tmp/tag.txt
-
-          DATA_VERSION="{{inputs.parameters.data_version}}"
-          BUMP_TYPE="{{inputs.parameters.bump_type}}"
-          IS_AUTOMATED="{{inputs.parameters.is_automated}}"
-          TAG_PREFIX="opencloudhub-readmes-embeddings"
-
-          mkdir -p ~/.ssh
-          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
-          echo "" >> ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-
-          git clone git@github.com:OpenCloudHub/data-registry.git /tmp/repo
-          cd /tmp/repo
-          git config user.name "Argo Workflow"
-          git config user.email "workflow@opencloudhub.org"
-
-          [ "$IS_AUTOMATED" = "true" ] && SUFFIX="-automated" || SUFFIX=""
-
-          LATEST=$(git tag -l "${TAG_PREFIX}-v*" --sort=-version:refname | head -n1)
-          if [ -z "$LATEST" ]; then
-            VERSION="1.0.0"
-          else
-            CURRENT=$(echo "$LATEST" | sed "s/${TAG_PREFIX}-v//" | sed 's/-automated//')
-            MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-            MINOR=$(echo "$CURRENT" | cut -d. -f2)
-            PATCH=$(echo "$CURRENT" | cut -d. -f3)
-            case "$BUMP_TYPE" in
-              major) VERSION="$((MAJOR + 1)).0.0" ;;
-              minor) VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
-              *) VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
-            esac
-          fi
-
-          NEW_TAG="${TAG_PREFIX}-v${VERSION}${SUFFIX}"
-
-          if git tag -l "$NEW_TAG" | grep -q .; then
-            echo "Tag $NEW_TAG exists"
-          else
-            git tag -a "$NEW_TAG" -m "Embeddings v${VERSION} (source: ${DATA_VERSION})"
-            git push origin "$NEW_TAG"
-            echo "Created: $NEW_TAG"
-          fi
-
-          echo "$NEW_TAG" > /tmp/tag.txt
+          echo "Substitutions JSON:"
+          cat /tmp/substitutions.json

@@ -12,13 +12,14 @@ data:
       namespace: mlops
       labels:
         run: "${RUN_LABEL}"
+        pipeline: "embeddings"
     spec:
-      entrypoint: "sed -i s/version:.*/version:${DATA_VERSION}/ pipelines/opencloudhub-readmes-embeddings/params.yaml && dvc repro ${FORCE_FLAG} pipelines/opencloudhub-readmes-embeddings/dvc.yaml"
+      entrypoint: "${ENTRYPOINT}"
       runtimeEnvYAML: "working_dir: /workspace/project"
       shutdownAfterJobFinishes: true
       ttlSecondsAfterFinished: 300
       rayClusterSpec:
-        rayVersion: "2.48.0"
+        rayVersion: "2.51.0"
         headGroupSpec:
           serviceType: ClusterIP
           template:
