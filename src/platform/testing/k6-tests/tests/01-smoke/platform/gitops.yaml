@@ -1,0 +1,27 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: smoke-platform-gitops
+  namespace: k6-testing
+  labels:
+    app.kubernetes.io/name: k6-tests
+    opencloudhub.org/test-type: smoke
+    opencloudhub.org/test-target: gitops
+spec:
+  parallelism: 1
+  script:
+    localFile: /tests/tests/01-smoke/platform/gitops.js
+  arguments: --insecure-skip-tls-verify
+  cleanup: post
+  runner:
+    image: docker.io/opencloudhub/k6-tests:latest
+    env:
+      - name: TEST_ENV
+        value: "dev"
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
