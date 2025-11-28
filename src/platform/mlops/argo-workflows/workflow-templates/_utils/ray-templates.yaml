@@ -55,8 +55,9 @@ spec:
             exit 1
           fi
 
-          # Extract template from ConfigMap
-          kubectl get configmap -n mlops "$CONFIGMAP" -o jsonpath="{.data.$CONFIGMAP_KEY}" > /tmp/template.yaml
+          # Extract template from ConfigMap - escape dots in key name for jsonpath
+          ESCAPED_KEY=$(echo "$CONFIGMAP_KEY" | sed 's/\./\\./g')
+          kubectl get configmap -n mlops "$CONFIGMAP" -o jsonpath="{.data.${ESCAPED_KEY}}" > /tmp/template.yaml
 
           if [ ! -s /tmp/template.yaml ]; then
             echo "ERROR: Template is empty or key '$CONFIGMAP_KEY' not found"
