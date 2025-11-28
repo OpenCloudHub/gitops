@@ -159,6 +159,14 @@ helmCharts:
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/storage
+            - name: 'testing'
+              orgId: 1
+              folder: 'Testing'
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /var/lib/grafana/dashboards/testing
       sidecar:
         dashboards:
           enabled: true
