@@ -1,220 +1,285 @@
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: data-pipeline
+  name: data-templates
   namespace: mlops
   annotations:
-    workflows.argoproj.io/title: '**Base Data Pipeline**'
-    workflows.argoproj.io/description: "Run DVC data pipelines with automatic versioning"
+    workflows.argoproj.io/description: "Reusable DVC data pipeline operations"
 spec:
   serviceAccountName: workflow-executor
 
-  arguments:
-    parameters:
-      - name: pipelines
-        description: "JSON array of pipeline names to run"
-        value: '["opencloudhub-readmes-download"]'
-      - name: force
-        description: "Force re-run even if no changes"
-        value: "false"
-      - name: bump_type
-        description: "Version bump type: major, minor, patch"
-        value: "patch"
-      - name: is_automated
-        description: "Add -automated suffix to tags"
-        value: "false"
-      - name: compute_type
-        description: "Compute profile: cpu-small, cpu-medium, cpu-large, gpu-small, etc."
-        value: "cpu-small"
-      - name: image
-        description: "Docker image for DVC operations"
-        value: "opencloudhuborg/data-registry-pipelines:latest"
-      - name: pipeline_map
-        description: "JSON mapping of pipeline name to dataset name"
-        value: '{"opencloudhub-readmes-download":"opencloudhub-readmes"}'
-
-  entrypoint: main
-
   templates:
     # --------------------------------------------------------------------------
-    # Main: fan out to run each pipeline in parallel
+    # Run a DVC pipeline (dvc repro)
     # --------------------------------------------------------------------------
-    - name: main
-      steps:
-        - - name: run-pipeline
-            template: single-pipeline
-            arguments:
-              parameters:
-                - name: pipeline_name
-                  value: "{{item}}"
-            withParam: "{{workflow.parameters.pipelines}}"
+    - name: run-dvc-pipeline
+      inputs:
+        parameters:
+          - name: repo_path
+            description: "Path to cloned repo"
+          - name: pipeline_name
+            description: "Pipeline folder name under pipelines/"
+          - name: force
+            default: "false"
+          - name: image
+            default: "opencloudhuborg/data-registry-pipelines:latest"
+          - name: cpu_request
+            default: "500m"
+          - name: cpu_limit
+            default: "2"
+          - name: memory_request
+            default: "1Gi"
+          - name: memory_limit
+            default: "4Gi"
+        artifacts:
+          - name: repo
+            path: "{{inputs.parameters.repo_path}}"
+      outputs:
+        parameters:
+          - name: changed
+            valueFrom:
+              path: /tmp/changed.txt
+          - name: hash_before
+            valueFrom:
+              path: /tmp/hash_before.txt
+          - name: hash_after
+            valueFrom:
+              path: /tmp/hash_after.txt
+        artifacts:
+          - name: repo
+            path: "{{inputs.parameters.repo_path}}"
+      script:
+        image: "{{inputs.parameters.image}}"
+        command: [bash]
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: accesskey
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: secretkey
+          - name: AWS_ENDPOINT_URL
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: endpoint-url
+        source: |
+          set -e
+
+          PIPELINE="{{inputs.parameters.pipeline_name}}"
+          FORCE="{{inputs.parameters.force}}"
+          REPO_PATH="{{inputs.parameters.repo_path}}"
+
+          echo "false" > /tmp/changed.txt
+          echo "" > /tmp/hash_before.txt
+          echo "" > /tmp/hash_after.txt
+
+          cd "$REPO_PATH"
+
+          echo "════════════════════════════════════════════════════════════"
+          echo "🚀 Running DVC pipeline: $PIPELINE"
+          echo "════════════════════════════════════════════════════════════"
+
+          # Configure DVC remote
+          dvc remote modify minio endpointurl "$AWS_ENDPOINT_URL"
+          dvc remote modify minio access_key_id "$AWS_ACCESS_KEY_ID"
+          dvc remote modify minio secret_access_key "$AWS_SECRET_ACCESS_KEY"
+
+          # Hash before
+          LOCK_FILE="pipelines/${PIPELINE}/dvc.lock"
+          if [ -f "$LOCK_FILE" ]; then
+            md5sum "$LOCK_FILE" | cut -d' ' -f1 > /tmp/hash_before.txt
+            echo "📦 Hash before: $(cat /tmp/hash_before.txt)"
+          else
+            echo "📦 No existing dvc.lock"
+          fi
+
+          # Run DVC
+          FORCE_FLAG=""
+          if [ "$FORCE" = "true" ]; then
+            FORCE_FLAG="--force"
+            echo "⚠️  Force mode enabled"
+          fi
+
+          echo "🔄 Running dvc repro..."
+          dvc repro $FORCE_FLAG "pipelines/${PIPELINE}/dvc.yaml"
+
+          # Hash after
+          if [ -f "$LOCK_FILE" ]; then
+            md5sum "$LOCK_FILE" | cut -d' ' -f1 > /tmp/hash_after.txt
+            echo "📦 Hash after: $(cat /tmp/hash_after.txt)"
+          fi
+
+          # Check if changed
+          HASH_BEFORE=$(cat /tmp/hash_before.txt)
+          HASH_AFTER=$(cat /tmp/hash_after.txt)
+
+          if [ "$HASH_BEFORE" != "$HASH_AFTER" ]; then
+            echo "true" > /tmp/changed.txt
+            echo "📝 dvc.lock changed"
+          else
+            echo "ℹ️  No changes detected"
+          fi
+
+          echo "════════════════════════════════════════════════════════════"
+          echo "✅ Pipeline $PIPELINE complete"
+          echo "════════════════════════════════════════════════════════════"
+        resources:
+          requests:
+            cpu: "{{inputs.parameters.cpu_request}}"
+            memory: "{{inputs.parameters.memory_request}}"
+          limits:
+            cpu: "{{inputs.parameters.cpu_limit}}"
+            memory: "{{inputs.parameters.memory_limit}}"
 
     # --------------------------------------------------------------------------
-    # Single pipeline: clone -> run -> push -> commit -> tag
+    # Push data to DVC remote
     # --------------------------------------------------------------------------
-    - name: single-pipeline
+    - name: dvc-push
+      inputs:
+        parameters:
+          - name: repo_path
+            description: "Path to cloned repo"
+          - name: image
+            default: "opencloudhuborg/data-registry-pipelines:latest"
+        artifacts:
+          - name: repo
+            path: "{{inputs.parameters.repo_path}}"
+      outputs:
+        artifacts:
+          - name: repo
+            path: "{{inputs.parameters.repo_path}}"
+      script:
+        image: "{{inputs.parameters.image}}"
+        command: [bash]
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: accesskey
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: secretkey
+          - name: AWS_ENDPOINT_URL
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: endpoint-url
+        source: |
+          set -e
+
+          cd "{{inputs.parameters.repo_path}}"
+
+          echo "📤 Pushing data to DVC remote..."
+
+          # Configure DVC remote
+          dvc remote modify minio endpointurl "$AWS_ENDPOINT_URL"
+          dvc remote modify minio access_key_id "$AWS_ACCESS_KEY_ID"
+          dvc remote modify minio secret_access_key "$AWS_SECRET_ACCESS_KEY"
+
+          dvc push
+
+          echo "✅ Data pushed to MinIO"
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1"
+            memory: "2Gi"
+
+    # --------------------------------------------------------------------------
+    # Pull data from DVC remote
+    # --------------------------------------------------------------------------
+    - name: dvc-pull
+      inputs:
+        parameters:
+          - name: repo_path
+            description: "Path to cloned repo"
+          - name: image
+            default: "opencloudhuborg/data-registry-pipelines:latest"
+        artifacts:
+          - name: repo
+            path: "{{inputs.parameters.repo_path}}"
+      outputs:
+        artifacts:
+          - name: repo
+            path: "{{inputs.parameters.repo_path}}"
+      script:
+        image: "{{inputs.parameters.image}}"
+        command: [bash]
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: accesskey
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: secretkey
+          - name: AWS_ENDPOINT_URL
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: endpoint-url
+        source: |
+          set -e
+
+          cd "{{inputs.parameters.repo_path}}"
+
+          echo "📥 Pulling data from DVC remote..."
+
+          # Configure DVC remote
+          dvc remote modify minio endpointurl "$AWS_ENDPOINT_URL"
+          dvc remote modify minio access_key_id "$AWS_ACCESS_KEY_ID"
+          dvc remote modify minio secret_access_key "$AWS_SECRET_ACCESS_KEY"
+
+          dvc pull
+
+          echo "✅ Data pulled from MinIO"
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1"
+            memory: "2Gi"
+
+    # --------------------------------------------------------------------------
+    # Map pipeline name to dataset name
+    # --------------------------------------------------------------------------
+    - name: map-pipeline-to-dataset
       inputs:
         parameters:
           - name: pipeline_name
+          - name: pipeline_map
+            default: '{"opencloudhub-readmes-download":"opencloudhub-readmes"}'
       outputs:
         parameters:
           - name: dataset
             valueFrom:
-              parameter: "{{steps.map-dataset.outputs.parameters.dataset}}"
-          - name: tag
-            valueFrom:
-              parameter: "{{steps.create-tag.outputs.parameters.new_tag}}"
-          - name: changed
-            valueFrom:
-              parameter: "{{steps.run-dvc.outputs.parameters.changed}}"
-      steps:
-        # Step 1: Map pipeline name to dataset name
-        - - name: map-dataset
-            templateRef:
-              name: data-templates
-              template: map-pipeline-to-dataset
-            arguments:
-              parameters:
-                - name: pipeline_name
-                  value: "{{inputs.parameters.pipeline_name}}"
-                - name: pipeline_map
-                  value: "{{workflow.parameters.pipeline_map}}"
-
-        # Step 2: Map compute type to resources
-        - - name: map-compute
-            templateRef:
-              name: compute-templates
-              template: map-compute-config
-            arguments:
-              parameters:
-                - name: compute_type
-                  value: "{{workflow.parameters.compute_type}}"
-
-        # Step 3: Clone repository
-        - - name: clone
-            templateRef:
-              name: git-templates
-              template: clone-repo
-            arguments:
-              parameters:
-                - name: clone_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-
-        # Step 4: Run DVC pipeline
-        - - name: run-dvc
-            templateRef:
-              name: data-templates
-              template: run-dvc-pipeline
-            arguments:
-              parameters:
-                - name: repo_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-                - name: pipeline_name
-                  value: "{{inputs.parameters.pipeline_name}}"
-                - name: force
-                  value: "{{workflow.parameters.force}}"
-                - name: image
-                  value: "{{workflow.parameters.image}}"
-                - name: cpu_request
-                  value: "{{steps.map-compute.outputs.parameters.cpu_request}}"
-                - name: cpu_limit
-                  value: "{{steps.map-compute.outputs.parameters.cpu_limit}}"
-                - name: memory_request
-                  value: "{{steps.map-compute.outputs.parameters.memory_request}}"
-                - name: memory_limit
-                  value: "{{steps.map-compute.outputs.parameters.memory_limit}}"
-              artifacts:
-                - name: repo
-                  from: "{{steps.clone.outputs.artifacts.repo}}"
-
-        # Step 5: Push to DVC remote (always, even if no changes - idempotent)
-        - - name: dvc-push
-            templateRef:
-              name: data-templates
-              template: dvc-push
-            arguments:
-              parameters:
-                - name: repo_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-                - name: image
-                  value: "{{workflow.parameters.image}}"
-              artifacts:
-                - name: repo
-                  from: "{{steps.run-dvc.outputs.artifacts.repo}}"
-
-        # Step 6: Commit changes (only if changed)
-        - - name: commit
-            templateRef:
-              name: git-templates
-              template: commit-and-push
-            arguments:
-              parameters:
-                - name: repo_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-                - name: files_to_add
-                  value: "pipelines/{{inputs.parameters.pipeline_name}}/"
-                - name: commit_message
-                  value: "chore({{steps.map-dataset.outputs.parameters.dataset}}): update dvc.lock [skip ci]"
-              artifacts:
-                - name: repo
-                  from: "{{steps.dvc-push.outputs.artifacts.repo}}"
-            when: "{{steps.run-dvc.outputs.parameters.changed}} == true"
-
-        # Step 7: Create version tag (only if changed)
-        - - name: create-tag
-            templateRef:
-              name: git-templates
-              template: create-tag
-            arguments:
-              parameters:
-                - name: repo_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-                - name: tag_prefix
-                  value: "{{steps.map-dataset.outputs.parameters.dataset}}"
-                - name: bump_type
-                  value: "{{workflow.parameters.bump_type}}"
-                - name: is_automated
-                  value: "{{workflow.parameters.is_automated}}"
-              artifacts:
-                - name: repo
-                  from: "{{steps.commit.outputs.artifacts.repo}}"
-            when: "{{steps.run-dvc.outputs.parameters.changed}} == true"
-
-        # Step 8: Summary
-        - - name: summary
-            template: pipeline-summary
-            arguments:
-              parameters:
-                - name: pipeline_name
-                  value: "{{inputs.parameters.pipeline_name}}"
-                - name: dataset
-                  value: "{{steps.map-dataset.outputs.parameters.dataset}}"
-                - name: changed
-                  value: "{{steps.run-dvc.outputs.parameters.changed}}"
-                - name: tag
-                  value: "{{steps.create-tag.outputs.parameters.new_tag}}"
-
-    # --------------------------------------------------------------------------
-    # Summary output
-    # --------------------------------------------------------------------------
-    - name: pipeline-summary
-      inputs:
-        parameters:
-          - name: pipeline_name
-          - name: dataset
-          - name: changed
-          - name: tag
+              path: /tmp/dataset.txt
       script:
         image: alpine:latest
         command: [sh]
         source: |
-          echo "════════════════════════════════════════════════════════════"
-          echo "📊 Pipeline Summary"
-          echo "════════════════════════════════════════════════════════════"
-          echo ""
-          echo "Pipeline: {{inputs.parameters.pipeline_name}}"
-          echo "Dataset:  {{inputs.parameters.dataset}}"
-          echo "Changed:  {{inputs.parameters.changed}}"
-          echo "Tag:      {{inputs.parameters.tag}}"
-          echo ""
-          echo "════════════════════════════════════════════════════════════"
+          set -e
+          apk add --no-cache jq >/dev/null 2>&1
+
+          PIPELINE="{{inputs.parameters.pipeline_name}}"
+          MAP='{{inputs.parameters.pipeline_map}}'
+
+          # Try to get from map, fallback to pipeline name
+          DATASET=$(echo "$MAP" | jq -r ".\"$PIPELINE\" // \"$PIPELINE\"")
+
+          echo "$DATASET" > /tmp/dataset.txt
+          echo "📦 Pipeline '$PIPELINE' -> Dataset '$DATASET'"
