@@ -74,9 +74,10 @@ spec:
           echo "$SUBS" | jq -r 'to_entries[] | "\(.key)=\(.value)"' | while IFS='=' read -r key value; do
             # Trim whitespace from value
             value=$(echo "$value" | xargs)
+            # Escape & for sed (& means matched pattern in sed replacement)
+            escaped_value=$(printf '%s' "$value" | sed 's/&/\\&/g')
             echo "  Substituting: \${$key} -> $value"
-            # Use | as sed delimiter since it won't appear in our values
-            sed -i "s|\${${key}}|${value}|g" /tmp/rayjob.yaml
+            sed -i "s|\${${key}}|${escaped_value}|g" /tmp/rayjob.yaml
           done
 
           # Also substitute RUN_LABEL
@@ -89,10 +90,10 @@ spec:
           echo "----------------------------------------"
           echo ""
 
-          # Validate YAML syntax
-          if ! kubectl apply --dry-run=client -f /tmp/rayjob.yaml > /dev/null 2>&1; then
+          # Validate YAML syntax (use create for generateName)
+          if ! kubectl create --dry-run=client -f /tmp/rayjob.yaml > /dev/null 2>&1; then
             echo "ERROR: Generated YAML is invalid"
-            kubectl apply --dry-run=client -f /tmp/rayjob.yaml
+            kubectl create --dry-run=client -f /tmp/rayjob.yaml
             exit 1
           fi
 
