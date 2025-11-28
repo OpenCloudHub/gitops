@@ -70,6 +70,8 @@ spec:
                 - name: job_name
                   value: "{{steps.create-rayjob.outputs.parameters.job_name}}"
 
+        # TODO: we need to check if something changed in dvc
+
         - - name: git-tag
             templateRef:
               name: git-templates
