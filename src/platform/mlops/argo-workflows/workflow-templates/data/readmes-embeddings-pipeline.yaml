@@ -159,6 +159,8 @@ spec:
           "                secretKeyRef:" \
           "                  name: demo-app-db-user" \
           "                  key: password" \
+          "            - name: DVC_REPO" \
+          "              value: https://github.com/OpenCloudHub/data-registry" \
           "    workerGroupSpecs:" \
           "    - replicas: ${REPLICAS}" \
           "      groupName: worker" \
@@ -197,6 +199,8 @@ spec:
           "                secretKeyRef:" \
           "                  name: demo-app-db-user" \
           "                  key: password" \
+          "            - name: DVC_REPO" \
+          "              value: https://github.com/OpenCloudHub/data-registry" \
           > /tmp/rayjob.yaml
 
           echo "=== YAML ==="
@@ -235,6 +239,8 @@ spec:
 
           while true; do
             JOBSTATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null)
+            DEPLOYSTATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null)
+
             case "$JOBSTATUS" in
               SUCCEEDED)
                 sleep 3
@@ -245,9 +251,19 @@ spec:
               FAILED|STOPPED)
                 kill $LOGPID 2>/dev/null || true
                 echo "Failed: $JOBSTATUS"
+                kubectl describe rayjob -n mlops $JOB_NAME
                 exit 1
                 ;;
             esac
+
+            # Also check deployment status for failures
+            if [ "$DEPLOYSTATUS" = "Failed" ]; then
+              kill $LOGPID 2>/dev/null || true
+              echo "Deployment failed"
+              kubectl describe rayjob -n mlops $JOB_NAME
+              exit 1
+            fi
+
             sleep 5
           done
 
