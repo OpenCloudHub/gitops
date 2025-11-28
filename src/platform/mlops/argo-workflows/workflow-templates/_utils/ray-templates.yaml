@@ -148,9 +148,11 @@ spec:
           TIMEOUT="{{inputs.parameters.timeout_seconds}}"
           echo "PENDING" > /tmp/job-status.txt
 
-          curl -sLO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
-          chmod +x kubectl && mv kubectl /tmp/kubectl
+          # wget exists in ray image, curl doesn't
+          wget -q "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl" -O /tmp/kubectl
+          chmod +x /tmp/kubectl
 
+          # Only use kubectl to get job ID + cluster name from CR
           ELAPSED=0
           while [ $ELAPSED -lt 300 ]; do
             RAY_JOB_ID=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
@@ -167,6 +169,7 @@ spec:
             if [ -n "$RAY_JOB_ID" ] && [ -n "$CLUSTER_NAME" ]; then
               break
             fi
+            echo "Waiting for job to initialize... (${ELAPSED}s)"
             sleep 5
             ELAPSED=$((ELAPSED + 5))
           done
@@ -178,12 +181,18 @@ spec:
           fi
 
           RAY_ADDRESS="http://${CLUSTER_NAME}-head-svc.mlops.svc.cluster.local:8265"
-          echo "Job ID: $RAY_JOB_ID | Cluster: $CLUSTER_NAME"
+          echo "=========================================="
+          echo "Job ID: $RAY_JOB_ID"
+          echo "Cluster: $CLUSTER_NAME" 
+          echo "Address: $RAY_ADDRESS"
+          echo "=========================================="
 
+          # Ray CLI handles everything from here - logs AND exit code
           if timeout "$TIMEOUT" ray job logs -f "$RAY_JOB_ID" --address "$RAY_ADDRESS"; then
             echo "SUCCEEDED" > /tmp/job-status.txt
             exit 0
           else
             echo "FAILED" > /tmp/job-status.txt
+            ray job status "$RAY_JOB_ID" --address "$RAY_ADDRESS" 2>/dev/null || true
             exit 1
           fi
