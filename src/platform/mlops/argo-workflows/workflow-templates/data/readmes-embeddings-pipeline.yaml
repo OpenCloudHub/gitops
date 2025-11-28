@@ -111,40 +111,48 @@ spec:
 
           DATA_VERSION="{{inputs.parameters.data_version}}"
           FORCE="{{inputs.parameters.force}}"
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          IMAGE="{{inputs.parameters.image}}"
+          CPU_REQUEST="{{inputs.parameters.cpu_request}}"
+          CPU_LIMIT="{{inputs.parameters.cpu_limit}}"
+          MEMORY_REQUEST="{{inputs.parameters.memory_request}}"
+          MEMORY_LIMIT="{{inputs.parameters.memory_limit}}"
+          REPLICAS="{{inputs.parameters.replicas}}"
           GPU="{{inputs.parameters.gpu}}"
+          WORKFLOW_UID="{{workflow.uid}}"
 
-          GPU_RESOURCES=""
-          GPU_NODE_SELECTOR=""
-          if [ "$GPU" != "0" ]; then
-            GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
-            GPU_NODE_SELECTOR="nodeSelector:
-            node.opencloudhub.org/gpu: \"true\""
-          fi
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
-          # Build entrypoint: update params.yaml then run dvc
+          # Build force flag
           FORCE_FLAG=""
           [ "$FORCE" = "true" ] && FORCE_FLAG="--force"
 
-          # sed updates params.yaml data.version before dvc repro
-          ENTRYPOINT="cd pipelines/opencloudhub-readmes-embeddings && sed -i 's/version: .*/version: \"${DATA_VERSION}\"/' params.yaml && dvc repro ${FORCE_FLAG}"
-
           RUN_LABEL="embeddings-${DATA_VERSION}-${TIMESTAMP}"
 
-          echo "Creating RayJob for embeddings with label: workflow-run=${RUN_LABEL}"
-          echo "Entrypoint: ${ENTRYPOINT}"
+          echo "Creating RayJob for embeddings"
+          echo "  Label: workflow-run=${RUN_LABEL}"
+          echo "  Data version: ${DATA_VERSION}"
+          echo "  Force: ${FORCE_FLAG:-none}"
 
-          cat <<EOF | kubectl create -f -
+          # Build GPU sections if needed
+          GPU_RESOURCES_LINE=""
+          GPU_NODE_SELECTOR=""
+          if [ "$GPU" != "0" ]; then
+            GPU_RESOURCES_LINE="nvidia.com/gpu: $GPU"
+            GPU_NODE_SELECTOR="node.opencloudhub.org/gpu: \"true\""
+          fi
+
+          # Write YAML to file (using heredoc with variable expansion)
+          cat > /tmp/rayjob.yaml << ENDOFYAML
           apiVersion: ray.io/v1
           kind: RayJob
           metadata:
             generateName: embeddings-
             namespace: mlops
             labels:
-              workflow-run: "${RUN_LABEL}"
-              pipeline: "embeddings"
+              workflow-run: ${RUN_LABEL}
+              pipeline: embeddings
           spec:
-            entrypoint: bash -c "${ENTRYPOINT}"
+            entrypoint: cd pipelines/opencloudhub-readmes-embeddings && sed -i "s/version:.*/version: ${DATA_VERSION}/" params.yaml && dvc repro ${FORCE_FLAG}
             shutdownAfterJobFinishes: true
             ttlSecondsAfterFinished: 300
             rayClusterSpec:
@@ -153,35 +161,30 @@ spec:
                 serviceType: ClusterIP
                 template:
                   spec:
-                    ${GPU_NODE_SELECTOR}
                     containers:
                     - name: ray-head
-                      image: {{inputs.parameters.image}}
+                      image: ${IMAGE}
                       readinessProbe:
                         exec:
-                          command:
-                            - bash
-                            - -c
-                            - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success && wget --tries 1 -T 10 -q -O- http://localhost:8265/api/gcs_healthz | grep success
+                          command: ["bash", "-c", "wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success && wget --tries 1 -T 10 -q -O- http://localhost:8265/api/gcs_healthz | grep success"]
                         initialDelaySeconds: 45
                         periodSeconds: 5
                         timeoutSeconds: 5
                         failureThreshold: 10
                       resources:
                         requests:
-                          cpu: "{{inputs.parameters.cpu_request}}"
-                          memory: "{{inputs.parameters.memory_request}}"
+                          cpu: "${CPU_REQUEST}"
+                          memory: "${MEMORY_REQUEST}"
                         limits:
-                          cpu: "{{inputs.parameters.cpu_limit}}"
-                          memory: "{{inputs.parameters.memory_limit}}"
-                          ${GPU_RESOURCES}
+                          cpu: "${CPU_LIMIT}"
+                          memory: "${MEMORY_LIMIT}"
                       env:
                       - name: DVC_DATA_VERSION
                         value: "${DATA_VERSION}"
                       - name: DVC_REPO
                         value: "https://github.com/OpenCloudHub/data-registry"
                       - name: ARGO_WORKFLOW_UID
-                        value: "{{workflow.uid}}"
+                        value: "${WORKFLOW_UID}"
                       - name: AWS_ACCESS_KEY_ID
                         valueFrom:
                           secretKeyRef:
@@ -205,39 +208,34 @@ spec:
                             name: demo-app-db-user
                             key: password
               workerGroupSpecs:
-              - replicas: {{inputs.parameters.replicas}}
+              - replicas: ${REPLICAS}
                 groupName: worker
                 template:
                   spec:
-                    ${GPU_NODE_SELECTOR}
                     containers:
                     - name: ray-worker
-                      image: {{inputs.parameters.image}}
+                      image: ${IMAGE}
                       readinessProbe:
                         exec:
-                          command:
-                            - bash
-                            - -c
-                            - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
+                          command: ["bash", "-c", "wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success"]
                         initialDelaySeconds: 30
                         periodSeconds: 5
                         timeoutSeconds: 5
                         failureThreshold: 10
                       resources:
                         requests:
-                          cpu: "{{inputs.parameters.cpu_request}}"
-                          memory: "{{inputs.parameters.memory_request}}"
+                          cpu: "${CPU_REQUEST}"
+                          memory: "${MEMORY_REQUEST}"
                         limits:
-                          cpu: "{{inputs.parameters.cpu_limit}}"
-                          memory: "{{inputs.parameters.memory_limit}}"
-                          ${GPU_RESOURCES}
+                          cpu: "${CPU_LIMIT}"
+                          memory: "${MEMORY_LIMIT}"
                       env:
                       - name: DVC_DATA_VERSION
                         value: "${DATA_VERSION}"
                       - name: DVC_REPO
                         value: "https://github.com/OpenCloudHub/data-registry"
                       - name: ARGO_WORKFLOW_UID
-                        value: "{{workflow.uid}}"
+                        value: "${WORKFLOW_UID}"
                       - name: AWS_ACCESS_KEY_ID
                         valueFrom:
                           secretKeyRef:
@@ -260,7 +258,10 @@ spec:
                           secretKeyRef:
                             name: demo-app-db-user
                             key: password
-          EOF
+          ENDOFYAML
+
+          # Apply the YAML
+          kubectl create -f /tmp/rayjob.yaml
 
           echo "⏳ Waiting for RayJob..."
           sleep 3
