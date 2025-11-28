@@ -23,7 +23,7 @@ data:
         restartPolicy: Never
         containers:
           - name: ray-job-submitter
-            image: rayproject/ray:2.51.0-py312 
+            image: rayproject/ray:2.51.0-py312
             resources:
               limits:
                 cpu: "1"

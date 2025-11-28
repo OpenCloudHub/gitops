@@ -1,6 +1,10 @@
 # k6-tests Kubernetes Makefile
 # Runs k6 tests via TestRun CRDs in cluster
 
+.PHONY: all test
+all: help
+test: smoke
+
 NAMESPACE := k6-testing
 BASE_PATH := /home/lukas/Development/projects/opencloudhub/dev/teams/platform/gitops/src/platform/testing/k6-tests/tests
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)

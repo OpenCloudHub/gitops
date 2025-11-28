@@ -22,12 +22,42 @@ spec:
           env:
             - name: LOG_LEVEL
               value: "INFO"
+            # Database
             - name: DB_CONNECTION_STRING
               value: postgresql+psycopg://demo-app:1234@demo-app-db-pooler.storage.svc.cluster.local:5432/demo_app
+            - name: DB_TABLE_NAME
+              value: readme_embeddings
+            - name: DB_TOP_K
+              value: "5"
+            # MLflow
             - name: MLFLOW_TRACKING_URI
               value: https://mlflow.internal.opencloudhub.org
             - name: MLFLOW_TRACKING_INSECURE_TLS
               value: "true"
+            # MinIO / S3
+            - name: AWS_ACCESS_KEY_ID
+              value: admin
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "12345678"
+            - name: AWS_ENDPOINT_URL
+              value: https://minio-api.internal.opencloudhub.org
+            # DVC / Data
+            - name: DVC_REPO
+              value: https://github.com/OpenCloudHub/data-registry
+            - name: EVAL_DATA_PATH
+              value: data/opencloudhub-readmes/rag-evaluation/questions.csv
+            - name: PROMPT_NAME
+              value: readme-rag-prompt
+            # LLM
+            - name: LLM_BASE_URL
+              value: https://api.opencloudhub.org/models/base/qwen-0.5b/v1
+            - name: LLM_MODEL
+              value: qwen2.5-0.5b-instruct
+            - name: API_KEY
+              value: dummy
+            # Embeddings
+            - name: EMBEDDING_MODEL
+              value: sentence-transformers/all-MiniLM-L6-v2
           # Liveness: Is the process alive? (checks if FastAPI is running)
           # livenessProbe:
           #   httpGet:

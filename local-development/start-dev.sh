@@ -23,8 +23,8 @@
 #   2. Creates persistent storage for MinIO and PostgreSQL
 #   3. Starts local Vault and seeds secrets
 #   4. Bootstraps GitOps (ArgoCD + applications)
-#   5. Configures /etc/hosts for local access
-#   6. Starts Minikube tunnel for LoadBalancer access
+#   5. Waits for Gateway Service, then starts tunnel
+#   6. Configures /etc/hosts for local access
 #
 # =============================================================================
 
@@ -195,6 +195,30 @@ step_bootstrap_gitops() {
   log_success "GitOps bootstrap complete"
 }
 
+step_wait_for_gateway_service() {
+  log_step "Waiting for Gateway Service to exist"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log_info "(DRY RUN) Would wait for gateway service"
+    return 0
+  fi
+
+  log_info "Waiting for ingress-gateway-istio service (up to 10 minutes)..."
+  local max_attempts=60
+  for ((i=1; i<=max_attempts; i++)); do
+    if kubectl get svc -n istio-ingress ingress-gateway-istio &>/dev/null; then
+      log_success "Gateway service exists"
+      return 0
+    fi
+    echo -n "."
+    sleep 10
+  done
+
+  echo ""
+  log_error "Gateway service not found after 10 minutes"
+  return 1
+}
+
 step_start_tunnel() {
   log_step "Starting Minikube tunnel"
 
@@ -219,16 +243,16 @@ step_start_tunnel() {
   log_success "Tunnel started (PID: $TUNNEL_PID)"
 }
 
-step_wait_for_gateway() {
-  log_step "Waiting for Ingress Gateway"
+step_wait_for_gateway_ip() {
+  log_step "Waiting for Gateway LoadBalancer IP"
 
   if [[ "$DRY_RUN" == "true" ]]; then
     log_info "(DRY RUN) Would wait for gateway IP"
     return 0
   fi
 
-  log_info "Waiting for Gateway LoadBalancer IP (up to 10 minutes)..."
-  local max_attempts=60
+  log_info "Waiting for external IP assignment (up to 2 minutes)..."
+  local max_attempts=12
   for ((i=1; i<=max_attempts; i++)); do
     GATEWAY_IP=$(kubectl get svc -n istio-ingress ingress-gateway-istio \
       -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
@@ -237,14 +261,12 @@ step_wait_for_gateway() {
       log_success "Gateway IP: $GATEWAY_IP"
       return 0
     fi
-
     echo -n "."
     sleep 10
   done
 
   echo ""
-  log_error "Gateway IP not available after 10 minutes"
-  log_info "Check: kubectl get svc -n istio-ingress"
+  log_error "Gateway IP not assigned - check tunnel status"
   return 1
 }
 
@@ -382,8 +404,9 @@ main() {
   step_create_persistent_storage
   step_setup_vault
   step_bootstrap_gitops
+  step_wait_for_gateway_service
   step_start_tunnel
-  step_wait_for_gateway
+  step_wait_for_gateway_ip
   step_configure_hosts
   step_create_summary
   print_completion_summary
