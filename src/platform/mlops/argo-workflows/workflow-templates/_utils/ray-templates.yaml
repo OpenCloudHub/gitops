@@ -21,7 +21,7 @@ spec:
           - name: run_label
             description: "Unique label for this run (used to find the job)"
           - name: substitutions
-            description: "JSON object of KEY=VALUE substitutions, e.g. {\"IMAGE\":\"myimg\",\"REPLICAS\":\"2\"}"
+            description: "JSON object of KEY=VALUE substitutions"
       outputs:
         parameters:
           - name: job_name
@@ -55,7 +55,7 @@ spec:
             exit 1
           fi
 
-          # Extract template from ConfigMap - escape dots in key name for jsonpath
+          # Extract template from ConfigMap
           ESCAPED_KEY=$(echo "$CONFIGMAP_KEY" | sed 's/\./\\./g')
           kubectl get configmap -n mlops "$CONFIGMAP" -o jsonpath="{.data.${ESCAPED_KEY}}" > /tmp/template.yaml
 
@@ -67,16 +67,14 @@ spec:
 
           echo "Template extracted successfully"
 
-          # Apply substitutions using jq to parse JSON and sed to replace
-          # This handles each substitution safely
           cp /tmp/template.yaml /tmp/rayjob.yaml
 
-          echo "$SUBS" | jq -r 'to_entries[] | "\(.key)=\(.value)"' | while IFS='=' read -r key value; do
-            # Trim whitespace from value
-            value=$(echo "$value" | xargs)
-            # Escape & for sed (& means matched pattern in sed replacement)
-            escaped_value=$(printf '%s' "$value" | sed 's/&/\\&/g')
-            echo "  Substituting: \${$key} -> $value"
+          # Apply substitutions - iterate keys with jq, get values separately
+          for key in $(echo "$SUBS" | jq -r 'keys[]'); do
+            value=$(echo "$SUBS" | jq -r --arg k "$key" '.[$k]')
+            # Escape special chars for sed: & \ /
+            escaped_value=$(printf '%s' "$value" | sed -e 's/[&/\]/\\&/g')
+            echo "  Substituting: \${$key}"
             sed -i "s|\${${key}}|${escaped_value}|g" /tmp/rayjob.yaml
           done
 
@@ -90,7 +88,7 @@ spec:
           echo "----------------------------------------"
           echo ""
 
-          # Validate YAML syntax (use create for generateName)
+          # Validate YAML syntax
           if ! kubectl create --dry-run=client -f /tmp/rayjob.yaml > /dev/null 2>&1; then
             echo "ERROR: Generated YAML is invalid"
             kubectl create --dry-run=client -f /tmp/rayjob.yaml
