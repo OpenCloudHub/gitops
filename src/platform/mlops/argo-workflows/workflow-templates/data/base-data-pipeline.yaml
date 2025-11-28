@@ -23,9 +23,6 @@ spec:
       - name: is_automated
         description: "Add -automated suffix to tags"
         value: "false"
-      - name: compute_type
-        description: "Compute profile: cpu-small, cpu-medium, cpu-large, gpu-small, etc."
-        value: "cpu-small"
       - name: image
         description: "Docker image for DVC operations"
         value: "opencloudhuborg/data-registry-pipelines:latest"
@@ -72,17 +69,7 @@ spec:
                 - name: clone_path
                   value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
 
-        # Step 2: Map compute type to resources
-        - - name: map-compute
-            templateRef:
-              name: compute-templates
-              template: map-compute-config
-            arguments:
-              parameters:
-                - name: compute_type
-                  value: "{{workflow.parameters.compute_type}}"
-
-        # Step 3: Run DVC pipeline
+        # Step 2: Run DVC pipeline
         - - name: run-dvc
             templateRef:
               name: data-templates
@@ -97,19 +84,11 @@ spec:
                   value: "{{workflow.parameters.force}}"
                 - name: image
                   value: "{{workflow.parameters.image}}"
-                - name: cpu_request
-                  value: "{{steps.map-compute.outputs.parameters.cpu_request}}"
-                - name: cpu_limit
-                  value: "{{steps.map-compute.outputs.parameters.cpu_limit}}"
-                - name: memory_request
-                  value: "{{steps.map-compute.outputs.parameters.memory_request}}"
-                - name: memory_limit
-                  value: "{{steps.map-compute.outputs.parameters.memory_limit}}"
               artifacts:
                 - name: repo
                   from: "{{steps.clone.outputs.artifacts.repo}}"
 
-        # Step 4: Push to DVC remote
+        # Step 3: Push to DVC remote
         - - name: dvc-push
             templateRef:
               name: data-templates
@@ -124,7 +103,7 @@ spec:
                 - name: repo
                   from: "{{steps.run-dvc.outputs.artifacts.repo}}"
 
-        # Step 5: Commit changes (only if changed)
+        # Step 4: Commit changes (only if changed)
         - - name: commit
             templateRef:
               name: git-templates
@@ -142,7 +121,7 @@ spec:
                   from: "{{steps.dvc-push.outputs.artifacts.repo}}"
             when: "{{steps.run-dvc.outputs.parameters.changed}} == true"
 
-        # Step 6: Create version tag (only if changed)
+        # Step 5: Create version tag (only if changed)
         - - name: create-tag
             templateRef:
               name: git-templates
@@ -162,7 +141,7 @@ spec:
                   from: "{{steps.commit.outputs.artifacts.repo}}"
             when: "{{steps.run-dvc.outputs.parameters.changed}} == true"
 
-        # Step 7: Summary
+        # Step 6: Summary
         - - name: summary
             template: pipeline-summary
             arguments:

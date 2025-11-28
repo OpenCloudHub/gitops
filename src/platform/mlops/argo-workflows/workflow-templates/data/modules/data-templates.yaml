@@ -23,10 +23,6 @@ spec:
             default: "false"
           - name: image
             default: "opencloudhuborg/data-registry-pipelines:latest"
-          - name: cpu_request
-          - name: cpu_limit
-          - name: memory_request
-          - name: memory_limit
         artifacts:
           - name: repo
             path: "{{inputs.parameters.repo_path}}"
@@ -65,11 +61,11 @@ spec:
                 key: endpoint-url
         resources:
           requests:
-            cpu: "{{inputs.parameters.cpu_request}}"
-            memory: "{{inputs.parameters.memory_request}}"
+            cpu: "2"
+            memory: "4Gi"
           limits:
-            cpu: "{{inputs.parameters.cpu_limit}}"
-            memory: "{{inputs.parameters.memory_limit}}"
+            cpu: "4"
+            memory: "8Gi"
         source: |
           set -e
 
