@@ -8,141 +8,128 @@ metadata:
 spec:
   templates:
     # ==========================================================================
-    # CREATE RAYJOB FROM CONFIGMAP TEMPLATE
+    # CREATE RAYJOB USING ARGO RESOURCE TEMPLATE (no shell substitution)
     # ==========================================================================
-    - name: create-rayjob-from-template
+    - name: create-rayjob-resource
       inputs:
         parameters:
-          - name: configmap_name
-            description: "Name of ConfigMap containing rayjob.yaml template"
-          - name: configmap_key
-            default: "rayjob.yaml"
-            description: "Key in ConfigMap containing the template"
           - name: run_label
-            description: "Unique label for this run (used to find the job)"
-          - name: substitutions
-            description: "JSON object of KEY=VALUE substitutions"
+          - name: entrypoint
+          - name: image
+          - name: cpu_request
+          - name: cpu_limit
+          - name: memory_request
+          - name: memory_limit
+          - name: replicas
       outputs:
         parameters:
           - name: job_name
             valueFrom:
-              path: /tmp/job-name.txt
-          - name: cluster_name
-            valueFrom:
-              path: /tmp/cluster-name.txt
-      script:
-        image: alpine/k8s:1.30.4
-        command: [sh]
-        source: |
-          set -e
-
-          CONFIGMAP="{{inputs.parameters.configmap_name}}"
-          CONFIGMAP_KEY="{{inputs.parameters.configmap_key}}"
-          RUN_LABEL="{{inputs.parameters.run_label}}"
-          SUBS='{{inputs.parameters.substitutions}}'
-
-          echo "=========================================="
-          echo "CREATE RAYJOB FROM TEMPLATE"
-          echo "  ConfigMap:  $CONFIGMAP"
-          echo "  Key:        $CONFIGMAP_KEY"
-          echo "  Run Label:  $RUN_LABEL"
-          echo "=========================================="
-
-          # Check ConfigMap exists
-          if ! kubectl get configmap -n mlops "$CONFIGMAP" > /dev/null 2>&1; then
-            echo "ERROR: ConfigMap '$CONFIGMAP' not found in namespace mlops"
-            kubectl get configmap -n mlops
-            exit 1
-          fi
-
-          # Extract template from ConfigMap
-          ESCAPED_KEY=$(echo "$CONFIGMAP_KEY" | sed 's/\./\\./g')
-          kubectl get configmap -n mlops "$CONFIGMAP" -o jsonpath="{.data.${ESCAPED_KEY}}" > /tmp/template.yaml
-
-          if [ ! -s /tmp/template.yaml ]; then
-            echo "ERROR: Template is empty or key '$CONFIGMAP_KEY' not found"
-            kubectl get configmap -n mlops "$CONFIGMAP" -o yaml
-            exit 1
-          fi
-
-          echo "Template extracted successfully"
-
-          cp /tmp/template.yaml /tmp/rayjob.yaml
-
-          # Apply substitutions - iterate keys with jq, get values separately
-          for key in $(echo "$SUBS" | jq -r 'keys[]'); do
-            value=$(echo "$SUBS" | jq -r --arg k "$key" '.[$k]')
-            # Escape special chars for sed: & \ /
-            escaped_value=$(printf '%s' "$value" | sed -e 's/[&/\]/\\&/g')
-            echo "  Substituting: \${$key}"
-            sed -i "s|\${${key}}|${escaped_value}|g" /tmp/rayjob.yaml
-          done
-
-          # Also substitute RUN_LABEL
-          sed -i "s|\${RUN_LABEL}|${RUN_LABEL}|g" /tmp/rayjob.yaml
-
-          echo ""
-          echo "Generated YAML:"
-          echo "----------------------------------------"
-          cat /tmp/rayjob.yaml
-          echo "----------------------------------------"
-          echo ""
-
-          # Validate YAML syntax
-          if ! kubectl create --dry-run=client -f /tmp/rayjob.yaml > /dev/null 2>&1; then
-            echo "ERROR: Generated YAML is invalid"
-            kubectl create --dry-run=client -f /tmp/rayjob.yaml
-            exit 1
-          fi
-
-          echo "YAML validation passed"
-
-          # Create the RayJob
-          if ! kubectl create -f /tmp/rayjob.yaml; then
-            echo "ERROR: Failed to create RayJob"
-            exit 1
-          fi
-
-          echo "RayJob created, waiting for it to appear..."
-          sleep 3
-
-          # Find the job by label
-          JOB_NAME=$(kubectl get rayjobs -n mlops -l run="$RUN_LABEL" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-
-          if [ -z "$JOB_NAME" ]; then
-            echo "ERROR: Could not find RayJob with label run=$RUN_LABEL"
-            kubectl get rayjobs -n mlops
-            exit 1
-          fi
-
-          echo "RayJob created: $JOB_NAME"
-          echo "$JOB_NAME" > /tmp/job-name.txt
-
-          # Wait for cluster name to be assigned
-          for i in $(seq 1 30); do
-            CLUSTER_NAME=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}' 2>/dev/null)
-            if [ -n "$CLUSTER_NAME" ]; then
-              break
-            fi
-            sleep 2
-          done
-
-          if [ -z "$CLUSTER_NAME" ]; then
-            CLUSTER_NAME="unknown"
-          fi
-
-          echo "$CLUSTER_NAME" > /tmp/cluster-name.txt
-          echo "Ray cluster: $CLUSTER_NAME"
-
-          echo ""
-          echo "=========================================="
-          echo "SUCCESS: RayJob created"
-          echo "  Job:     $JOB_NAME"
-          echo "  Cluster: $CLUSTER_NAME"
-          echo "=========================================="
+              jsonPath: '{.metadata.name}'
+      resource:
+        action: create
+        successCondition: status.jobDeploymentStatus in (Running, Complete)
+        failureCondition: status.jobDeploymentStatus == Failed
+        manifest: |
+          apiVersion: ray.io/v1
+          kind: RayJob
+          metadata:
+            generateName: embeddings-
+            namespace: mlops
+            labels:
+              run: "{{inputs.parameters.run_label}}"
+              pipeline: "embeddings"
+          spec:
+            entrypoint: "{{inputs.parameters.entrypoint}}"
+            submissionMode: HTTPMode
+            shutdownAfterJobFinishes: true
+            ttlSecondsAfterFinished: 300
+            rayClusterSpec:
+              rayVersion: "2.51.0"
+              headGroupSpec:
+                serviceType: ClusterIP
+                template:
+                  spec:
+                    containers:
+                    - name: ray-head
+                      image: "{{inputs.parameters.image}}"
+                      imagePullPolicy: Always
+                      resources:
+                        requests:
+                          cpu: "{{inputs.parameters.cpu_request}}"
+                          memory: "{{inputs.parameters.memory_request}}"
+                        limits:
+                          cpu: "{{inputs.parameters.cpu_limit}}"
+                          memory: "{{inputs.parameters.memory_limit}}"
+                      env:
+                      - name: AWS_ACCESS_KEY_ID
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: accesskey
+                      - name: AWS_SECRET_ACCESS_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: secretkey
+                      - name: AWS_ENDPOINT_URL
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: endpoint-url
+                      - name: PGVECTOR_HOST
+                        value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                      - name: POSTGRES_DEMO_APP_DB_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: demo-app-db-user
+                            key: password
+                      - name: DVC_REPO
+                        value: "https://github.com/OpenCloudHub/data-registry"
+              workerGroupSpecs:
+              - replicas: {{inputs.parameters.replicas}}
+                groupName: worker
+                template:
+                  spec:
+                    containers:
+                    - name: ray-worker
+                      image: "{{inputs.parameters.image}}"
+                      imagePullPolicy: Always
+                      resources:
+                        requests:
+                          cpu: "{{inputs.parameters.cpu_request}}"
+                          memory: "{{inputs.parameters.memory_request}}"
+                        limits:
+                          cpu: "{{inputs.parameters.cpu_limit}}"
+                          memory: "{{inputs.parameters.memory_limit}}"
+                      env:
+                      - name: AWS_ACCESS_KEY_ID
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: accesskey
+                      - name: AWS_SECRET_ACCESS_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: secretkey
+                      - name: AWS_ENDPOINT_URL
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: endpoint-url
+                      - name: PGVECTOR_HOST
+                        value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                      - name: POSTGRES_DEMO_APP_DB_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: demo-app-db-user
+                            key: password
+                      - name: DVC_REPO
+                        value: "https://github.com/OpenCloudHub/data-registry"
 
     # ==========================================================================
-    # WAIT FOR RAYJOB COMPLETION - USES RAY CLI
+    # WAIT FOR RAYJOB - RAY CLI AS PRIMARY (no kubectl polling for status)
     # ==========================================================================
     - name: wait-for-rayjob
       inputs:
@@ -156,7 +143,7 @@ spec:
             valueFrom:
               path: /tmp/job-status.txt
       script:
-        image: rayproject/ray:2.48.0-py312
+        image: rayproject/ray:2.51.0-py312
         command: [bash]
         source: |
           set -e
@@ -166,35 +153,42 @@ spec:
 
           echo "PENDING" > /tmp/job-status.txt
 
-          # Install kubectl
-          wget -q "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl" -O /tmp/kubectl
-          chmod +x /tmp/kubectl
+          # Install kubectl (only needed to get job ID and cluster name from CR)
+          curl -sLO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
+          chmod +x kubectl && mv kubectl /tmp/kubectl
 
-          echo "Waiting for RayJob $JOB_NAME to be ready..."
+          echo "=========================================="
+          echo "Waiting for RayJob $JOB_NAME to initialize..."
+          echo "=========================================="
 
-          # Wait for job ID and cluster name
+          # Wait for Ray to assign job ID and cluster name
           ELAPSED=0
-          RAY_JOB_ID=""
-          CLUSTER_NAME=""
-          while [ -z "$RAY_JOB_ID" ] && [ $ELAPSED -lt 300 ]; do
+          while [ $ELAPSED -lt 300 ]; do
             RAY_JOB_ID=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
             CLUSTER_NAME=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}' 2>/dev/null || echo "")
+            DEPLOY_STATUS=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
             
-            if [ -z "$RAY_JOB_ID" ]; then
-              DEPLOY_STATUS=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
-              if [ "$DEPLOY_STATUS" = "Failed" ]; then
-                echo "RayJob deployment failed"
-                /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
-                echo "FAILED" > /tmp/job-status.txt
-                exit 1
-              fi
-              sleep 5
-              ELAPSED=$((ELAPSED + 5))
+            # Check for early failure (before job even submitted)
+            if [ "$DEPLOY_STATUS" = "Failed" ]; then
+              echo "ERROR: RayJob deployment failed before job submission"
+              /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
+              echo "FAILED" > /tmp/job-status.txt
+              exit 1
             fi
+            
+            # Got what we need
+            if [ -n "$RAY_JOB_ID" ] && [ -n "$CLUSTER_NAME" ]; then
+              break
+            fi
+            
+            echo "  Waiting for job ID and cluster... (${ELAPSED}s)"
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
           done
 
           if [ -z "$RAY_JOB_ID" ] || [ -z "$CLUSTER_NAME" ]; then
-            echo "Timeout waiting for Ray job ID or cluster name"
+            echo "ERROR: Timeout waiting for Ray job ID or cluster name"
+            /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
             echo "FAILED" > /tmp/job-status.txt
             exit 1
           fi
@@ -202,51 +196,45 @@ spec:
           RAY_ADDRESS="http://${CLUSTER_NAME}-head-svc.mlops.svc.cluster.local:8265"
 
           echo "=========================================="
-          echo "Ray Job ID: $RAY_JOB_ID"
-          echo "Ray Cluster: $CLUSTER_NAME"
-          echo "Ray Address: $RAY_ADDRESS"
+          echo "Ray Job ID:    $RAY_JOB_ID"
+          echo "Ray Cluster:   $CLUSTER_NAME"
+          echo "Ray Address:   $RAY_ADDRESS"
           echo "=========================================="
+          echo ""
 
-          # Start log streaming in background (best effort)
-          ray job logs -f "$RAY_JOB_ID" --address "$RAY_ADDRESS" 2>/dev/null &
-          LOG_PID=$!
-
-          # Poll job status via kubectl (authoritative source)
-          ELAPSED=0
-          while [ $ELAPSED -lt $TIMEOUT ]; do
-            JOB_STATUS=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "")
-            DEPLOY_STATUS=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
-            MESSAGE=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.message}' 2>/dev/null || echo "")
+          # =====================================================================
+          # USE RAY CLI - this is the authoritative source
+          # ray job logs -f: streams logs AND exits with correct status code
+          # =====================================================================
+          
+          echo "Streaming job logs via Ray CLI..."
+          echo ""
+          
+          if timeout "$TIMEOUT" ray job logs -f "$RAY_JOB_ID" --address "$RAY_ADDRESS"; then
+            # ray job logs -f exits 0 only if job SUCCEEDED
+            echo ""
+            echo "=========================================="
+            echo "SUCCESS: Job completed successfully"
+            echo "=========================================="
+            echo "SUCCEEDED" > /tmp/job-status.txt
+            exit 0
+          else
+            EXIT_CODE=$?
+            echo ""
+            echo "=========================================="
             
-            # Check terminal states
-            if [ "$JOB_STATUS" = "SUCCEEDED" ]; then
-              kill $LOG_PID 2>/dev/null || true
-              wait $LOG_PID 2>/dev/null || true
-              echo ""
-              echo "=========================================="
-              echo "SUCCESS: $MESSAGE"
-              echo "=========================================="
-              echo "SUCCEEDED" > /tmp/job-status.txt
-              exit 0
+            if [ $EXIT_CODE -eq 124 ]; then
+              echo "TIMEOUT: Job did not complete within ${TIMEOUT}s"
+            else
+              echo "FAILED: Job failed (exit code: $EXIT_CODE)"
             fi
             
-            if [ "$JOB_STATUS" = "FAILED" ] || [ "$DEPLOY_STATUS" = "Failed" ]; then
-              kill $LOG_PID 2>/dev/null || true
-              wait $LOG_PID 2>/dev/null || true
-              echo ""
-              echo "=========================================="
-              echo "FAILED: $MESSAGE"
-              echo "=========================================="
-              /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
-              echo "FAILED" > /tmp/job-status.txt
-              exit 1
-            fi
+            # Get final status for debugging
+            echo ""
+            echo "Final job status:"
+            ray job status "$RAY_JOB_ID" --address "$RAY_ADDRESS" 2>/dev/null || true
+            echo "=========================================="
             
-            sleep 5
-            ELAPSED=$((ELAPSED + 5))
-          done
-
-          kill $LOG_PID 2>/dev/null || true
-          echo "Timeout after $TIMEOUT seconds"
-          echo "FAILED" > /tmp/job-status.txt
-          exit 1
+            echo "FAILED" > /tmp/job-status.txt
+            exit 1
+          fi

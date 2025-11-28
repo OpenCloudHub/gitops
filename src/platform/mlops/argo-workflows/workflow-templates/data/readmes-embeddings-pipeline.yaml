@@ -45,15 +45,27 @@ spec:
                 - name: compute_type
                   value: "{{workflow.parameters.compute_type}}"
 
-        # Step 2: Prepare RayJob parameters (trim whitespace, build JSON)
-        - - name: prepare-rayjob
-            template: prepare-rayjob-params
+        # Step 2: Prepare parameters using Python (safe string handling)
+        - - name: prepare-params
+            template: prepare-params-python
             arguments:
               parameters:
                 - name: data_version
                   value: "{{workflow.parameters.data_version}}"
                 - name: force
                   value: "{{workflow.parameters.force}}"
+
+        # Step 3: Create RayJob using Argo resource template
+        - - name: create-rayjob
+            templateRef:
+              name: ray-templates
+              template: create-rayjob-resource
+            arguments:
+              parameters:
+                - name: run_label
+                  value: "{{steps.prepare-params.outputs.parameters.run_label}}"
+                - name: entrypoint
+                  value: "{{steps.prepare-params.outputs.parameters.entrypoint}}"
                 - name: image
                   value: "{{workflow.parameters.image}}"
                 - name: cpu_request
@@ -67,21 +79,7 @@ spec:
                 - name: replicas
                   value: "{{steps.map-compute.outputs.parameters.replicas}}"
 
-        # Step 3: Create RayJob from ConfigMap template
-        - - name: create-rayjob
-            templateRef:
-              name: ray-templates
-              template: create-rayjob-from-template
-            arguments:
-              parameters:
-                - name: configmap_name
-                  value: "embeddings-rayjob-template"
-                - name: run_label
-                  value: "{{steps.prepare-rayjob.outputs.parameters.run_label}}"
-                - name: substitutions
-                  value: "{{steps.prepare-rayjob.outputs.parameters.substitutions}}"
-
-        # Step 4: Wait for job completion with Ray CLI log streaming
+        # Step 4: Wait for job completion
         - - name: wait-for-rayjob
             templateRef:
               name: ray-templates
@@ -93,7 +91,7 @@ spec:
                 - name: timeout_seconds
                   value: "3600"
 
-        # Step 5: Tag the successful run (only on success)
+        # Step 5: Tag the successful run
         - - name: git-tag
             templateRef:
               name: git-templates
@@ -111,83 +109,51 @@ spec:
                   value: "Embeddings generated from {{workflow.parameters.data_version}}"
 
     # ==========================================================================
-    # PREPARE RAYJOB PARAMETERS
-    # Trims whitespace from all inputs and builds substitution JSON
+    # PREPARE PARAMS WITH PYTHON (safe string building)
     # ==========================================================================
-    - name: prepare-rayjob-params
+    - name: prepare-params-python
       inputs:
         parameters:
           - name: data_version
           - name: force
-          - name: image
-          - name: cpu_request
-          - name: cpu_limit
-          - name: memory_request
-          - name: memory_limit
-          - name: replicas
       outputs:
         parameters:
           - name: run_label
             valueFrom:
-              path: /tmp/run-label.txt
-          - name: substitutions
+              path: /tmp/run_label.txt
+          - name: entrypoint
             valueFrom:
-              path: /tmp/substitutions.json
+              path: /tmp/entrypoint.txt
       script:
-        image: alpine:3.19
-        command: [sh]
+        image: python:3.12-alpine
+        command: [python]
         source: |
-          set -e
-          apk add --no-cache jq > /dev/null 2>&1
+          import datetime
 
-          # Trim all inputs (remove leading/trailing whitespace and newlines)
-          DATA_VERSION=$(printf '%s' "{{inputs.parameters.data_version}}" | xargs)
-          FORCE=$(printf '%s' "{{inputs.parameters.force}}" | xargs)
-          IMAGE=$(printf '%s' "{{inputs.parameters.image}}" | xargs)
-          CPU_REQUEST=$(printf '%s' "{{inputs.parameters.cpu_request}}" | xargs)
-          CPU_LIMIT=$(printf '%s' "{{inputs.parameters.cpu_limit}}" | xargs)
-          MEMORY_REQUEST=$(printf '%s' "{{inputs.parameters.memory_request}}" | xargs)
-          MEMORY_LIMIT=$(printf '%s' "{{inputs.parameters.memory_limit}}" | xargs)
-          REPLICAS=$(printf '%s' "{{inputs.parameters.replicas}}" | xargs)
+          data_version = """{{inputs.parameters.data_version}}""".strip()
+          force = """{{inputs.parameters.force}}""".strip().lower() == "true"
 
           # Generate unique run label
-          RUN_LABEL="emb$(date +%Y%m%d%H%M%S)"
-          echo "$RUN_LABEL" > /tmp/run-label.txt
-
-          # Build entrypoint command
-          FORCE_FLAG=""
-          [ "$FORCE" = "true" ] && FORCE_FLAG="--force"
-          ENTRYPOINT="cd /workspace/project && sed -i 's/DATA_VERSION = .*/DATA_VERSION = \"${DATA_VERSION}\"/' pipelines/opencloudhub-readmes-embeddings/params.py && /workspace/project/.venv/bin/dvc repro ${FORCE_FLAG} pipelines/opencloudhub-readmes-embeddings/dvc.yaml"
-
-          # Build substitutions JSON
-          jq -n \
-            --arg image "$IMAGE" \
-            --arg entrypoint "$ENTRYPOINT" \
-            --arg cpu_request "$CPU_REQUEST" \
-            --arg cpu_limit "$CPU_LIMIT" \
-            --arg memory_request "$MEMORY_REQUEST" \
-            --arg memory_limit "$MEMORY_LIMIT" \
-            --arg replicas "$REPLICAS" \
-            '{
-              IMAGE: $image,
-              ENTRYPOINT: $entrypoint,
-              CPU_REQUEST: $cpu_request,
-              CPU_LIMIT: $cpu_limit,
-              MEMORY_REQUEST: $memory_request,
-              MEMORY_LIMIT: $memory_limit,
-              REPLICAS: $replicas
-            }' > /tmp/substitutions.json
-
-          echo "=========================================="
-          echo "PREPARED RAYJOB PARAMETERS"
-          echo "  Run Label:  $RUN_LABEL"
-          echo "  Data:       $DATA_VERSION"
-          echo "  Image:      $IMAGE"
-          echo "  Force:      $FORCE"
-          echo "  CPU:        $CPU_REQUEST / $CPU_LIMIT"
-          echo "  Memory:     $MEMORY_REQUEST / $MEMORY_LIMIT"
-          echo "  Replicas:   $REPLICAS"
-          echo "=========================================="
-          echo ""
-          echo "Substitutions JSON:"
-          cat /tmp/substitutions.json
+          run_label = f"emb{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+          
+          # Build entrypoint - Python handles quoting correctly
+          force_flag = "--force " if force else ""
+          entrypoint = (
+              f"cd /workspace/project && "
+              f"sed -i 's/DATA_VERSION = .*/DATA_VERSION = \"{data_version}\"/' "
+              f"pipelines/opencloudhub-readmes-embeddings/params.py && "
+              f"/workspace/project/.venv/bin/dvc repro {force_flag}"
+              f"pipelines/opencloudhub-readmes-embeddings/dvc.yaml"
+          )
+          
+          # Write outputs
+          with open("/tmp/run_label.txt", "w") as f:
+              f.write(run_label)
+          
+          with open("/tmp/entrypoint.txt", "w") as f:
+              f.write(entrypoint)
+          
+          print(f"Run Label: {run_label}")
+          print(f"Data Version: {data_version}")
+          print(f"Force: {force}")
+          print(f"Entrypoint: {entrypoint}")
