@@ -1,0 +1,437 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: embeddings-pipeline
+  namespace: mlops
+  annotations:
+    workflows.argoproj.io/description: "Run embeddings generation via Ray with automatic versioning"
+spec:
+  serviceAccountName: workflow-executor
+
+  arguments:
+    parameters:
+      - name: data_version
+        description: "DVC data version tag (e.g., opencloudhub-readmes-v1.0.0)"
+      - name: compute_type
+        value: "cpu-medium"
+        enum: [cpu-small, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
+        description: "Compute configuration"
+      - name: image
+        description: "Docker image for embeddings"
+        value: "opencloudhuborg/data-registry-pipelines:latest"
+      - name: bump_type
+        value: "patch"
+        description: "Version bump type: major, minor, patch"
+      - name: is_automated
+        value: "false"
+        description: "Add -automated suffix to tags"
+
+  entrypoint: main
+
+  templates:
+    # --------------------------------------------------------------------------
+    # Main flow
+    # --------------------------------------------------------------------------
+    - name: main
+      steps:
+        # Step 1: Map compute
+        - - name: map-compute
+            templateRef:
+              name: compute-templates
+              template: map-compute-config
+            arguments:
+              parameters:
+                - name: compute_type
+                  value: "{{workflow.parameters.compute_type}}"
+
+        # Step 2: Submit Ray job
+        - - name: run-embeddings
+            template: submit-ray-embeddings
+            arguments:
+              parameters:
+                - name: data_version
+                  value: "{{workflow.parameters.data_version}}"
+                - name: image
+                  value: "{{workflow.parameters.image}}"
+                - name: cpu_request
+                  value: "{{steps.map-compute.outputs.parameters.cpu_request}}"
+                - name: cpu_limit
+                  value: "{{steps.map-compute.outputs.parameters.cpu_limit}}"
+                - name: memory_request
+                  value: "{{steps.map-compute.outputs.parameters.memory_request}}"
+                - name: memory_limit
+                  value: "{{steps.map-compute.outputs.parameters.memory_limit}}"
+                - name: replicas
+                  value: "{{steps.map-compute.outputs.parameters.replicas}}"
+                - name: gpu
+                  value: "{{steps.map-compute.outputs.parameters.gpu}}"
+
+        # Step 3: Commit and tag (only on success)
+        - - name: commit-and-tag
+            template: git-commit-tag
+            arguments:
+              parameters:
+                - name: data_version
+                  value: "{{workflow.parameters.data_version}}"
+                - name: bump_type
+                  value: "{{workflow.parameters.bump_type}}"
+                - name: is_automated
+                  value: "{{workflow.parameters.is_automated}}"
+
+    # --------------------------------------------------------------------------
+    # Submit Ray embeddings job
+    # --------------------------------------------------------------------------
+    - name: submit-ray-embeddings
+      inputs:
+        parameters:
+          - name: data_version
+          - name: image
+          - name: cpu_request
+          - name: cpu_limit
+          - name: memory_request
+          - name: memory_limit
+          - name: replicas
+          - name: gpu
+      outputs:
+        parameters:
+          - name: job-name
+            valueFrom:
+              path: /tmp/job-name.txt
+      script:
+        image: bitnami/kubectl:latest
+        command: [sh]
+        source: |
+          set -e
+
+          DATA_VERSION="{{inputs.parameters.data_version}}"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          GPU="{{inputs.parameters.gpu}}"
+
+          GPU_RESOURCES=""
+          GPU_NODE_SELECTOR=""
+          if [ "$GPU" != "0" ]; then
+            GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
+            GPU_NODE_SELECTOR="nodeSelector:
+            node.opencloudhub.org/gpu: \"true\""
+          fi
+
+          RUN_LABEL="embeddings-${DATA_VERSION}-${TIMESTAMP}"
+
+          echo "Creating RayJob for embeddings with label: workflow-run=${RUN_LABEL}"
+
+          cat <<EOF | kubectl create -f -
+          apiVersion: ray.io/v1
+          kind: RayJob
+          metadata:
+            generateName: embeddings-
+            namespace: mlops
+            labels:
+              workflow-run: "${RUN_LABEL}"
+              pipeline: "embeddings"
+          spec:
+            entrypoint: python -m src.embeddings.run --data-version ${DATA_VERSION}
+            shutdownAfterJobFinishes: true
+            ttlSecondsAfterFinished: 300
+            rayClusterSpec:
+              rayVersion: "2.51.0"
+              headGroupSpec:
+                serviceType: ClusterIP
+                template:
+                  spec:
+                    ${GPU_NODE_SELECTOR}
+                    containers:
+                    - name: ray-head
+                      image: {{inputs.parameters.image}}
+                      readinessProbe:
+                        exec:
+                          command:
+                            - bash
+                            - -c
+                            - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success && wget --tries 1 -T 10 -q -O- http://localhost:8265/api/gcs_healthz | grep success
+                        initialDelaySeconds: 45
+                        periodSeconds: 5
+                        timeoutSeconds: 5
+                        failureThreshold: 10
+                      resources:
+                        requests:
+                          cpu: "{{inputs.parameters.cpu_request}}"
+                          memory: "{{inputs.parameters.memory_request}}"
+                        limits:
+                          cpu: "{{inputs.parameters.cpu_limit}}"
+                          memory: "{{inputs.parameters.memory_limit}}"
+                          ${GPU_RESOURCES}
+                      env:
+                      - name: DVC_DATA_VERSION
+                        value: "${DATA_VERSION}"
+                      - name: ARGO_WORKFLOW_UID
+                        value: "{{workflow.uid}}"
+                      - name: AWS_ACCESS_KEY_ID
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: accesskey
+                      - name: AWS_SECRET_ACCESS_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: secretkey
+                      - name: AWS_ENDPOINT_URL
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: endpoint-url
+                      - name: PGVECTOR_HOST
+                        value: "pgvector-rw.storage.svc.cluster.local"
+                      - name: PGVECTOR_PORT
+                        value: "5432"
+                      - name: PGVECTOR_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: pgvector-app
+                            key: username
+                      - name: PGVECTOR_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: pgvector-app
+                            key: password
+                      - name: PGVECTOR_DATABASE
+                        value: "vectors"
+              workerGroupSpecs:
+              - replicas: {{inputs.parameters.replicas}}
+                groupName: worker
+                template:
+                  spec:
+                    ${GPU_NODE_SELECTOR}
+                    containers:
+                    - name: ray-worker
+                      image: {{inputs.parameters.image}}
+                      readinessProbe:
+                        exec:
+                          command:
+                            - bash
+                            - -c
+                            - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
+                        initialDelaySeconds: 30
+                        periodSeconds: 5
+                        timeoutSeconds: 5
+                        failureThreshold: 10
+                      resources:
+                        requests:
+                          cpu: "{{inputs.parameters.cpu_request}}"
+                          memory: "{{inputs.parameters.memory_request}}"
+                        limits:
+                          cpu: "{{inputs.parameters.cpu_limit}}"
+                          memory: "{{inputs.parameters.memory_limit}}"
+                          ${GPU_RESOURCES}
+                      env:
+                      - name: DVC_DATA_VERSION
+                        value: "${DATA_VERSION}"
+                      - name: ARGO_WORKFLOW_UID
+                        value: "{{workflow.uid}}"
+                      - name: AWS_ACCESS_KEY_ID
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: accesskey
+                      - name: AWS_SECRET_ACCESS_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: secretkey
+                      - name: AWS_ENDPOINT_URL
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: endpoint-url
+                      - name: PGVECTOR_HOST
+                        value: "pgvector-rw.storage.svc.cluster.local"
+                      - name: PGVECTOR_PORT
+                        value: "5432"
+                      - name: PGVECTOR_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: pgvector-app
+                            key: username
+                      - name: PGVECTOR_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: pgvector-app
+                            key: password
+                      - name: PGVECTOR_DATABASE
+                        value: "vectors"
+          EOF
+
+          echo "⏳ Waiting for RayJob..."
+          sleep 3
+
+          JOB_NAME=$(kubectl get rayjobs -n mlops -l workflow-run="${RUN_LABEL}" -o jsonpath='{.items[0].metadata.name}')
+
+          if [ -z "$JOB_NAME" ]; then
+            echo "❌ Failed to get RayJob"
+            exit 1
+          fi
+
+          echo "✅ RayJob: $JOB_NAME"
+          echo "$JOB_NAME" > /tmp/job-name.txt
+
+          echo "⏳ Waiting for job to be submitted..."
+
+          MAX_WAIT=1200
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            JOB_DEPLOYMENT_STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}')
+
+            if [ "$JOB_DEPLOYMENT_STATUS" = "Running" ] || [ "$JOB_DEPLOYMENT_STATUS" = "Complete" ]; then
+              echo "✅ Job submitted successfully"
+              break
+            fi
+
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "❌ Job submission timeout after ${MAX_WAIT}s"
+            kubectl describe rayjob -n mlops $JOB_NAME
+            exit 1
+          fi
+
+          # Find the submitter pod
+          SUBMITTER_POD=$(kubectl get pods -n mlops -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
+
+          echo "✅ Submitter pod: $SUBMITTER_POD"
+          echo ""
+          echo "Waiting for submitter pod to become ready..."
+
+          kubectl wait --for=condition=Ready pod/$SUBMITTER_POD -n mlops --timeout=300s || true
+
+          echo ""
+          echo "🔍 Streaming embeddings logs..."
+          echo "================================"
+
+          # Stream logs in the background
+          kubectl logs -n mlops $SUBMITTER_POD -f 2>/dev/null &
+          LOG_PID=$!
+
+          # Wait for RayJob to complete
+          while true; do
+            STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null)
+
+            if [ -z "$STATUS" ]; then
+              echo "⏳ Waiting for job to start..."
+              sleep 10
+              continue
+            fi
+
+            case "$STATUS" in
+              "SUCCEEDED")
+                sleep 5
+                kill $LOG_PID 2>/dev/null || true
+                wait $LOG_PID 2>/dev/null || true
+                echo ""
+                echo "✅ Embeddings complete!"
+                exit 0
+                ;;
+              "FAILED"|"STOPPED")
+                kill $LOG_PID 2>/dev/null || true
+                wait $LOG_PID 2>/dev/null || true
+                echo ""
+                echo "❌ Embeddings failed: $STATUS"
+                kubectl describe rayjob -n mlops $JOB_NAME
+                exit 1
+                ;;
+              "PENDING"|"RUNNING")
+                sleep 10
+                ;;
+              *)
+                echo "⏳ Job status: $STATUS"
+                sleep 10
+                ;;
+            esac
+          done
+
+    # --------------------------------------------------------------------------
+    # Git commit and tag on success
+    # --------------------------------------------------------------------------
+    - name: git-commit-tag
+      inputs:
+        parameters:
+          - name: data_version
+          - name: bump_type
+          - name: is_automated
+      outputs:
+        parameters:
+          - name: tag
+            valueFrom:
+              path: /tmp/tag.txt
+      volumes:
+        - name: git-secret
+          secret:
+            secretName: data-registry-repo
+      script:
+        image: alpine/git:latest
+        command: [sh]
+        volumeMounts:
+          - name: git-secret
+            mountPath: /mnt/secrets
+            readOnly: true
+        source: |
+          set -e
+          echo "" > /tmp/tag.txt
+
+          DATA_VERSION="{{inputs.parameters.data_version}}"
+          BUMP_TYPE="{{inputs.parameters.bump_type}}"
+          IS_AUTOMATED="{{inputs.parameters.is_automated}}"
+          TAG_PREFIX="opencloudhub-readmes-embeddings"
+
+          # Setup SSH
+          mkdir -p ~/.ssh
+          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+          echo "" >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Clone
+          echo "📥 Cloning..."
+          git clone git@github.com:OpenCloudHub/data-registry.git /tmp/repo
+          cd /tmp/repo
+          git config user.name "Argo Workflow"
+          git config user.email "workflow@opencloudhub.org"
+
+          # Create tag
+          [ "$IS_AUTOMATED" = "true" ] && SUFFIX="-automated" || SUFFIX=""
+
+          LATEST=$(git tag -l "${TAG_PREFIX}-v*" --sort=-version:refname | head -n1 || echo "")
+          if [ -z "$LATEST" ]; then
+            VERSION="1.0.0"
+          else
+            CURRENT=$(echo "$LATEST" | sed "s/${TAG_PREFIX}-v//" | sed 's/-automated//')
+            MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+            MINOR=$(echo "$CURRENT" | cut -d. -f2)
+            PATCH=$(echo "$CURRENT" | cut -d. -f3)
+            case "$BUMP_TYPE" in
+              major) VERSION="$((MAJOR + 1)).0.0" ;;
+              minor) VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
+              *) VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+            esac
+          fi
+
+          NEW_TAG="${TAG_PREFIX}-v${VERSION}${SUFFIX}"
+
+          if git tag -l "$NEW_TAG" | grep -q .; then
+            echo "ℹ️ Tag $NEW_TAG exists"
+          else
+            # Tag message includes source data version for lineage
+            git tag -a "$NEW_TAG" -m "Embeddings v${VERSION} (source: ${DATA_VERSION})"
+            git push origin "$NEW_TAG"
+            echo "🏷️ Created: $NEW_TAG"
+          fi
+
+          echo "$NEW_TAG" > /tmp/tag.txt
+
+          echo "════════════════════════════════════════════════════════════"
+          echo "✅ Complete"
+          echo "   Source data: $DATA_VERSION"
+          echo "   Embeddings:  $NEW_TAG"
+          echo "════════════════════════════════════════════════════════════"
