@@ -134,8 +134,7 @@ spec:
               pipeline: "embeddings"
           spec:
             entrypoint: "sed -i 's/version:.*/version: ${DATA_VERSION}/' pipelines/opencloudhub-readmes-embeddings/params.yaml && dvc repro ${FORCE_FLAG} pipelines/opencloudhub-readmes-embeddings/dvc.yaml"
-            runtimeEnvYAML: |
-              working_dir: /workspace/project
+            runtimeEnvYAML: "working_dir: /workspace/project"
             shutdownAfterJobFinishes: true
             ttlSecondsAfterFinished: 300
             rayClusterSpec:
