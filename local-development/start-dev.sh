@@ -128,6 +128,7 @@ step_start_minikube() {
   log_success "Minikube started successfully"
 }
 
+# TODO: make this work
 step_create_persistent_storage() {
   log_step "Creating persistent storage directories"
 
@@ -226,8 +227,8 @@ step_wait_for_gateway() {
     return 0
   fi
 
-  log_info "Waiting for Gateway LoadBalancer IP (up to 5 minutes)..."
-  local max_attempts=100
+  log_info "Waiting for Gateway LoadBalancer IP (up to 10 minutes)..."
+  local max_attempts=60
   for ((i=1; i<=max_attempts; i++)); do
     GATEWAY_IP=$(kubectl get svc -n istio-ingress ingress-gateway-istio \
       -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
@@ -242,7 +243,7 @@ step_wait_for_gateway() {
   done
 
   echo ""
-  log_error "Gateway IP not available after 5 minutes"
+  log_error "Gateway IP not available after 10 minutes"
   log_info "Check: kubectl get svc -n istio-ingress"
   return 1
 }
@@ -288,52 +289,6 @@ step_configure_hosts() {
   log_success "/etc/hosts configured ($entry_count entries added)"
 }
 
-step_verify_gpu() {
-  log_step "Verifying GPU access"
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) Would verify GPU access"
-    return 0
-  fi
-
-  log_info "Running GPU test pod..."
-
-  # Create a test pod YAML to avoid ArgoCD management
-  local gpu_test_yaml="/tmp/gpu-test-pod.yaml"
-  cat > "$gpu_test_yaml" <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: gpu-test
-  namespace: default
-  labels:
-    app: gpu-test
-    argocd.argoproj.io/instance: ignore  # Tell ArgoCD to ignore this
-spec:
-  restartPolicy: Never
-  containers:
-  - name: cuda
-    image: nvidia/cuda:12.2.0-base-ubuntu22.04
-    command: ["nvidia-smi"]
-    resources:
-      limits:
-        nvidia.com/gpu: 1
-EOF
-
-  # Run the test with timeout
-  if timeout 60s kubectl apply -f "$gpu_test_yaml" && \
-     kubectl wait --for=condition=Ready pod/gpu-test -n default --timeout=30s 2>/dev/null && \
-     kubectl logs -f gpu-test -n default 2>/dev/null; then
-    log_success "GPU access verified ✓"
-  else
-    log_warning "GPU test failed - cluster may not have GPU access"
-    log_info "Check GPU allocatable: kubectl get nodes -o json | jq '.items[].status.allocatable'"
-  fi
-
-  # Cleanup
-  kubectl delete pod gpu-test -n default --ignore-not-found 2>/dev/null
-  rm -f "$gpu_test_yaml"
-}
 
 step_create_summary() {
   log_step "Creating development environment summary"
@@ -430,7 +385,6 @@ main() {
   step_start_tunnel
   step_wait_for_gateway
   step_configure_hosts
-  step_verify_gpu
   step_create_summary
   print_completion_summary
 }

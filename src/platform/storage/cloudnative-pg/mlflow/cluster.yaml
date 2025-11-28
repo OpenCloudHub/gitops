@@ -1,4 +1,5 @@
 # platform/mlflow-cluster.yaml
+# yaml-language-server: $schema=https://json-schema.org/draft/2020-12/schema
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
