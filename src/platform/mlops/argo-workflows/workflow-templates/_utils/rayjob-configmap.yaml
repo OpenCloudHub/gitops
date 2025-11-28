@@ -18,24 +18,33 @@ data:
       runtimeEnvYAML: "working_dir: /workspace/project"
       shutdownAfterJobFinishes: true
       ttlSecondsAfterFinished: 300
+      submitterPodTemplate:
+        spec:
+          containers:
+            - name: ray-job-submitter
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: "2Gi"
+                requests:
+                  cpu: "500m"
+                  memory: "1Gi"
       rayClusterSpec:
         rayVersion: "2.51.0"
         headGroupSpec:
           serviceType: ClusterIP
           template:
             spec:
-              entrypoint: "${ENTRYPOINT}"
-              submitterPodTemplate:
-                spec:
-                  containers:
-                    - name: ray-job-submitter
-                      resources:
-                        limits:
-                          cpu: "1"
-                          memory: "2Gi"
-                        requests:
-                          cpu: "500m"
-                          memory: "1Gi"
+              containers:
+              - name: ray-head
+                image: "${IMAGE}"
+                resources:
+                  requests:
+                    cpu: "${CPU_REQUEST}"
+                    memory: "${MEMORY_REQUEST}"
+                  limits:
+                    cpu: "${CPU_LIMIT}"
+                    memory: "${MEMORY_LIMIT}"
                 env:
                 - name: AWS_ACCESS_KEY_ID
                   valueFrom:
