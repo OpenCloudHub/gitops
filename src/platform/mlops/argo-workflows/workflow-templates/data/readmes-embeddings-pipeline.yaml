@@ -12,6 +12,9 @@ spec:
     parameters:
       - name: data_version
         description: "DVC data version tag (e.g., opencloudhub-readmes-v1.0.0)"
+      - name: force
+        value: "false"
+        description: "Force re-run even if no changes"
       - name: compute_type
         value: "cpu-medium"
         enum: [cpu-small, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
@@ -51,6 +54,8 @@ spec:
               parameters:
                 - name: data_version
                   value: "{{workflow.parameters.data_version}}"
+                - name: force
+                  value: "{{workflow.parameters.force}}"
                 - name: image
                   value: "{{workflow.parameters.image}}"
                 - name: cpu_request
@@ -85,6 +90,7 @@ spec:
       inputs:
         parameters:
           - name: data_version
+          - name: force
           - name: image
           - name: cpu_request
           - name: cpu_limit
@@ -104,6 +110,7 @@ spec:
           set -e
 
           DATA_VERSION="{{inputs.parameters.data_version}}"
+          FORCE="{{inputs.parameters.force}}"
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           GPU="{{inputs.parameters.gpu}}"
 
@@ -115,9 +122,17 @@ spec:
             node.opencloudhub.org/gpu: \"true\""
           fi
 
+          # Build entrypoint: update params.yaml then run dvc
+          FORCE_FLAG=""
+          [ "$FORCE" = "true" ] && FORCE_FLAG="--force"
+
+          # sed updates params.yaml data.version before dvc repro
+          ENTRYPOINT="cd pipelines/opencloudhub-readmes-embeddings && sed -i 's/version: .*/version: \"${DATA_VERSION}\"/' params.yaml && dvc repro ${FORCE_FLAG}"
+
           RUN_LABEL="embeddings-${DATA_VERSION}-${TIMESTAMP}"
 
           echo "Creating RayJob for embeddings with label: workflow-run=${RUN_LABEL}"
+          echo "Entrypoint: ${ENTRYPOINT}"
 
           cat <<EOF | kubectl create -f -
           apiVersion: ray.io/v1
@@ -129,7 +144,7 @@ spec:
               workflow-run: "${RUN_LABEL}"
               pipeline: "embeddings"
           spec:
-            entrypoint: dvc repro pipelines/opencloudhub-readmes-embeddings/dvc.yaml
+            entrypoint: bash -c "${ENTRYPOINT}"
             shutdownAfterJobFinishes: true
             ttlSecondsAfterFinished: 300
             rayClusterSpec:
