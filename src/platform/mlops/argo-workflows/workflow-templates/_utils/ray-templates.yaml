@@ -170,7 +170,7 @@ spec:
           
           # Install kubectl using wget (curl not available in ray image)
           wget -q "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl" -O /tmp/kubectl
-          chmod +x /tmp/kubectl && mv /tmp/kubectl /usr/local/bin/
+          chmod +x /tmp/kubectl
           
           echo "Waiting for RayJob $JOB_NAME to be ready..."
           
@@ -178,13 +178,13 @@ spec:
           ELAPSED=0
           RAY_JOB_ID=""
           while [ -z "$RAY_JOB_ID" ] && [ $ELAPSED -lt 300 ]; do
-            RAY_JOB_ID=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
+            RAY_JOB_ID=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
             if [ -z "$RAY_JOB_ID" ]; then
               # Check for early failures
-              FAIL=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
+              FAIL=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
               if [ "$FAIL" = "Failed" ]; then
                 echo "RayJob deployment failed"
-                kubectl describe rayjob -n mlops "$JOB_NAME"
+                /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
                 echo "FAILED" > /tmp/job-status.txt
                 exit 1
               fi
@@ -200,7 +200,7 @@ spec:
           fi
           
           # Get Ray dashboard address
-          CLUSTER_NAME=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}')
+          CLUSTER_NAME=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}')
           RAY_ADDRESS="http://${CLUSTER_NAME}-head-svc.mlops.svc.cluster.local:8265"
           
           echo "=========================================="
