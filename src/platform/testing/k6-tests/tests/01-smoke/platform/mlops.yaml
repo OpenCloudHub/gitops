@@ -20,10 +20,8 @@ spec:
       - name: TEST_ENV
         value: "dev"
       - name: K6_PROMETHEUS_RW_SERVER_URL
-        value: "http://prometheus-server.observability.svc.cluster.local:80/api/v1/write"
-      - name: K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM
-        value: "true"
         value: "http://prometheus-server.observability.svc.cluster.local/api/v1/write"
+      - name: K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM
         value: "true"
     resources:
       limits:

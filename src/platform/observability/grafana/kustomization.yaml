@@ -189,7 +189,7 @@ helmCharts:
           cnpg:
             gnetId: 20417
             datasource: Prometheus
-        default:
+        testing:
           k6-testing:
             gnetId: 18030
             datasource: Prometheus

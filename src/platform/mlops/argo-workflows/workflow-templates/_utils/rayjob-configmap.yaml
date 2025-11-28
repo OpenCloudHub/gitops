@@ -19,16 +19,18 @@ data:
       shutdownAfterJobFinishes: true
       ttlSecondsAfterFinished: 300
       submitterPodTemplate:
-        spec:
-          containers:
-            - name: ray-job-submitter
-              resources:
-                limits:
-                  cpu: "1"
-                  memory: "2Gi"
-                requests:
-                  cpu: "500m"
-                  memory: "1Gi"
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: ray-job-submitter
+            image: rayproject/ray:2.51.0-py312 
+            resources:
+              limits:
+                cpu: "1"
+                memory: "2Gi"
+              requests:
+                cpu: "500m"
+                memory: "1Gi"
       rayClusterSpec:
         rayVersion: "2.51.0"
         headGroupSpec:
