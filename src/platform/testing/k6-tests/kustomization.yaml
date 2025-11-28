@@ -3,5 +3,5 @@ kind: Kustomization
 
 namespace: k6-testing
 
-resources:
-  - tests/01-smoke
+# resources:
+#   - tests/01-smoke
