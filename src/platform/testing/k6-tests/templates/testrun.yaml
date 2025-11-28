@@ -1,0 +1,38 @@
+# templates/testrun.yaml - Base template for k6 TestRuns
+# Copy and modify test_type, test_target, and script path
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: ${TEST_TYPE}-${TEST_TARGET}
+  namespace: k6-testing
+  labels:
+    app.kubernetes.io/name: k6-tests
+    opencloudhub.org/test-type: ${TEST_TYPE}
+    opencloudhub.org/test-target: ${TEST_TARGET}
+spec:
+  parallelism: 1
+  script:
+    localFile: /tests/tests/${TEST_DIR}/${SCRIPT_PATH}
+  arguments: >-
+    --insecure-skip-tls-verify 
+    --out experimental-prometheus-rw 
+    --tag testid=${TESTID} 
+    --tag test_type=${TEST_TYPE} 
+    --tag test_target=${TEST_TARGET}
+  cleanup: post
+  runner:
+    image: docker.io/opencloudhuborg/k6-tests:latest
+    env:
+      - name: TEST_ENV
+        value: "dev"
+      - name: K6_PROMETHEUS_RW_SERVER_URL
+        value: "http://prometheus-server.observability.svc.cluster.local:80/api/v1/write"
+      - name: K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM
+        value: "true"
+    resources:
+      limits:
+        cpu: ${CPU_LIMIT}
+        memory: ${MEM_LIMIT}
+      requests:
+        cpu: ${CPU_REQUEST}
+        memory: ${MEM_REQUEST}

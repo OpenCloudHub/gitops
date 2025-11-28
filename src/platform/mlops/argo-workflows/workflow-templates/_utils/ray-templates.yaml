@@ -147,85 +147,96 @@ spec:
     # WAIT FOR RAYJOB COMPLETION - USES RAY CLI
     # ==========================================================================
     - name: wait-for-rayjob
-      inputs:
-        parameters:
-          - name: job_name
-          - name: timeout_seconds
-            default: "3600"
-      outputs:
-        parameters:
-          - name: job_status
-            valueFrom:
-              path: /tmp/job-status.txt
-      script:
-        image: rayproject/ray:2.48.0-py312
-        command: [bash]
-        source: |
-          set -e
+  inputs:
+    parameters:
+      - name: job_name
+      - name: timeout_seconds
+        default: "3600"
+  outputs:
+    parameters:
+      - name: job_status
+        valueFrom:
+          path: /tmp/job-status.txt
+  script:
+    image: rayproject/ray:2.48.0-py312
+    command: [bash]
+    source: |
+      set -e
 
-          JOB_NAME="{{inputs.parameters.job_name}}"
-          TIMEOUT="{{inputs.parameters.timeout_seconds}}"
+      JOB_NAME="{{inputs.parameters.job_name}}"
+      TIMEOUT="{{inputs.parameters.timeout_seconds}}"
 
-          echo "PENDING" > /tmp/job-status.txt
+      echo "PENDING" > /tmp/job-status.txt
 
-          # Install kubectl using wget (curl not available in ray image)
-          wget -q "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl" -O /tmp/kubectl
-          chmod +x /tmp/kubectl
+      # Install kubectl
+      wget -q "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl" -O /tmp/kubectl
+      chmod +x /tmp/kubectl
 
-          echo "Waiting for RayJob $JOB_NAME to be ready..."
+      echo "Waiting for RayJob $JOB_NAME to be ready..."
 
-          # Wait for job ID to be available (means Ray cluster is up and job submitted)
-          ELAPSED=0
-          RAY_JOB_ID=""
-          while [ -z "$RAY_JOB_ID" ] && [ $ELAPSED -lt 300 ]; do
-            RAY_JOB_ID=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
-            if [ -z "$RAY_JOB_ID" ]; then
-              # Check for early failures
-              FAIL=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
-              if [ "$FAIL" = "Failed" ]; then
-                echo "RayJob deployment failed"
-                /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
-                echo "FAILED" > /tmp/job-status.txt
-                exit 1
-              fi
-              sleep 5
-              ELAPSED=$((ELAPSED + 5))
-            fi
-          done
-
-          if [ -z "$RAY_JOB_ID" ]; then
-            echo "Timeout waiting for Ray job ID"
+      # Wait for job ID and cluster name to be available
+      ELAPSED=0
+      RAY_JOB_ID=""
+      CLUSTER_NAME=""
+      while [ -z "$RAY_JOB_ID" ] && [ $ELAPSED -lt 300 ]; do
+        RAY_JOB_ID=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
+        CLUSTER_NAME=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}' 2>/dev/null || echo "")
+        
+        if [ -z "$RAY_JOB_ID" ]; then
+          # Check for early failures
+          FAIL=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
+          if [ "$FAIL" = "Failed" ]; then
+            echo "RayJob deployment failed"
+            /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
             echo "FAILED" > /tmp/job-status.txt
             exit 1
           fi
+          sleep 5
+          ELAPSED=$((ELAPSED + 5))
+        fi
+      done
 
-          # Get Ray dashboard address
-          CLUSTER_NAME=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}')
-          RAY_ADDRESS="http://${JOB_NAME}-head-svc.mlops.svc.cluster.local:8265"
+      if [ -z "$RAY_JOB_ID" ]; then
+        echo "Timeout waiting for Ray job ID"
+        echo "FAILED" > /tmp/job-status.txt
+        exit 1
+      fi
 
-          echo "=========================================="
-          echo "Ray Job ID: $RAY_JOB_ID"
-          echo "Ray Address: $RAY_ADDRESS"
-          echo "=========================================="
-          echo ""
+      # Use cluster name for the head service (not job name)
+      RAY_ADDRESS="http://${CLUSTER_NAME}-head-svc.mlops.svc.cluster.local:8265"
 
-          # Use ray job logs -f to stream logs and wait for completion
-          # This command blocks until job finishes, returns exit code 0 on success, 1 on failure
-          if timeout $TIMEOUT ray job logs -f "$RAY_JOB_ID" --address "$RAY_ADDRESS"; then
-            echo ""
-            echo "=========================================="
-            echo "SUCCESS"
-            echo "=========================================="
-            echo "SUCCEEDED" > /tmp/job-status.txt
-            exit 0
-          else
-            EXIT_CODE=$?
-            echo ""
-            echo "=========================================="
-            echo "FAILED (exit code: $EXIT_CODE)"
-            echo "=========================================="
-            # Get final status
-            ray job status "$RAY_JOB_ID" --address "$RAY_ADDRESS" || true
-            echo "FAILED" > /tmp/job-status.txt
-            exit 1
-          fi
+      echo "=========================================="
+      echo "Ray Job ID: $RAY_JOB_ID"
+      echo "Ray Cluster: $CLUSTER_NAME"
+      echo "Ray Address: $RAY_ADDRESS"
+      echo "=========================================="
+      echo ""
+
+      # Wait for head service to be reachable
+      echo "Waiting for Ray head service..."
+      for i in $(seq 1 60); do
+        if ray job status "$RAY_JOB_ID" --address "$RAY_ADDRESS" > /dev/null 2>&1; then
+          echo "Ray head service is ready"
+          break
+        fi
+        sleep 5
+      done
+
+      # Stream logs and wait for completion
+      if timeout $TIMEOUT ray job logs -f "$RAY_JOB_ID" --address "$RAY_ADDRESS"; then
+        echo ""
+        echo "=========================================="
+        echo "SUCCESS"
+        echo "=========================================="
+        echo "SUCCEEDED" > /tmp/job-status.txt
+        exit 0
+      else
+        EXIT_CODE=$?
+        echo ""
+        echo "=========================================="
+        echo "FAILED (exit code: $EXIT_CODE)"
+        echo "=========================================="
+        ray job status "$RAY_JOB_ID" --address "$RAY_ADDRESS" || true
+        echo "FAILED" > /tmp/job-status.txt
+        exit 1
+      fi
