@@ -57,6 +57,7 @@ spec:
 
         - - name: commit-and-tag
             template: git-commit-tag
+            when: "{{steps.run-embeddings.exitCode}} == 0"
             arguments:
               parameters:
                 - name: data_version
@@ -83,127 +84,128 @@ spec:
             valueFrom:
               path: /tmp/job-name.txt
       script:
-        image: bitnami/kubectl:latest
-        command: [bash]
+        image: alpine/k8s:1.30.4
+        command: [sh]
         source: |
           set -e
 
-          DATA_VERSION="{{inputs.parameters.data_version}}"
-          FORCE="{{inputs.parameters.force}}"
-          IMAGE="{{inputs.parameters.image}}"
-          CPU_REQUEST="{{inputs.parameters.cpu_request}}"
-          CPU_LIMIT="{{inputs.parameters.cpu_limit}}"
-          MEMORY_REQUEST="{{inputs.parameters.memory_request}}"
-          MEMORY_LIMIT="{{inputs.parameters.memory_limit}}"
-          REPLICAS="{{inputs.parameters.replicas}}"
-          WORKFLOW_UID="{{workflow.uid}}"
-
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          RUN_LABEL="emb${TIMESTAMP}"
+          # Export all variables for envsubst
+          export DATA_VERSION="{{inputs.parameters.data_version}}"
+          export FORCE="{{inputs.parameters.force}}"
+          export IMAGE="{{inputs.parameters.image}}"
+          export CPU_REQUEST="{{inputs.parameters.cpu_request}}"
+          export CPU_LIMIT="{{inputs.parameters.cpu_limit}}"
+          export MEMORY_REQUEST="{{inputs.parameters.memory_request}}"
+          export MEMORY_LIMIT="{{inputs.parameters.memory_limit}}"
+          export REPLICAS="{{inputs.parameters.replicas}}"
+          export WORKFLOW_UID="{{workflow.uid}}"
+          export RUN_LABEL="emb$(date +%Y%m%d%H%M%S)"
 
           FORCE_FLAG=""
           [ "$FORCE" = "true" ] && FORCE_FLAG="--force"
+          export FORCE_FLAG
 
           echo "Creating RayJob: ${RUN_LABEL}"
           echo "Data version: ${DATA_VERSION}"
 
-          printf '%s\n' \
-          "apiVersion: ray.io/v1" \
-          "kind: RayJob" \
-          "metadata:" \
-          "  generateName: embeddings-" \
-          "  namespace: mlops" \
-          "  labels:" \
-          "    run: ${RUN_LABEL}" \
-          "spec:" \
-          "  entrypoint: sed -i s/version:.*/version:${DATA_VERSION}/ pipelines/opencloudhub-readmes-embeddings/params.yaml && dvc repro ${FORCE_FLAG} pipelines/opencloudhub-readmes-embeddings/dvc.yaml" \
-          "  runtimeEnvYAML: 'working_dir: /workspace/project'" \
-          "  shutdownAfterJobFinishes: true" \
-          "  ttlSecondsAfterFinished: 300" \
-          "  rayClusterSpec:" \
-          "    rayVersion: '2.48.0'" \
-          "    headGroupSpec:" \
-          "      serviceType: ClusterIP" \
-          "      template:" \
-          "        spec:" \
-          "          containers:" \
-          "          - name: ray-head" \
-          "            image: ${IMAGE}" \
-          "            resources:" \
-          "              requests:" \
-          "                cpu: '${CPU_REQUEST}'" \
-          "                memory: ${MEMORY_REQUEST}" \
-          "              limits:" \
-          "                cpu: '${CPU_LIMIT}'" \
-          "                memory: ${MEMORY_LIMIT}" \
-          "            env:" \
-          "            - name: AWS_ACCESS_KEY_ID" \
-          "              valueFrom:" \
-          "                secretKeyRef:" \
-          "                  name: minio-tenant-secret" \
-          "                  key: accesskey" \
-          "            - name: AWS_SECRET_ACCESS_KEY" \
-          "              valueFrom:" \
-          "                secretKeyRef:" \
-          "                  name: minio-tenant-secret" \
-          "                  key: secretkey" \
-          "            - name: AWS_ENDPOINT_URL" \
-          "              valueFrom:" \
-          "                secretKeyRef:" \
-          "                  name: minio-tenant-secret" \
-          "                  key: endpoint-url" \
-          "            - name: PGVECTOR_HOST" \
-          "              value: cnpg-cluster-rw.storage.svc.cluster.local" \
-          "            - name: POSTGRES_DEMO_APP_DB_PASSWORD" \
-          "              valueFrom:" \
-          "                secretKeyRef:" \
-          "                  name: demo-app-db-user" \
-          "                  key: password" \
-          "            - name: DVC_REPO" \
-          "              value: 'https://github.com/OpenCloudHub/data-registry'" \
-          "    workerGroupSpecs:" \
-          "    - replicas: ${REPLICAS}" \
-          "      groupName: worker" \
-          "      template:" \
-          "        spec:" \
-          "          containers:" \
-          "          - name: ray-worker" \
-          "            image: ${IMAGE}" \
-          "            resources:" \
-          "              requests:" \
-          "                cpu: '${CPU_REQUEST}'" \
-          "                memory: ${MEMORY_REQUEST}" \
-          "              limits:" \
-          "                cpu: '${CPU_LIMIT}'" \
-          "                memory: ${MEMORY_LIMIT}" \
-          "            env:" \
-          "            - name: AWS_ACCESS_KEY_ID" \
-          "              valueFrom:" \
-          "                secretKeyRef:" \
-          "                  name: minio-tenant-secret" \
-          "                  key: accesskey" \
-          "            - name: AWS_SECRET_ACCESS_KEY" \
-          "              valueFrom:" \
-          "                secretKeyRef:" \
-          "                  name: minio-tenant-secret" \
-          "                  key: secretkey" \
-          "            - name: AWS_ENDPOINT_URL" \
-          "              valueFrom:" \
-          "                secretKeyRef:" \
-          "                  name: minio-tenant-secret" \
-          "                  key: endpoint-url" \
-          "            - name: PGVECTOR_HOST" \
-          "              value: cnpg-cluster-rw.storage.svc.cluster.local" \
-          "            - name: POSTGRES_DEMO_APP_DB_PASSWORD" \
-          "              valueFrom:" \
-          "                secretKeyRef:" \
-          "                  name: demo-app-db-user" \
-          "                  key: password" \
-          "            - name: DVC_REPO" \
-          "              value: 'https://github.com/OpenCloudHub/data-registry'" \
-          > /tmp/rayjob.yaml
+          # Write template and substitute
+          cat <<'TEMPLATE' | envsubst > /tmp/rayjob.yaml
+          apiVersion: ray.io/v1
+          kind: RayJob
+          metadata:
+            generateName: embeddings-
+            namespace: mlops
+            labels:
+              run: "${RUN_LABEL}"
+          spec:
+            entrypoint: "sed -i s/version:.*/version:${DATA_VERSION}/ pipelines/opencloudhub-readmes-embeddings/params.yaml && dvc repro ${FORCE_FLAG} pipelines/opencloudhub-readmes-embeddings/dvc.yaml"
+            runtimeEnvYAML: "working_dir: /workspace/project"
+            shutdownAfterJobFinishes: true
+            ttlSecondsAfterFinished: 300
+            rayClusterSpec:
+              rayVersion: "2.48.0"
+              headGroupSpec:
+                serviceType: ClusterIP
+                template:
+                  spec:
+                    containers:
+                    - name: ray-head
+                      image: "${IMAGE}"
+                      resources:
+                        requests:
+                          cpu: "${CPU_REQUEST}"
+                          memory: "${MEMORY_REQUEST}"
+                        limits:
+                          cpu: "${CPU_LIMIT}"
+                          memory: "${MEMORY_LIMIT}"
+                      env:
+                      - name: AWS_ACCESS_KEY_ID
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: accesskey
+                      - name: AWS_SECRET_ACCESS_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: secretkey
+                      - name: AWS_ENDPOINT_URL
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: endpoint-url
+                      - name: PGVECTOR_HOST
+                        value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                      - name: POSTGRES_DEMO_APP_DB_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: demo-app-db-user
+                            key: password
+                      - name: DVC_REPO
+                        value: "https://github.com/OpenCloudHub/data-registry"
+              workerGroupSpecs:
+              - replicas: ${REPLICAS}
+                groupName: worker
+                template:
+                  spec:
+                    containers:
+                    - name: ray-worker
+                      image: "${IMAGE}"
+                      resources:
+                        requests:
+                          cpu: "${CPU_REQUEST}"
+                          memory: "${MEMORY_REQUEST}"
+                        limits:
+                          cpu: "${CPU_LIMIT}"
+                          memory: "${MEMORY_LIMIT}"
+                      env:
+                      - name: AWS_ACCESS_KEY_ID
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: accesskey
+                      - name: AWS_SECRET_ACCESS_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: secretkey
+                      - name: AWS_ENDPOINT_URL
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: endpoint-url
+                      - name: PGVECTOR_HOST
+                        value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                      - name: POSTGRES_DEMO_APP_DB_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: demo-app-db-user
+                            key: password
+                      - name: DVC_REPO
+                        value: "https://github.com/OpenCloudHub/data-registry"
+          TEMPLATE
 
-          echo "=== YAML ==="
+          echo "=== Generated YAML ==="
           cat /tmp/rayjob.yaml
           echo "=== END ==="
 
@@ -220,50 +222,45 @@ spec:
           echo "RayJob: $JOB_NAME"
           echo "$JOB_NAME" > /tmp/job-name.txt
 
-          MAX_WAIT=1200
-          ELAPSED=0
-          while [ $ELAPSED -lt $MAX_WAIT ]; do
-            STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}')
+          # Wait for job to start
+          echo "Waiting for job to start..."
+          for i in $(seq 1 240); do
+            STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
             if [ "$STATUS" = "Running" ] || [ "$STATUS" = "Complete" ]; then
+              echo "Job running"
               break
             fi
             sleep 5
-            ELAPSED=$((ELAPSED + 5))
           done
 
-          SUBMITTER=$(kubectl get pods -n mlops | grep ${JOB_NAME} | grep -v head | grep -v worker | awk '{print $1}' | head -1)
-          kubectl wait --for=condition=Ready pod/$SUBMITTER -n mlops --timeout=300s 2>/dev/null || true
+          # Find submitter pod
+          sleep 5
+          SUBMITTER=$(kubectl get pods -n mlops -l ray.io/cluster=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.rayClusterName}') -o name 2>/dev/null | grep -v head | grep -v worker | head -1 | cut -d/ -f2)
 
-          kubectl logs -n mlops $SUBMITTER -f 2>/dev/null &
-          LOGPID=$!
+          if [ -n "$SUBMITTER" ]; then
+            echo "Streaming logs from: $SUBMITTER"
+            kubectl logs -n mlops $SUBMITTER -f 2>/dev/null &
+            LOGPID=$!
+          fi
 
+          # Wait for completion
           while true; do
-            JOBSTATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null)
-            DEPLOYSTATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null)
+            JOBSTATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "")
 
             case "$JOBSTATUS" in
               SUCCEEDED)
-                sleep 3
-                kill $LOGPID 2>/dev/null || true
-                echo "Done!"
+                sleep 2
+                [ -n "$LOGPID" ] && kill $LOGPID 2>/dev/null || true
+                echo "SUCCESS"
                 exit 0
                 ;;
               FAILED|STOPPED)
-                kill $LOGPID 2>/dev/null || true
-                echo "Failed: $JOBSTATUS"
+                [ -n "$LOGPID" ] && kill $LOGPID 2>/dev/null || true
+                echo "FAILED: $JOBSTATUS"
                 kubectl describe rayjob -n mlops $JOB_NAME
                 exit 1
                 ;;
             esac
-
-            # Also check deployment status for failures
-            if [ "$DEPLOYSTATUS" = "Failed" ]; then
-              kill $LOGPID 2>/dev/null || true
-              echo "Deployment failed"
-              kubectl describe rayjob -n mlops $JOB_NAME
-              exit 1
-            fi
-
             sleep 5
           done
 
