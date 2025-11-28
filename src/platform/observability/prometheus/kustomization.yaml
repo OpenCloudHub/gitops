@@ -1,6 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: observability
+
 helmCharts:
   - name: prometheus
     releaseName: prometheus
@@ -11,13 +12,15 @@ helmCharts:
       alertmanager:
         enabled: false
       kube-state-metrics:
-        enabled: false  # Let k8s-monitoring handle this
+        enabled: false
       prometheus-node-exporter:
-        enabled: false  # Let k8s-monitoring handle this
+        enabled: false
       pushgateway:
         enabled: false
       server:
         replicaCount: 1
+        extraFlags:
+          - "web.enable-remote-write-receiver"
         resources:
           limits:
             cpu: 1
@@ -25,5 +28,3 @@ helmCharts:
           requests:
             cpu: 500m
             memory: 1Gi
-        extraArgs:
-          web.enable-remote-write-receiver: ""
