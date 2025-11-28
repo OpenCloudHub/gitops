@@ -144,7 +144,7 @@ spec:
           echo "=========================================="
 
     # ==========================================================================
-    # WAIT FOR RAYJOB COMPLETION - SIMPLE KUBECTL ONLY
+    # WAIT FOR RAYJOB COMPLETION - USES RAY CLI
     # ==========================================================================
     - name: wait-for-rayjob
       inputs:
@@ -158,7 +158,7 @@ spec:
             valueFrom:
               path: /tmp/job-status.txt
       script:
-        image: bitnami/kubectl:latest
+        image: rayproject/ray:2.48.0-py312
         command: [bash]
         source: |
           set -e
@@ -168,66 +168,64 @@ spec:
 
           echo "PENDING" > /tmp/job-status.txt
 
-          echo "Monitoring RayJob: $JOB_NAME"
+          # Install kubectl
+          curl -sLO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
+          chmod +x kubectl && mv kubectl /usr/local/bin/
 
+          echo "Waiting for RayJob $JOB_NAME to be ready..."
+
+          # Wait for job ID to be available (means Ray cluster is up and job submitted)
           ELAPSED=0
-          HEAD_POD=""
-
-          while [ $ELAPSED -lt $TIMEOUT ]; do
-            # Get current status
-            DEPLOY=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
-            JOB=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "")
-
-            # Check for pod creation failure
-            FAIL_MSG=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.conditions[?(@.reason=="FailedCreateHeadPod")].message}' 2>/dev/null || echo "")
-            if [ -n "$FAIL_MSG" ]; then
-              echo ""
-              echo "ERROR: $FAIL_MSG"
-              echo "FAILED" > /tmp/job-status.txt
-              exit 1
-            fi
-
-            # Check job status
-            case "$JOB" in
-              SUCCEEDED)
-                echo ""
-                echo "SUCCESS"
-                echo "SUCCEEDED" > /tmp/job-status.txt
-                exit 0
-                ;;
-              FAILED|STOPPED)
-                echo ""
-                echo "FAILED: $JOB"
-                kubectl logs -n mlops -l ray.io/cluster=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}'),ray.io/node-type=head --tail=50 2>/dev/null || true
+          RAY_JOB_ID=""
+          while [ -z "$RAY_JOB_ID" ] && [ $ELAPSED -lt 300 ]; do
+            RAY_JOB_ID=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
+            if [ -z "$RAY_JOB_ID" ]; then
+              # Check for early failures
+              FAIL=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
+              if [ "$FAIL" = "Failed" ]; then
+                echo "RayJob deployment failed"
+                kubectl describe rayjob -n mlops "$JOB_NAME"
                 echo "FAILED" > /tmp/job-status.txt
                 exit 1
-                ;;
-            esac
-
-            # Check deployment status
-            if [ "$DEPLOY" = "Failed" ]; then
-              echo "Deployment failed"
-              echo "FAILED" > /tmp/job-status.txt
-              exit 1
-            fi
-
-            # Try to find and stream logs from head pod once cluster is running
-            if [ "$DEPLOY" = "Running" ] && [ -z "$HEAD_POD" ]; then
-              CLUSTER=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}' 2>/dev/null || echo "")
-              if [ -n "$CLUSTER" ]; then
-                HEAD_POD=$(kubectl get pods -n mlops -l "ray.io/cluster=$CLUSTER,ray.io/node-type=head" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-                if [ -n "$HEAD_POD" ]; then
-                  echo "Streaming logs from: $HEAD_POD"
-                  kubectl logs -n mlops "$HEAD_POD" -f 2>/dev/null &
-                fi
               fi
+              sleep 5
+              ELAPSED=$((ELAPSED + 5))
             fi
-
-            echo "[$ELAPSED s] deploy=$DEPLOY job=$JOB"
-            sleep 10
-            ELAPSED=$((ELAPSED + 10))
           done
 
-          echo "TIMEOUT"
-          echo "TIMEOUT" > /tmp/job-status.txt
-          exit 1
+          if [ -z "$RAY_JOB_ID" ]; then
+            echo "Timeout waiting for Ray job ID"
+            echo "FAILED" > /tmp/job-status.txt
+            exit 1
+          fi
+
+          # Get Ray dashboard address
+          CLUSTER_NAME=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}')
+          RAY_ADDRESS="http://${CLUSTER_NAME}-head-svc.mlops.svc.cluster.local:8265"
+
+          echo "=========================================="
+          echo "Ray Job ID: $RAY_JOB_ID"
+          echo "Ray Address: $RAY_ADDRESS"
+          echo "=========================================="
+          echo ""
+
+          # Use ray job logs -f to stream logs and wait for completion
+          # This command blocks until job finishes, returns exit code 0 on success, 1 on failure
+          if timeout $TIMEOUT ray job logs -f "$RAY_JOB_ID" --address "$RAY_ADDRESS"; then
+            echo ""
+            echo "=========================================="
+            echo "SUCCESS"
+            echo "=========================================="
+            echo "SUCCEEDED" > /tmp/job-status.txt
+            exit 0
+          else
+            EXIT_CODE=$?
+            echo ""
+            echo "=========================================="
+            echo "FAILED (exit code: $EXIT_CODE)"
+            echo "=========================================="
+            # Get final status
+            ray job status "$RAY_JOB_ID" --address "$RAY_ADDRESS" || true
+            echo "FAILED" > /tmp/job-status.txt
+            exit 1
+          fi
