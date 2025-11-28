@@ -24,13 +24,9 @@ spec:
           - name: image
             default: "opencloudhuborg/data-registry-pipelines:latest"
           - name: cpu_request
-            default: "500m"
           - name: cpu_limit
-            default: "2"
           - name: memory_request
-            default: "1Gi"
           - name: memory_limit
-            default: "4Gi"
         artifacts:
           - name: repo
             path: "{{inputs.parameters.repo_path}}"
@@ -67,6 +63,13 @@ spec:
               secretKeyRef:
                 name: minio-tenant-secret
                 key: endpoint-url
+        resources:
+          requests:
+            cpu: "{{inputs.parameters.cpu_request}}"
+            memory: "{{inputs.parameters.memory_request}}"
+          limits:
+            cpu: "{{inputs.parameters.cpu_limit}}"
+            memory: "{{inputs.parameters.memory_limit}}"
         source: |
           set -e
 
@@ -128,13 +131,6 @@ spec:
           echo "════════════════════════════════════════════════════════════"
           echo "✅ Pipeline $PIPELINE complete"
           echo "════════════════════════════════════════════════════════════"
-        resources:
-          requests:
-            cpu: "{{inputs.parameters.cpu_request}}"
-            memory: "{{inputs.parameters.memory_request}}"
-          limits:
-            cpu: "{{inputs.parameters.cpu_limit}}"
-            memory: "{{inputs.parameters.memory_limit}}"
 
     # --------------------------------------------------------------------------
     # Push data to DVC remote
@@ -194,92 +190,3 @@ spec:
           limits:
             cpu: "1"
             memory: "2Gi"
-
-    # --------------------------------------------------------------------------
-    # Pull data from DVC remote
-    # --------------------------------------------------------------------------
-    - name: dvc-pull
-      inputs:
-        parameters:
-          - name: repo_path
-            description: "Path to cloned repo"
-          - name: image
-            default: "opencloudhuborg/data-registry-pipelines:latest"
-        artifacts:
-          - name: repo
-            path: "{{inputs.parameters.repo_path}}"
-      outputs:
-        artifacts:
-          - name: repo
-            path: "{{inputs.parameters.repo_path}}"
-      script:
-        image: "{{inputs.parameters.image}}"
-        command: [bash]
-        env:
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: minio-tenant-secret
-                key: accesskey
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: minio-tenant-secret
-                key: secretkey
-          - name: AWS_ENDPOINT_URL
-            valueFrom:
-              secretKeyRef:
-                name: minio-tenant-secret
-                key: endpoint-url
-        source: |
-          set -e
-
-          cd "{{inputs.parameters.repo_path}}"
-
-          echo "📥 Pulling data from DVC remote..."
-
-          # Configure DVC remote
-          dvc remote modify minio endpointurl "$AWS_ENDPOINT_URL"
-          dvc remote modify minio access_key_id "$AWS_ACCESS_KEY_ID"
-          dvc remote modify minio secret_access_key "$AWS_SECRET_ACCESS_KEY"
-
-          dvc pull
-
-          echo "✅ Data pulled from MinIO"
-        resources:
-          requests:
-            cpu: "200m"
-            memory: "512Mi"
-          limits:
-            cpu: "1"
-            memory: "2Gi"
-
-    # --------------------------------------------------------------------------
-    # Map pipeline name to dataset name
-    # --------------------------------------------------------------------------
-    - name: map-pipeline-to-dataset
-      inputs:
-        parameters:
-          - name: pipeline_name
-          - name: pipeline_map
-            default: '{"opencloudhub-readmes-download":"opencloudhub-readmes"}'
-      outputs:
-        parameters:
-          - name: dataset
-            valueFrom:
-              path: /tmp/dataset.txt
-      script:
-        image: alpine:latest
-        command: [sh]
-        source: |
-          set -e
-          apk add --no-cache jq >/dev/null 2>&1
-
-          PIPELINE="{{inputs.parameters.pipeline_name}}"
-          MAP='{{inputs.parameters.pipeline_map}}'
-
-          # Try to get from map, fallback to pipeline name
-          DATASET=$(echo "$MAP" | jq -r ".\"$PIPELINE\" // \"$PIPELINE\"")
-
-          echo "$DATASET" > /tmp/dataset.txt
-          echo "📦 Pipeline '$PIPELINE' -> Dataset '$DATASET'"

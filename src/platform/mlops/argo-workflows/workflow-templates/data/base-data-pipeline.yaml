@@ -4,7 +4,7 @@ metadata:
   name: data-pipeline
   namespace: mlops
   annotations:
-    workflows.argoproj.io/title: '**Base Data Pipeline**'
+    workflows.argoproj.io/title: '**Data Pipeline Example**'
     workflows.argoproj.io/description: "Run DVC data pipelines with automatic versioning"
 spec:
   serviceAccountName: workflow-executor
@@ -29,9 +29,6 @@ spec:
       - name: image
         description: "Docker image for DVC operations"
         value: "opencloudhuborg/data-registry-pipelines:latest"
-      - name: pipeline_map
-        description: "JSON mapping of pipeline name to dataset name"
-        value: '{"opencloudhub-readmes-download":"opencloudhub-readmes"}'
 
   entrypoint: main
 
@@ -58,9 +55,6 @@ spec:
           - name: pipeline_name
       outputs:
         parameters:
-          - name: dataset
-            valueFrom:
-              parameter: "{{steps.map-dataset.outputs.parameters.dataset}}"
           - name: tag
             valueFrom:
               parameter: "{{steps.create-tag.outputs.parameters.new_tag}}"
@@ -68,17 +62,15 @@ spec:
             valueFrom:
               parameter: "{{steps.run-dvc.outputs.parameters.changed}}"
       steps:
-        # Step 1: Map pipeline name to dataset name
-        - - name: map-dataset
+        # Step 1: Clone repository
+        - - name: clone
             templateRef:
-              name: data-templates
-              template: map-pipeline-to-dataset
+              name: git-templates
+              template: clone-repo
             arguments:
               parameters:
-                - name: pipeline_name
-                  value: "{{inputs.parameters.pipeline_name}}"
-                - name: pipeline_map
-                  value: "{{workflow.parameters.pipeline_map}}"
+                - name: clone_path
+                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
 
         # Step 2: Map compute type to resources
         - - name: map-compute
@@ -90,17 +82,7 @@ spec:
                 - name: compute_type
                   value: "{{workflow.parameters.compute_type}}"
 
-        # Step 3: Clone repository
-        - - name: clone
-            templateRef:
-              name: git-templates
-              template: clone-repo
-            arguments:
-              parameters:
-                - name: clone_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-
-        # Step 4: Run DVC pipeline
+        # Step 3: Run DVC pipeline
         - - name: run-dvc
             templateRef:
               name: data-templates
@@ -127,7 +109,7 @@ spec:
                 - name: repo
                   from: "{{steps.clone.outputs.artifacts.repo}}"
 
-        # Step 5: Push to DVC remote (always, even if no changes - idempotent)
+        # Step 4: Push to DVC remote
         - - name: dvc-push
             templateRef:
               name: data-templates
@@ -142,7 +124,7 @@ spec:
                 - name: repo
                   from: "{{steps.run-dvc.outputs.artifacts.repo}}"
 
-        # Step 6: Commit changes (only if changed)
+        # Step 5: Commit changes (only if changed)
         - - name: commit
             templateRef:
               name: git-templates
@@ -154,13 +136,13 @@ spec:
                 - name: files_to_add
                   value: "pipelines/{{inputs.parameters.pipeline_name}}/"
                 - name: commit_message
-                  value: "chore({{steps.map-dataset.outputs.parameters.dataset}}): update dvc.lock [skip ci]"
+                  value: "chore({{inputs.parameters.pipeline_name}}): update dvc.lock [skip ci]"
               artifacts:
                 - name: repo
                   from: "{{steps.dvc-push.outputs.artifacts.repo}}"
             when: "{{steps.run-dvc.outputs.parameters.changed}} == true"
 
-        # Step 7: Create version tag (only if changed)
+        # Step 6: Create version tag (only if changed)
         - - name: create-tag
             templateRef:
               name: git-templates
@@ -170,7 +152,7 @@ spec:
                 - name: repo_path
                   value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
                 - name: tag_prefix
-                  value: "{{steps.map-dataset.outputs.parameters.dataset}}"
+                  value: "{{inputs.parameters.pipeline_name}}"
                 - name: bump_type
                   value: "{{workflow.parameters.bump_type}}"
                 - name: is_automated
@@ -180,15 +162,13 @@ spec:
                   from: "{{steps.commit.outputs.artifacts.repo}}"
             when: "{{steps.run-dvc.outputs.parameters.changed}} == true"
 
-        # Step 8: Summary
+        # Step 7: Summary
         - - name: summary
             template: pipeline-summary
             arguments:
               parameters:
                 - name: pipeline_name
                   value: "{{inputs.parameters.pipeline_name}}"
-                - name: dataset
-                  value: "{{steps.map-dataset.outputs.parameters.dataset}}"
                 - name: changed
                   value: "{{steps.run-dvc.outputs.parameters.changed}}"
                 - name: tag
@@ -201,7 +181,6 @@ spec:
       inputs:
         parameters:
           - name: pipeline_name
-          - name: dataset
           - name: changed
           - name: tag
       script:
@@ -213,7 +192,6 @@ spec:
           echo "════════════════════════════════════════════════════════════"
           echo ""
           echo "Pipeline: {{inputs.parameters.pipeline_name}}"
-          echo "Dataset:  {{inputs.parameters.dataset}}"
           echo "Changed:  {{inputs.parameters.changed}}"
           echo "Tag:      {{inputs.parameters.tag}}"
           echo ""
