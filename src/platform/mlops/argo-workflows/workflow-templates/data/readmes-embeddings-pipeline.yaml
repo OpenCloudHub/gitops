@@ -129,7 +129,7 @@ spec:
               workflow-run: "${RUN_LABEL}"
               pipeline: "embeddings"
           spec:
-            entrypoint: python -m src.embeddings.run --data-version ${DATA_VERSION}
+            entrypoint: dvc repro pipelines/opencloudhub-readmes-embeddings/dvc.yaml
             shutdownAfterJobFinishes: true
             ttlSecondsAfterFinished: 300
             rayClusterSpec:
@@ -163,6 +163,8 @@ spec:
                       env:
                       - name: DVC_DATA_VERSION
                         value: "${DATA_VERSION}"
+                      - name: DVC_REPO
+                        value: "https://github.com/OpenCloudHub/data-registry"
                       - name: ARGO_WORKFLOW_UID
                         value: "{{workflow.uid}}"
                       - name: AWS_ACCESS_KEY_ID
@@ -181,21 +183,12 @@ spec:
                             name: minio-tenant-secret
                             key: endpoint-url
                       - name: PGVECTOR_HOST
-                        value: "pgvector-rw.storage.svc.cluster.local"
-                      - name: PGVECTOR_PORT
-                        value: "5432"
-                      - name: PGVECTOR_USER
+                        value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                      - name: POSTGRES_DEMO_APP_DB_PASSWORD
                         valueFrom:
                           secretKeyRef:
-                            name: pgvector-app
-                            key: username
-                      - name: PGVECTOR_PASSWORD
-                        valueFrom:
-                          secretKeyRef:
-                            name: pgvector-app
+                            name: demo-app-db-user
                             key: password
-                      - name: PGVECTOR_DATABASE
-                        value: "vectors"
               workerGroupSpecs:
               - replicas: {{inputs.parameters.replicas}}
                 groupName: worker
@@ -226,6 +219,8 @@ spec:
                       env:
                       - name: DVC_DATA_VERSION
                         value: "${DATA_VERSION}"
+                      - name: DVC_REPO
+                        value: "https://github.com/OpenCloudHub/data-registry"
                       - name: ARGO_WORKFLOW_UID
                         value: "{{workflow.uid}}"
                       - name: AWS_ACCESS_KEY_ID
@@ -244,21 +239,12 @@ spec:
                             name: minio-tenant-secret
                             key: endpoint-url
                       - name: PGVECTOR_HOST
-                        value: "pgvector-rw.storage.svc.cluster.local"
-                      - name: PGVECTOR_PORT
-                        value: "5432"
-                      - name: PGVECTOR_USER
+                        value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                      - name: POSTGRES_DEMO_APP_DB_PASSWORD
                         valueFrom:
                           secretKeyRef:
-                            name: pgvector-app
-                            key: username
-                      - name: PGVECTOR_PASSWORD
-                        valueFrom:
-                          secretKeyRef:
-                            name: pgvector-app
+                            name: demo-app-db-user
                             key: password
-                      - name: PGVECTOR_DATABASE
-                        value: "vectors"
           EOF
 
           echo "⏳ Waiting for RayJob..."

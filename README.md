@@ -46,6 +46,8 @@
 
 <!-- TODO: make tunnel wait for ingress to be up -->
 
+<!-- TODO: cleanup ray jobs on failure of workflow -->
+
 <details>
   <summary>📑 Table of Contents</summary>
   <ol>
