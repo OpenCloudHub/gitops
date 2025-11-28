@@ -96,7 +96,7 @@ spec:
               path: /tmp/job-name.txt
       script:
         image: bitnami/kubectl:latest
-        command: [sh]
+        command: [bash]
         source: |
           set -e
 
@@ -116,25 +116,24 @@ spec:
           FORCE_FLAG=""
           [ "$FORCE" = "true" ] && FORCE_FLAG="--force"
 
-          RUN_LABEL="embeddings-${DATA_VERSION}-${TIMESTAMP}"
+          RUN_LABEL="embeddings-${TIMESTAMP}"
 
           echo "Creating RayJob for embeddings"
           echo "  Label: workflow-run=${RUN_LABEL}"
           echo "  Data version: ${DATA_VERSION}"
           echo "  Force: ${FORCE_FLAG:-none}"
 
-          cat <<EOF | kubectl create -f -
+          # Build the entrypoint command
+          ENTRYPOINT="sed -i s/version:.*/version:\ ${DATA_VERSION}/ pipelines/opencloudhub-readmes-embeddings/params.yaml && dvc repro ${FORCE_FLAG} pipelines/opencloudhub-readmes-embeddings/dvc.yaml"
+
+          # Write RayJob YAML to file to avoid heredoc escaping issues
+          cat > /tmp/rayjob.yaml << 'YAMLEOF'
           apiVersion: ray.io/v1
           kind: RayJob
           metadata:
             generateName: embeddings-
             namespace: mlops
-            labels:
-              workflow-run: "${RUN_LABEL}"
-              pipeline: "embeddings"
           spec:
-            entrypoint: "sed -i 's/version:.*/version: ${DATA_VERSION}/' pipelines/opencloudhub-readmes-embeddings/params.yaml && dvc repro ${FORCE_FLAG} pipelines/opencloudhub-readmes-embeddings/dvc.yaml"
-            runtimeEnvYAML: "working_dir: /workspace/project"
             shutdownAfterJobFinishes: true
             ttlSecondsAfterFinished: 300
             rayClusterSpec:
@@ -145,31 +144,14 @@ spec:
                   spec:
                     containers:
                     - name: ray-head
-                      image: ${IMAGE}
-                      readinessProbe:
-                        exec:
-                          command:
-                            - bash
-                            - -c
-                            - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success && wget --tries 1 -T 10 -q -O- http://localhost:8265/api/gcs_healthz | grep success
-                        initialDelaySeconds: 45
-                        periodSeconds: 5
-                        timeoutSeconds: 5
-                        failureThreshold: 10
                       resources:
                         requests:
-                          cpu: ${CPU_REQUEST}
-                          memory: ${MEMORY_REQUEST}
+                          cpu: "PLACEHOLDER_CPU_REQUEST"
+                          memory: "PLACEHOLDER_MEMORY_REQUEST"
                         limits:
-                          cpu: ${CPU_LIMIT}
-                          memory: ${MEMORY_LIMIT}
+                          cpu: "PLACEHOLDER_CPU_LIMIT"
+                          memory: "PLACEHOLDER_MEMORY_LIMIT"
                       env:
-                      - name: DVC_DATA_VERSION
-                        value: ${DATA_VERSION}
-                      - name: DVC_REPO
-                        value: https://github.com/OpenCloudHub/data-registry
-                      - name: ARGO_WORKFLOW_UID
-                        value: ${WORKFLOW_UID}
                       - name: AWS_ACCESS_KEY_ID
                         valueFrom:
                           secretKeyRef:
@@ -193,37 +175,20 @@ spec:
                             name: demo-app-db-user
                             key: password
               workerGroupSpecs:
-              - replicas: ${REPLICAS}
+              - replicas: PLACEHOLDER_REPLICAS
                 groupName: worker
                 template:
                   spec:
                     containers:
                     - name: ray-worker
-                      image: ${IMAGE}
-                      readinessProbe:
-                        exec:
-                          command:
-                            - bash
-                            - -c
-                            - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
-                        initialDelaySeconds: 30
-                        periodSeconds: 5
-                        timeoutSeconds: 5
-                        failureThreshold: 10
                       resources:
                         requests:
-                          cpu: ${CPU_REQUEST}
-                          memory: ${MEMORY_REQUEST}
+                          cpu: "PLACEHOLDER_CPU_REQUEST"
+                          memory: "PLACEHOLDER_MEMORY_REQUEST"
                         limits:
-                          cpu: ${CPU_LIMIT}
-                          memory: ${MEMORY_LIMIT}
+                          cpu: "PLACEHOLDER_CPU_LIMIT"
+                          memory: "PLACEHOLDER_MEMORY_LIMIT"
                       env:
-                      - name: DVC_DATA_VERSION
-                        value: ${DATA_VERSION}
-                      - name: DVC_REPO
-                        value: https://github.com/OpenCloudHub/data-registry
-                      - name: ARGO_WORKFLOW_UID
-                        value: ${WORKFLOW_UID}
                       - name: AWS_ACCESS_KEY_ID
                         valueFrom:
                           secretKeyRef:
@@ -246,7 +211,33 @@ spec:
                           secretKeyRef:
                             name: demo-app-db-user
                             key: password
-          EOF
+          YAMLEOF
+
+          # Now use sed to replace placeholders with actual values
+          sed -i "s|PLACEHOLDER_CPU_REQUEST|${CPU_REQUEST}|g" /tmp/rayjob.yaml
+          sed -i "s|PLACEHOLDER_CPU_LIMIT|${CPU_LIMIT}|g" /tmp/rayjob.yaml
+          sed -i "s|PLACEHOLDER_MEMORY_REQUEST|${MEMORY_REQUEST}|g" /tmp/rayjob.yaml
+          sed -i "s|PLACEHOLDER_MEMORY_LIMIT|${MEMORY_LIMIT}|g" /tmp/rayjob.yaml
+          sed -i "s|PLACEHOLDER_REPLICAS|${REPLICAS}|g" /tmp/rayjob.yaml
+
+          # Add dynamic fields using yq or just more sed
+          # Add labels
+          sed -i "s|metadata:|metadata:\n    labels:\n      workflow-run: \"${RUN_LABEL}\"\n      pipeline: \"embeddings\"|" /tmp/rayjob.yaml
+
+          # Add image to both containers
+          sed -i "s|name: ray-head|name: ray-head\n                      image: ${IMAGE}|" /tmp/rayjob.yaml
+          sed -i "s|name: ray-worker|name: ray-worker\n                      image: ${IMAGE}|" /tmp/rayjob.yaml
+
+          # Add entrypoint and runtimeEnvYAML
+          sed -i "s|spec:\n            shutdownAfterJobFinishes|spec:\n            entrypoint: \"${ENTRYPOINT}\"\n            runtimeEnvYAML: \"working_dir: /workspace/project\"\n            shutdownAfterJobFinishes|" /tmp/rayjob.yaml
+
+          # Debug: show the YAML
+          echo "=== Generated RayJob YAML ==="
+          cat /tmp/rayjob.yaml
+          echo "=== End YAML ==="
+
+          # Apply the YAML
+          kubectl create -f /tmp/rayjob.yaml
 
           echo "⏳ Waiting for RayJob..."
           sleep 3
