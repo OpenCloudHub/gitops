@@ -189,6 +189,10 @@ helmCharts:
           cnpg:
             gnetId: 20417
             datasource: Prometheus
+        default:
+          k6-testing:
+            gnetId: 18030
+            datasource: Prometheus
         ray:
           # Ray default dashboard
           ray-default:
