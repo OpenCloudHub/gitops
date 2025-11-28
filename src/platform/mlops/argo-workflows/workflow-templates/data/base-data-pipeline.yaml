@@ -4,7 +4,6 @@ metadata:
   name: data-pipeline
   namespace: mlops
   annotations:
-    workflows.argoproj.io/title: '**Data Pipeline Example**'
     workflows.argoproj.io/description: "Run DVC data pipelines with automatic versioning"
 spec:
   serviceAccountName: workflow-executor
@@ -44,7 +43,7 @@ spec:
             withParam: "{{workflow.parameters.pipelines}}"
 
     # --------------------------------------------------------------------------
-    # Single pipeline: clone -> run -> push -> commit -> tag
+    # Single pipeline: clone, run, push, commit, tag - all in one container
     # --------------------------------------------------------------------------
     - name: single-pipeline
       inputs:
@@ -54,124 +53,155 @@ spec:
         parameters:
           - name: tag
             valueFrom:
-              parameter: "{{steps.create-tag.outputs.parameters.new_tag}}"
+              path: /tmp/outputs/tag.txt
           - name: changed
             valueFrom:
-              parameter: "{{steps.run-dvc.outputs.parameters.changed}}"
-      steps:
-        # Step 1: Clone repository
-        - - name: clone
-            templateRef:
-              name: git-templates
-              template: clone-repo
-            arguments:
-              parameters:
-                - name: clone_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-
-        # Step 2: Run DVC pipeline
-        - - name: run-dvc
-            templateRef:
-              name: data-templates
-              template: run-dvc-pipeline
-            arguments:
-              parameters:
-                - name: repo_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-                - name: pipeline_name
-                  value: "{{inputs.parameters.pipeline_name}}"
-                - name: force
-                  value: "{{workflow.parameters.force}}"
-                - name: image
-                  value: "{{workflow.parameters.image}}"
-              artifacts:
-                - name: repo
-                  from: "{{steps.clone.outputs.artifacts.repo}}"
-
-        # Step 3: Push to DVC remote
-        - - name: dvc-push
-            templateRef:
-              name: data-templates
-              template: dvc-push
-            arguments:
-              parameters:
-                - name: repo_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-                - name: image
-                  value: "{{workflow.parameters.image}}"
-              artifacts:
-                - name: repo
-                  from: "{{steps.run-dvc.outputs.artifacts.repo}}"
-
-        # Step 4: Commit changes (only if changed)
-        - - name: commit
-            templateRef:
-              name: git-templates
-              template: commit-and-push
-            arguments:
-              parameters:
-                - name: repo_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-                - name: files_to_add
-                  value: "pipelines/{{inputs.parameters.pipeline_name}}/"
-                - name: commit_message
-                  value: "chore({{inputs.parameters.pipeline_name}}): update dvc.lock [skip ci]"
-              artifacts:
-                - name: repo
-                  from: "{{steps.dvc-push.outputs.artifacts.repo}}"
-            when: "{{steps.run-dvc.outputs.parameters.changed}} == true"
-
-        # Step 5: Create version tag (only if changed)
-        - - name: create-tag
-            templateRef:
-              name: git-templates
-              template: create-tag
-            arguments:
-              parameters:
-                - name: repo_path
-                  value: "/tmp/repo-{{inputs.parameters.pipeline_name}}"
-                - name: tag_prefix
-                  value: "{{inputs.parameters.pipeline_name}}"
-                - name: bump_type
-                  value: "{{workflow.parameters.bump_type}}"
-                - name: is_automated
-                  value: "{{workflow.parameters.is_automated}}"
-              artifacts:
-                - name: repo
-                  from: "{{steps.commit.outputs.artifacts.repo}}"
-            when: "{{steps.run-dvc.outputs.parameters.changed}} == true"
-
-        # Step 6: Summary
-        - - name: summary
-            template: pipeline-summary
-            arguments:
-              parameters:
-                - name: pipeline_name
-                  value: "{{inputs.parameters.pipeline_name}}"
-                - name: changed
-                  value: "{{steps.run-dvc.outputs.parameters.changed}}"
-                - name: tag
-                  value: "{{steps.create-tag.outputs.parameters.new_tag}}"
-
-    # --------------------------------------------------------------------------
-    # Summary output
-    # --------------------------------------------------------------------------
-    - name: pipeline-summary
-      inputs:
-        parameters:
-          - name: pipeline_name
-          - name: changed
-          - name: tag
+              path: /tmp/outputs/changed.txt
+      volumes:
+        - name: git-secret
+          secret:
+            secretName: data-registry-repo
       script:
-        image: alpine:latest
-        command: [sh]
+        image: "{{workflow.parameters.image}}"
+        command: [bash]
+        volumeMounts:
+          - name: git-secret
+            mountPath: /mnt/secrets
+            readOnly: true
+        env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: accesskey
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: secretkey
+          - name: AWS_ENDPOINT_URL
+            valueFrom:
+              secretKeyRef:
+                name: minio-tenant-secret
+                key: endpoint-url
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "8Gi"
         source: |
+          set -e
+
+          PIPELINE="{{inputs.parameters.pipeline_name}}"
+          FORCE="{{workflow.parameters.force}}"
+          BUMP_TYPE="{{workflow.parameters.bump_type}}"
+          IS_AUTOMATED="{{workflow.parameters.is_automated}}"
+
+          # Initialize outputs
+          mkdir -p /tmp/outputs
+          echo "" > /tmp/outputs/tag.txt
+          echo "false" > /tmp/outputs/changed.txt
+
           echo "════════════════════════════════════════════════════════════"
-          echo "📊 Pipeline Summary"
+          echo "🚀 Pipeline: $PIPELINE"
           echo "════════════════════════════════════════════════════════════"
-          echo ""
-          echo "Pipeline: {{inputs.parameters.pipeline_name}}"
-          echo "Changed:  {{inputs.parameters.changed}}"
-          echo "Tag:      {{inputs.parameters.tag}}"
-          echo ""
+
+          # Setup SSH
+          mkdir -p ~/.ssh
+          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+          echo "" >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Clone
+          echo "📥 Cloning..."
+          git clone git@github.com:OpenCloudHub/data-registry.git /tmp/repo
+          cd /tmp/repo
+          git config user.name "Argo Workflow"
+          git config user.email "workflow@opencloudhub.org"
+
+          # Configure DVC
+          dvc remote modify minio endpointurl "$AWS_ENDPOINT_URL"
+          dvc remote modify minio access_key_id "$AWS_ACCESS_KEY_ID"
+          dvc remote modify minio secret_access_key "$AWS_SECRET_ACCESS_KEY"
+
+          # Hash before
+          LOCK_FILE="pipelines/${PIPELINE}/dvc.lock"
+          HASH_BEFORE="none"
+          [ -f "$LOCK_FILE" ] && HASH_BEFORE=$(md5sum "$LOCK_FILE" | cut -d' ' -f1)
+
+          # Run DVC
+          echo "🔄 Running DVC..."
+          FORCE_FLAG=""
+          [ "$FORCE" = "true" ] && FORCE_FLAG="--force" && echo "⚠️ Force mode"
+          dvc repro $FORCE_FLAG "pipelines/${PIPELINE}/dvc.yaml"
+
+          # Push data
+          echo "📤 Pushing data..."
+          dvc push
+
+          # Check if changed
+          HASH_AFTER="none"
+          [ -f "$LOCK_FILE" ] && HASH_AFTER=$(md5sum "$LOCK_FILE" | cut -d' ' -f1)
+
+          if [ "$HASH_BEFORE" = "$HASH_AFTER" ]; then
+            echo "✅ No changes"
+            exit 0
+          fi
+
+          echo "true" > /tmp/outputs/changed.txt
+          echo "📝 dvc.lock changed"
+
+          # Commit with retry
+          git add "pipelines/${PIPELINE}/"
+          git commit -m "chore(${PIPELINE}): update dvc.lock [skip ci]"
+
+          for attempt in 1 2 3; do
+            echo "🔄 Push attempt $attempt..."
+            if git push origin main; then
+              echo "✅ Pushed"
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "❌ Failed after 3 attempts"
+              exit 1
+            fi
+            echo "⚠️ Conflict, rebasing..."
+            git pull --rebase origin main
+          done
+
+          # Create tag
+          [ "$IS_AUTOMATED" = "true" ] && SUFFIX="-automated" || SUFFIX=""
+
+          LATEST=$(git tag -l "${PIPELINE}-v*" --sort=-version:refname | head -n1 || echo "")
+          if [ -z "$LATEST" ]; then
+            VERSION="1.0.0"
+          else
+            CURRENT=$(echo "$LATEST" | sed "s/${PIPELINE}-v//" | sed 's/-automated//')
+            MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+            MINOR=$(echo "$CURRENT" | cut -d. -f2)
+            PATCH=$(echo "$CURRENT" | cut -d. -f3)
+            case "$BUMP_TYPE" in
+              major) VERSION="$((MAJOR + 1)).0.0" ;;
+              minor) VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
+              *) VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+            esac
+          fi
+
+          NEW_TAG="${PIPELINE}-v${VERSION}${SUFFIX}"
+
+          if git tag -l "$NEW_TAG" | grep -q .; then
+            echo "ℹ️ Tag $NEW_TAG exists"
+          else
+            git tag -a "$NEW_TAG" -m "${PIPELINE} v${VERSION}"
+            git push origin "$NEW_TAG"
+            echo "🏷️ Created: $NEW_TAG"
+          fi
+
+          echo "$NEW_TAG" > /tmp/outputs/tag.txt
+
+          echo "════════════════════════════════════════════════════════════"
+          echo "✅ Complete: $NEW_TAG"
           echo "════════════════════════════════════════════════════════════"
