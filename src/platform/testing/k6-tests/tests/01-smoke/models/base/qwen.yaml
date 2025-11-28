@@ -11,13 +11,17 @@ spec:
   parallelism: 1
   script:
     localFile: /tests/tests/01-smoke/models/base/qwen.js
-  arguments: --insecure-skip-tls-verify
+  arguments: --insecure-skip-tls-verify --out experimental-prometheus-rw
   cleanup: post
   runner:
     image: docker.io/opencloudhuborg/k6-tests:latest
     env:
       - name: TEST_ENV
         value: "dev"
+      - name: K6_PROMETHEUS_RW_SERVER_URL
+        value: "http://prometheus-server.observability.svc.cluster.local:80/api/v1/write"
+      - name: K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM
+        value: "true"
     resources:
       limits:
         cpu: 500m
