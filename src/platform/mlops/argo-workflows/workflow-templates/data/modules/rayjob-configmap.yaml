@@ -39,6 +39,7 @@ data:
               containers:
               - name: ray-head
                 image: "${IMAGE}"
+                imagePullPolicy: Always
                 resources:
                   requests:
                     cpu: "${CPU_REQUEST}"
@@ -79,6 +80,7 @@ data:
               containers:
               - name: ray-worker
                 image: "${IMAGE}"
+                imagePullPolicy: Always
                 resources:
                   requests:
                     cpu: "${CPU_REQUEST}"
