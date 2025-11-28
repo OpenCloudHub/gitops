@@ -80,7 +80,7 @@ spec:
                             name: minio-tenant-secret
                             key: endpoint-url
                       - name: PGVECTOR_HOST
-                        value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                        value: "demo-app-db-cluster-rw.storage.svc.cluster.local"
                       - name: POSTGRES_DEMO_APP_DB_PASSWORD
                         valueFrom:
                           secretKeyRef:
@@ -125,7 +125,7 @@ spec:
                             name: minio-tenant-secret
                             key: endpoint-url
                       - name: PGVECTOR_HOST
-                        value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                        value: "demo-app-db-cluster-rw.storage.svc.cluster.local"
                       - name: POSTGRES_DEMO_APP_DB_PASSWORD
                         valueFrom:
                           secretKeyRef:
