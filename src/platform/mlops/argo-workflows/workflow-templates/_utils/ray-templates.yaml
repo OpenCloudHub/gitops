@@ -201,7 +201,7 @@ spec:
           
           # Get Ray dashboard address
           CLUSTER_NAME=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}')
-          RAY_ADDRESS="http://${CLUSTER_NAME}-head-svc.mlops.svc.cluster.local:8265"
+          RAY_ADDRESS="http://${JOB_NAME}-head-svc.mlops.svc.cluster.local:8265"
           
           echo "=========================================="
           echo "Ray Job ID: $RAY_JOB_ID"
