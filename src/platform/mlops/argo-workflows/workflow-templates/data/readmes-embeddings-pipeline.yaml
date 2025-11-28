@@ -160,7 +160,7 @@ spec:
           "                  name: demo-app-db-user" \
           "                  key: password" \
           "            - name: DVC_REPO" \
-          "              value: https://github.com/OpenCloudHub/data-registry" \
+          "              value: 'https://github.com/OpenCloudHub/data-registry'" \
           "    workerGroupSpecs:" \
           "    - replicas: ${REPLICAS}" \
           "      groupName: worker" \
@@ -200,7 +200,7 @@ spec:
           "                  name: demo-app-db-user" \
           "                  key: password" \
           "            - name: DVC_REPO" \
-          "              value: https://github.com/OpenCloudHub/data-registry" \
+          "              value: 'https://github.com/OpenCloudHub/data-registry'" \
           > /tmp/rayjob.yaml
 
           echo "=== YAML ==="
