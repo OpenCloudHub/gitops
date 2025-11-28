@@ -7,4 +7,4 @@ resources:
 - compute.yaml
 - git-templates.yaml
 - ray-templates.yaml
-- rayjobconfigmap.yaml
+- rayjob-configmap.yaml
