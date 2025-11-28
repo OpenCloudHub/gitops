@@ -44,6 +44,8 @@
 
 <!-- TABLE OF CONTENTS -->
 
+<!-- TODO: make tunnel wait for ingress to be up -->
+
 <details>
   <summary>📑 Table of Contents</summary>
   <ol>
@@ -66,7 +68,7 @@ ______________________________________________________________________
 
 ## 🌐 Overview <a id="overview"></a>
 
-This repository contains the complete GitOps configuration for the OpenCloudHub Kubernetes platform. It implements a declarative, Git-driven approach to infrastructure and application management using ArgoCD.
+This repository contains the complete GitOps configuration for the OpenCloudHub Kubernetes platform. It implements a declarative, Git-driven approach to infrastructure and application management using (ArgoCD)[https://argo-cd.readthedocs.io/en/stable/].
 
 **Key Principles:**
 

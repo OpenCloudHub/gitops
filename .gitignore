@@ -37,6 +37,7 @@ override.tf.json
 terraform.rc
 
 # Specific
+archive/
 *.env
 *.env.local
 *.env.secrets

@@ -6,4 +6,4 @@ namespace: mlops
 resources:
 - base-data-pipeline.yaml
 - readmes-embeddings-pipeline.yaml
-- modules/dvc-data.yaml
+- modules/data-templates.yaml
