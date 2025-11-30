@@ -1,5 +1,9 @@
 # k6 Kubernetes Test Runner
 
+.PHONY: all test
+all: help
+test: smoke
+
 NAMESPACE := k6-testing
 SCRIPT := ./run-test.sh
 

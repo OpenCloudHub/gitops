@@ -54,7 +54,7 @@ spec:
 EOF
 
 echo "⏳ Waiting for test..."
-while ! kubectl logs -l k6_cr=${NAME} -n ${NAMESPACE} 2>/dev/null | grep -qE "iteration|checks|http_req|level=info"; do 
+while ! kubectl logs -l k6_cr=${NAME} -n ${NAMESPACE} 2>/dev/null | grep -qE "iteration|checks|http_req|level=info"; do
   sleep 2
 done
 

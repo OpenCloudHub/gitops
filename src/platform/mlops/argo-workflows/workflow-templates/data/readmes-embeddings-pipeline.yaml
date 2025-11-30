@@ -64,6 +64,8 @@ spec:
                   value: "{{workflow.parameters.force}}"
                 - name: image
                   value: "{{workflow.parameters.image}}"
+                - name: workflow_uid
+                  value: "{{workflow.uid}}"
                 - name: cpu_request
                   value: "{{steps.map-compute.outputs.parameters.cpu_request}}"
                 - name: cpu_limit

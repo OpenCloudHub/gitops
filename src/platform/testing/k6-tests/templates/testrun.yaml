@@ -14,10 +14,10 @@ spec:
   script:
     localFile: /tests/tests/${TEST_DIR}/${SCRIPT_PATH}
   arguments: >-
-    --insecure-skip-tls-verify 
-    --out experimental-prometheus-rw 
-    --tag testid=${TESTID} 
-    --tag test_type=${TEST_TYPE} 
+    --insecure-skip-tls-verify
+    --out experimental-prometheus-rw
+    --tag testid=${TESTID}
+    --tag test_type=${TEST_TYPE}
     --tag test_target=${TEST_TARGET}
   cleanup: post
   runner:
