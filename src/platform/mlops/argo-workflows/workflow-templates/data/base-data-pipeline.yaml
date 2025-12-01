@@ -123,12 +123,6 @@ spec:
           git config user.name "Argo Workflow"
           git config user.email "workflow@opencloudhub.org"
 
-          # Configure DVC
-          export DVC_REMOTE_MINIO_ENDPOINTURL="$AWS_ENDPOINT_URL"
-          export DVC_REMOTE_MINIO_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-          export DVC_REMOTE_MINIO_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
-          export DVC_REMOTE=minio
-
           # Hash before
           LOCK_FILE="pipelines/${PIPELINE}/dvc.lock"
           HASH_BEFORE="none"
