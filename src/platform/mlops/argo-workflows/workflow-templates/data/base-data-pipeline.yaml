@@ -124,10 +124,10 @@ spec:
           git config user.email "workflow@opencloudhub.org"
 
           # Configure DVC
-          dvc remote modify minio endpointurl "$AWS_ENDPOINT_URL"
-          dvc remote modify minio access_key_id "$AWS_ACCESS_KEY_ID"
-          dvc remote modify minio secret_access_key "$AWS_SECRET_ACCESS_KEY"
-          dvc remote default minio
+          export DVC_REMOTE_MINIO_ENDPOINTURL="$AWS_ENDPOINT_URL"
+          export DVC_REMOTE_MINIO_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+          export DVC_REMOTE_MINIO_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+          export DVC_REMOTE=minio
 
           # Hash before
           LOCK_FILE="pipelines/${PIPELINE}/dvc.lock"
