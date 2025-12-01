@@ -127,6 +127,7 @@ spec:
           dvc remote modify minio endpointurl "$AWS_ENDPOINT_URL"
           dvc remote modify minio access_key_id "$AWS_ACCESS_KEY_ID"
           dvc remote modify minio secret_access_key "$AWS_SECRET_ACCESS_KEY"
+          dvc remote default minio
 
           # Hash before
           LOCK_FILE="pipelines/${PIPELINE}/dvc.lock"
