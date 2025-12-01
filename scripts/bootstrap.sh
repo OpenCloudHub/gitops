@@ -54,7 +54,7 @@ DRY_RUN="${DRY_RUN:-false}"
 SUMMARY_OUTPUT_DIR="${SUMMARY_OUTPUT_DIR:-${REPO_ROOT}/local-dev/output}"
 
 # Timeout for kubectl wait operations
-KUBECTL_TIMEOUT="300s"
+KUBECTL_TIMEOUT="1200s"
 
 # -----------------------------------------------------------------------------
 # ArgoCD Repository Configuration
@@ -228,13 +228,26 @@ step_install_argocd() {
   log_info "Applying ArgoCD manifests..."
   echo "$manifests" | kubectl apply -f -
 
-  # Wait for ArgoCD server
-  log_info "Waiting for ArgoCD server to be ready..."
-  if ! kubectl wait --for=condition=available --timeout="$KUBECTL_TIMEOUT" \
-    deployment/argocd-server -n argocd; then
-    log_error "ArgoCD server failed to become ready"
+  # Wait for critical ArgoCD components
+  log_info "Waiting for ArgoCD components to be ready..."
+
+  # Wait for Deployments
+  for deployment in argocd-server argocd-repo-server; do
+    if ! kubectl wait --for=condition=available --timeout="$KUBECTL_TIMEOUT" \
+      deployment/$deployment -n argocd; then
+      log_error "$deployment failed to become ready"
+      return 1
+    fi
+    log_info "$deployment is ready"
+  done
+
+  # Wait for StatefulSet (argocd-application-controller is a StatefulSet in ArgoCD v3.x)
+  log_info "Waiting for argocd-application-controller StatefulSet..."
+  if ! kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout="$KUBECTL_TIMEOUT"; then
+    log_error "argocd-application-controller StatefulSet failed to become ready"
     return 1
   fi
+  log_info "argocd-application-controller is ready"
 
   log_success "ArgoCD installed successfully"
 }
@@ -253,37 +266,11 @@ step_deploy_applications() {
   kubectl apply -f "${REPO_ROOT}/src/application-sets/security/applicationset.yaml"
   sleep 10
 
-  # # Stage 2: Platform infrastructure
-  # log_info "Stage 2: Deploying platform infrastructure..."
-  # kubectl apply -f "${REPO_ROOT}/src/application-sets/platform/applicationset.yaml"
 
-  # # Wait for External Secrets Operator
-  # log_info "Waiting for External Secrets Operator..."
-  # local max_attempts=60
-  # for ((i=1; i<=max_attempts; i++)); do
-  #   if kubectl get deployment external-secrets -n external-secrets &>/dev/null; then
-  #     if kubectl wait --for=condition=available --timeout=30s \
-  #       deployment/external-secrets -n external-secrets 2>/dev/null; then
-  #       break
-  #     fi
-  #   fi
-  #   echo -n "."
-  #   sleep 5
-  # done
-  # echo ""
-  # log_success "External Secrets Operator ready"
-
-  # Stage 3: Root app (self-management and AI workloads)
+  # Stage 2: Root app (self-management and AI workloads)
   log_info "Stage 3: Deploying root application..."
   kubectl apply -f "${REPO_ROOT}/src/root-app.yaml"
 
-  # Trigger ArgoCD refresh
-  # TODO: do we need?
-  # log_info "Triggering ArgoCD refresh..."
-  # sleep 15
-  # kubectl rollout restart deployment/argocd-repo-server -n argocd
-  # kubectl wait --for=condition=ready pod -n argocd \
-  #   -l app.kubernetes.io/name=argocd-repo-server --timeout=120s || true
 
   log_success "Applications deployed successfully"
 }
