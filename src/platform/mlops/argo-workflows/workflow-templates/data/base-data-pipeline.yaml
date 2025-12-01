@@ -4,7 +4,7 @@ metadata:
   name: data-pipeline
   namespace: mlops
   annotations:
-    # workflows.argoproj.io/title: '**MLOPS Pipeline**'
+    # workflows.argoproj.io/title: '**Data Pipeline**'
     # workflows.argoproj.io/description: "Run DVC data pipelines with automatic versioning"
 spec:
   serviceAccountName: workflow-executor
