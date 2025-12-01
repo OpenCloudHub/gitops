@@ -150,6 +150,9 @@ spec:
           echo "true" > /tmp/outputs/changed.txt
           echo "📝 dvc.lock changed"
 
+          echo "📋 Git status before push:"
+          git status --short
+
           # Commit with retry
           git add "pipelines/${PIPELINE}/"
           git commit -m "chore(${PIPELINE}): update dvc.lock [skip ci]"
