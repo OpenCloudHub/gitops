@@ -4,7 +4,7 @@ metadata:
   name: embeddings-pipeline
   namespace: mlops
   annotations:
-    description: "Generate embeddings from downloaded data and store in pgvector"
+    workflows.argoproj.io/description: "Generate embeddings from downloaded data and store in pgvector"
 spec:
   serviceAccountName: workflow-executor
 
@@ -17,7 +17,8 @@ spec:
         description: "Force re-run even if DVC cache exists"
       - name: compute_type
         value: "cpu-medium"
-        enum: [cpu-small, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
+        enum:
+          [cpu-small, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large]
         description: "Compute configuration for Ray cluster"
       - name: image
         value: "opencloudhuborg/data-registry-pipelines:latest"
