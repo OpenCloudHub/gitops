@@ -206,40 +206,29 @@ step_wait_for_gateway_service() {
     return 0
   fi
 
-  log_info "Waiting for ingress-gateway-istio service (up to 20 minutes)..."
   local max_attempts=120
-  for ((i=1; i<=max_attempts; i++)); do
-    if kubectl get svc -n istio-ingress ingress-gateway-istio &>/dev/null; then
-      log_success "Gateway service exists"
-      break
+  local attempt=1
+
+  log_info "Waiting for gateway to be ready (up to 20 minutes)..."
+  while [[ $attempt -le $max_attempts ]]; do
+    # Check if pod exists and is ready
+    local ready=$(kubectl get pods -n istio-ingress \
+      -l gateway.networking.k8s.io/gateway-name=ingress-gateway \
+      -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+
+    if [[ "$ready" == "True" ]]; then
+      log_success "Gateway pod is ready"
+      return 0
     fi
+
     echo -n "."
     sleep 10
+    ((attempt++))
   done
 
-  if ! kubectl get svc -n istio-ingress ingress-gateway-istio &>/dev/null; then
-    log_error "Gateway service not found after 20 minutes"
-    return 1
-  fi
-
-  log_info "Waiting for gateway pod to exist..."
-  for ((i=1; i<=max_attempts; i++)); do
-    if kubectl get pods -n istio-ingress -l gateway.networking.k8s.io/gateway-name=ingress-gateway 2>/dev/null | grep -q ingress; then
-      log_success "Gateway pod exists"
-      break
-    fi
-    echo -n "."
-    sleep 10
-  done
-
-  log_info "Waiting for gateway pod to be ready..."
-  if ! kubectl wait --for=condition=ready pod \
-    -l gateway.networking.k8s.io/gateway-name=ingress-gateway \
-    -n istio-ingress \
-    --timeout="$KUBECTL_TIMEOUT"; then
-    log_error "Gateway pod not ready"
-    return 1
-  fi
+  echo ""
+  log_error "Gateway not ready after 20 minutes"
+  return 1
 }
 
 step_start_tunnel() {
