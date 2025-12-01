@@ -260,17 +260,34 @@ step_deploy_applications() {
     return 0
   fi
 
-  # Stage 1: Projects and Security
+  # Stage 1: Projects and Security (namespaces, RBAC)
   log_info "Stage 1: Deploying projects and security..."
   kubectl apply -k "${REPO_ROOT}/src/app-projects/"
   kubectl apply -f "${REPO_ROOT}/src/application-sets/security/applicationset.yaml"
   sleep 10
 
+  # Stage 2: Platform ApplicationSet (creates all platform apps)
+  log_info "Stage 2: Deploying platform ApplicationSet..."
+  kubectl apply -f "${REPO_ROOT}/src/application-sets/platform/applicationset.yaml"
 
-  # Stage 2: Root app (self-management and AI workloads)
-  log_info "Stage 3: Deploying root application..."
+  # Stage 3: Wait for core infrastructure
+  log_info "Stage 3: Waiting for core infrastructure..."
+
+  log_info "Waiting for external-secrets operator..."
+  kubectl wait --for=condition=available deployment/external-secrets \
+    -n external-secrets --timeout="$KUBECTL_TIMEOUT" 2>/dev/null || true
+
+  log_info "Waiting for cert-manager..."
+  kubectl wait --for=condition=available deployment/cert-manager \
+    -n cert-manager --timeout="$KUBECTL_TIMEOUT" 2>/dev/null || true
+
+  log_info "Waiting for istiod..."
+  kubectl wait --for=condition=available deployment/istiod \
+    -n istio-system --timeout="$KUBECTL_TIMEOUT" 2>/dev/null || true
+
+  # Stage 4: Root app (adds teams apps now that platform is ready)
+  log_info "Stage 4: Deploying root application..."
   kubectl apply -f "${REPO_ROOT}/src/root-app.yaml"
-
 
   log_success "Applications deployed successfully"
 }
