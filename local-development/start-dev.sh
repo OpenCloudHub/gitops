@@ -70,6 +70,9 @@ DRY_RUN="${DRY_RUN:-false}"
 # Output directory
 SUMMARY_OUTPUT_DIR="${SCRIPT_DIR}/output"
 
+# Timeout for kubectl wait operations
+KUBECTL_TIMEOUT="1200s"
+
 # =============================================================================
 # Runtime Variables
 # =============================================================================
@@ -196,27 +199,47 @@ step_bootstrap_gitops() {
 }
 
 step_wait_for_gateway_service() {
-  log_step "Waiting for Gateway Service to exist"
+  log_step "Waiting for Gateway Service to be ready"
 
   if [[ "$DRY_RUN" == "true" ]]; then
     log_info "(DRY RUN) Would wait for gateway service"
     return 0
   fi
 
-  log_info "Waiting for ingress-gateway-istio service (up to 10 minutes)..."
-  local max_attempts=60
+  log_info "Waiting for ingress-gateway-istio service (up to 20 minutes)..."
+  local max_attempts=120
   for ((i=1; i<=max_attempts; i++)); do
     if kubectl get svc -n istio-ingress ingress-gateway-istio &>/dev/null; then
       log_success "Gateway service exists"
-      return 0
+      break
     fi
     echo -n "."
     sleep 10
   done
 
-  echo ""
-  log_error "Gateway service not found after 10 minutes"
-  return 1
+  if ! kubectl get svc -n istio-ingress ingress-gateway-istio &>/dev/null; then
+    log_error "Gateway service not found after 20 minutes"
+    return 1
+  fi
+
+  log_info "Waiting for gateway pod to exist..."
+  for ((i=1; i<=max_attempts; i++)); do
+    if kubectl get pods -n istio-ingress -l gateway.networking.k8s.io/gateway-name=ingress-gateway 2>/dev/null | grep -q ingress; then
+      log_success "Gateway pod exists"
+      break
+    fi
+    echo -n "."
+    sleep 10
+  done
+
+  log_info "Waiting for gateway pod to be ready..."
+  if ! kubectl wait --for=condition=ready pod \
+    -l gateway.networking.k8s.io/gateway-name=ingress-gateway \
+    -n istio-ingress \
+    --timeout="$KUBECTL_TIMEOUT"; then
+    log_error "Gateway pod not ready"
+    return 1
+  fi
 }
 
 step_start_tunnel() {
