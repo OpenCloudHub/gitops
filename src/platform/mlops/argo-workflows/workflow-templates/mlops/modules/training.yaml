@@ -99,7 +99,7 @@ spec:
                           memory: "{{inputs.parameters.memory_limit}}"
                           ${GPU_RESOURCES}
                       env:
-                      - mame: RAY_STORAGE_PATH
+                      - name: RAY_STORAGE_PATH
                         value: "ray-results"
                       - name: MLFLOW_TRACKING_URI
                         value: {{inputs.parameters.mlflow_tracking_uri}}
@@ -158,7 +158,7 @@ spec:
                           memory: "{{inputs.parameters.memory_limit}}"
                           ${GPU_RESOURCES}
                       env:
-                      - mame: RAY_STORAGE_PATH
+                      - name: RAY_STORAGE_PATH
                         value: "ray-results"
                       - name: MLFLOW_TRACKING_URI
                         value: {{inputs.parameters.mlflow_tracking_uri}}
