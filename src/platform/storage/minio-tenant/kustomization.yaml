@@ -14,15 +14,15 @@ helmCharts:
         name: minio
         env:
           - name: MINIO_PROMETHEUS_AUTH_TYPE
-            value: "public"  # Allow unauthenticated access to metrics
+            value: "public" # Allow unauthenticated access to metrics
           - name: MINIO_PROMETHEUS_JOB_ID
             value: "minio-job"
         pools:
           - name: pool-0
             servers: 1
-            volumesPerServer: 2  # Use all 2 PVs we created
+            volumesPerServer: 2 # Use all 2 PVs we created
             size: 10Gi
-            storageClassName: local-storage  # Changed from 'standard'
+            storageClassName: local-storage # Changed from 'standard'
         buckets:
           - name: mlflow
           - name: argo-workflows
@@ -31,6 +31,7 @@ helmCharts:
           - name: loki-admin
           - name: tempo-traces
           - name: dvcstore
+          - name: ray-results
         configSecret:
           name: minio-tenant-secret
           accesskey: accesskey
