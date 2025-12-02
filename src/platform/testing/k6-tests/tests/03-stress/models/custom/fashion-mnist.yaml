@@ -1,16 +1,16 @@
 apiVersion: k6.io/v1alpha1
 kind: TestRun
 metadata:
-  name: smoke-app-demo-backend
+  name: stress-model-fashion-mnist
   namespace: k6-testing
   labels:
     app.kubernetes.io/name: k6-tests
-    opencloudhub.org/test-type: smoke
-    opencloudhub.org/test-target: demo-backend
+    opencloudhub.org/test-type: stress
+    opencloudhub.org/test-target: fashion-mnist
 spec:
   parallelism: 1
   script:
-    localFile: /tests/tests/01-smoke/apps/demo-backend.js
+    localFile: /tests/tests/03-stress/models/custom/fashion-mnist.js
   arguments: --insecure-skip-tls-verify --out experimental-prometheus-rw
   cleanup: post
   runner:

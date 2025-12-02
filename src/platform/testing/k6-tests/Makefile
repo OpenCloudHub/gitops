@@ -90,6 +90,13 @@ load-infra:
 load-obs:
 	@$(SCRIPT) load-platform-obs load platform-obs 02-load/platform/observability.js $(CPU_PLATFORM) $(MEM_PLATFORM)
 
+.PHONY: load-models
+load-models: load-fashion-mnist
+
+.PHONY: load-fashion-mnist
+load-fashion-mnist:
+	@$(SCRIPT) load-model-fashion-mnist load model-fashion-mnist 02-load/models/custom/fashion-mnist.js $(CPU_MODEL) $(MEM_MODEL)
+
 # ============================================================================
 # STRESS TESTS
 # ============================================================================

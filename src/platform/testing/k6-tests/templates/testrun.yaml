@@ -22,6 +22,7 @@ spec:
   cleanup: post
   runner:
     image: docker.io/opencloudhuborg/k6-tests:latest
+    imagePullPolicy: Always
     env:
       - name: TEST_ENV
         value: "dev"
