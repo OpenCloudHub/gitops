@@ -21,13 +21,13 @@ spec:
             user_config:
               model_uri: "models:/prod.fashion-mnist-classifier/1"
             num_replicas: auto  # Enable autoscaling!
-            max_ongoing_requests: 30
+            max_ongoing_requests: 50       # bigger queue buffer
             autoscaling_config:
-              min_replicas: 2        # Start at 2
-              max_replicas: 4        # Allow scaling to 4
-              target_ongoing_requests: 2  # Lower = more sensitive scaling
-              upscale_delay_s: 5
-              downscale_delay_s: 30  # Faster downscale for demo
+              min_replicas: 2
+              max_replicas: 4
+              target_ongoing_requests: 2   # trigger scaling earlier
+              upscale_delay_s: 2           # react faster
+              downscale_delay_s: 30
             ray_actor_options:
               num_cpus: 1
               memory: 3221225472  # 3GB
