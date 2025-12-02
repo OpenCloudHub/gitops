@@ -4,7 +4,8 @@ kind: Kustomization
 namespace: mlops
 
 resources:
-- mlops-pipeline.yaml
-- modules/training.yaml
-- modules/mlflow.yaml
-- modules/deployment.yaml
+  - mlops-pipeline.yaml
+  - modules/training.yaml
+  - modules/mlflow.yaml
+  - modules/deployment.yaml
+  - modules/testing.yaml
