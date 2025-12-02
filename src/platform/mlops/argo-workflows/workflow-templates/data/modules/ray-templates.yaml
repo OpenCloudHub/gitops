@@ -91,11 +91,21 @@ spec:
                             key: endpoint-url
                       - name: PGVECTOR_HOST
                         value: "demo-app-db-cluster-rw.storage.svc.cluster.local"
-                      - name: POSTGRES_DEMO_APP_DB_PASSWORD
+                      - name: PGVECTOR_DATABASE
+                        value: demo_app
+                      - name: PGVECTOR_TABLENAME
+                        value: readme_embeddings
+                      - name: PGVECTOR_PASSWORD
                         valueFrom:
                           secretKeyRef:
                             name: demo-app-db-user
                             key: password
+                      - name: PGVECTOR_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: demo-app-db-user
+                            key: username
+
               workerGroupSpecs:
               - replicas: {{inputs.parameters.replicas}}
                 groupName: worker
@@ -140,11 +150,20 @@ spec:
                             key: endpoint-url
                       - name: PGVECTOR_HOST
                         value: "demo-app-db-cluster-rw.storage.svc.cluster.local"
-                      - name: POSTGRES_DEMO_APP_DB_PASSWORD
+                      - name: PGVECTOR_DATABASE
+                        value: demo_app
+                      - name: PGVECTOR_TABLENAME
+                        value: readme_embeddings
+                      - name: PGVECTOR_PASSWORD
                         valueFrom:
                           secretKeyRef:
                             name: demo-app-db-user
                             key: password
+                      - name: PGVECTOR_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: demo-app-db-user
+                            key: username
 
     # ==========================================================================
     # WAIT FOR RAYJOB COMPLETION
