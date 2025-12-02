@@ -26,6 +26,7 @@ metadata:
   name: demo-app
   labels:
     istio.io/dataplane-mode: ambient
+    opencloudhub.org/secret-demo-app-db: "true"
   annotations:
     opencloudhub.org/description: "Demo application (frontend, backend)"
     opencloudhub.org/mesh-reason: "User-facing APIs, handles student data, frontend-backend traffic"
