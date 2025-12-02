@@ -123,6 +123,10 @@ stress-infra:
 stress-obs:
 	@$(SCRIPT) stress-platform-obs stress platform-obs 03-stress/platform/observability.js $(CPU_PLATFORM) $(MEM_PLATFORM)
 
+.PHONY: stress-fashion-mnist
+stress-fashion-mnist:
+	@$(SCRIPT) stress-model-fashion-mnist stress model-fashion-mnist 03-stress/models/custom/fashion-mnist.js $(CPU_MODEL) $(MEM_MODEL)
+
 # ============================================================================
 # SPIKE TESTS
 # ============================================================================
@@ -148,6 +152,11 @@ spike-infra:
 .PHONY: spike-obs
 spike-obs:
 	@$(SCRIPT) spike-platform-obs spike platform-obs 04-spike/platform/observability.js $(CPU_PLATFORM) $(MEM_PLATFORM)
+
+.PHONY: spike-fashion-mnist
+spike-fashion-mnist:
+	@$(SCRIPT) spike-model-fashion-mnist spike model-fashion-mnist 04-spike/models/custom/fashion-mnist.js $(CPU_MODEL) $(MEM_MODEL)
+
 
 # ============================================================================
 # UTILITIES

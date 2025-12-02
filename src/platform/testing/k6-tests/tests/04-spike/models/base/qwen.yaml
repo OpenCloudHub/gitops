@@ -1,0 +1,32 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: spike-model-qwen
+  namespace: k6-testing
+  labels:
+    app.kubernetes.io/name: k6-tests
+    opencloudhub.org/test-type: spike
+    opencloudhub.org/test-target: qwen
+spec:
+  parallelism: 1
+  script:
+    localFile: /tests/tests/04-spike/models/base/qwen.js
+  arguments: --insecure-skip-tls-verify --out experimental-prometheus-rw
+  cleanup: post
+  runner:
+    image: docker.io/opencloudhuborg/k6-tests:latest
+    imagePullPolicy: Always
+    env:
+      - name: TEST_ENV
+        value: "dev"
+      - name: K6_PROMETHEUS_RW_SERVER_URL
+        value: "http://prometheus-server.observability.svc.cluster.local:80/api/v1/write"
+      - name: K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM
+        value: "true"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 200m
+        memory: 256Mi
