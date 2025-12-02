@@ -3,33 +3,33 @@ kind: Kustomization
 namespace: argocd-image-updater-system
 
 resources:
-- https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/config/install.yaml
-- demo-app-backend.yaml
-- wine-classifier.yaml
+  - https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/config/install.yaml
+  - demo-app-backend.yaml
+  - wine-classifier.yaml
 
 patches:
-# Exclude the Namespace - managed by security-namespaces app
-- target:
-    kind: Namespace
-    name: argocd-image-updater-system
-  patch: |-
-    $patch: delete
-    apiVersion: v1
-    kind: Namespace
-    metadata:
+  # Exclude the Namespace - managed by security-namespaces app
+  - target:
+      kind: Namespace
       name: argocd-image-updater-system
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: argocd-image-updater-system
 
-- target:
-    kind: ConfigMap
-    name: argocd-image-updater-config
-  patch: |-
-    - op: replace
-      path: /data
-      value:
-        registries.conf: |
-          registries:
-          - name: Docker Hub
-            api_url: https://registry-1.docker.io
-            prefix: docker.io
-            credentials: pullsecret:argocd-image-updater-system/dockerhub-secret
-            defaultns: library
+  - target:
+      kind: ConfigMap
+      name: argocd-image-updater-config
+    patch: |-
+      - op: replace
+        path: /data
+        value:
+          registries.conf: |
+            registries:
+            - name: Docker Hub
+              api_url: https://registry-1.docker.io
+              prefix: docker.io
+              credentials: pullsecret:argocd-image-updater-system/dockerhub-secret
+              defaultns: library

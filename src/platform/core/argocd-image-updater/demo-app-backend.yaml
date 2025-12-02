@@ -7,7 +7,8 @@ metadata:
 spec:
   namespace: argocd
   writeBackConfig:
-    method: git
+    # git:secret:<namespace>/<secret> - secret must have sshPrivateKey field
+    method: "git:secret:argocd-image-updater-system/gitops-repo"
     gitConfig:
       repository: git@github.com:opencloudhub/gitops.git
       branch: main
