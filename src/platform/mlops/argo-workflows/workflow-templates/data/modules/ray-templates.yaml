@@ -27,7 +27,7 @@ spec:
         parameters:
           - name: job_name
             valueFrom:
-              jsonPath: '{.metadata.name}'
+              jsonPath: "{.metadata.name}"
       resource:
         action: create
         successCondition: status.jobDeploymentStatus in (Running, Complete)
@@ -64,7 +64,7 @@ spec:
                           cpu: "{{inputs.parameters.cpu_limit}}"
                           memory: "{{inputs.parameters.memory_limit}}"
                       env:
-                      - name: DATA_VERSION
+                      - name: DVC_DATA_VERSION
                         value: "{{inputs.parameters.data_version}}"
                       - name: DOCKER_IMAGE
                         value: "{{inputs.parameters.image}}"
@@ -113,7 +113,7 @@ spec:
                           cpu: "{{inputs.parameters.cpu_limit}}"
                           memory: "{{inputs.parameters.memory_limit}}"
                       env:
-                      - name: DATA_VERSION
+                      - name: DVC_DATA_VERSION
                         value: "{{inputs.parameters.data_version}}"
                       - name: DOCKER_IMAGE
                         value: "{{inputs.parameters.image}}"
