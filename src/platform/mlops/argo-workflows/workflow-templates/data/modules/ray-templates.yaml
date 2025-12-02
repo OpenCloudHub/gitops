@@ -93,7 +93,7 @@ spec:
                         value: "demo-app-db-cluster-rw.storage.svc.cluster.local"
                       - name: PGVECTOR_DATABASE
                         value: demo_app
-                      - name: PGVECTOR_TABLENAME
+                      - name: PGVECTOR_TABLE_NAME
                         value: readme_embeddings
                       - name: PGVECTOR_PASSWORD
                         valueFrom:
@@ -152,7 +152,7 @@ spec:
                         value: "demo-app-db-cluster-rw.storage.svc.cluster.local"
                       - name: PGVECTOR_DATABASE
                         value: demo_app
-                      - name: PGVECTOR_TABLENAME
+                      - name: PGVECTOR_TABLE_NAME
                         value: readme_embeddings
                       - name: PGVECTOR_PASSWORD
                         valueFrom:
