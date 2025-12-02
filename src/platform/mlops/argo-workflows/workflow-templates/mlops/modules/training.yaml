@@ -100,7 +100,7 @@ spec:
                           ${GPU_RESOURCES}
                       env:
                       - mame: RAY_STORAGE_PATH
-                        value: "s3://ray-results/"
+                        value: "ray-results"
                       - name: MLFLOW_TRACKING_URI
                         value: {{inputs.parameters.mlflow_tracking_uri}}
                       - name: MLFLOW_EXPERIMENT_NAME
@@ -159,7 +159,7 @@ spec:
                           ${GPU_RESOURCES}
                       env:
                       - mame: RAY_STORAGE_PATH
-                        value: "s3://ray-results/"
+                        value: "ray-results"
                       - name: MLFLOW_TRACKING_URI
                         value: {{inputs.parameters.mlflow_tracking_uri}}
                       - name: MLFLOW_EXPERIMENT_NAME
