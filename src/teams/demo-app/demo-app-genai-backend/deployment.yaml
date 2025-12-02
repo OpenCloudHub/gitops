@@ -23,8 +23,22 @@ spec:
             - name: LOG_LEVEL
               value: "INFO"
             # Database
-            - name: DB_CONNECTION_STRING
-              value: postgresql+psycopg://demo-app:1234@demo-app-db-pooler.storage.svc.cluster.local:5432/demo_app
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: demo-app-db-user
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: demo-app-db-user
+                  key: password
+            - name: DB_HOST
+              value: demo-app-db-pooler.storage.svc.cluster.local
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: demo_app
             - name: DB_TABLE_NAME
               value: readme_embeddings
             - name: DB_TOP_K
