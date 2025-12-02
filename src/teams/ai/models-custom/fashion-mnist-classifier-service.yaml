@@ -23,11 +23,11 @@ spec:
             num_replicas: auto  # Enable autoscaling!
             max_ongoing_requests: 20
             autoscaling_config:
-              target_ongoing_requests: 5
-              min_replicas: 1
-              max_replicas: 3
-              upscale_delay_s: 5      # Fast response for demos
-              downscale_delay_s: 60    # Quick scale-down for demos
+              min_replicas: 2        # Start at 2
+              max_replicas: 4        # Allow scaling to 4
+              target_ongoing_requests: 3  # Lower = more sensitive scaling
+              upscale_delay_s: 5
+              downscale_delay_s: 30  # Faster downscale for demo
             ray_actor_options:
               num_cpus: 1
               memory: 3221225472  # 3GB
