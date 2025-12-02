@@ -28,6 +28,9 @@ spec:
           - name: replicas
             valueFrom:
               path: /tmp/replicas.txt
+          - name: num_workers
+            valueFrom:
+              path: /tmp/num_workers.txt
           - name: gpu
             valueFrom:
               path: /tmp/gpu.txt
