@@ -128,15 +128,15 @@ spec:
                 - name: model_name
                   value: "{{workflow.parameters.model_name}}"
                 - name: staging_version
-                  value: "{{steps.compare-promote-staging.outputs.parameters.staging_version}}"
+                  value: "{{steps.compare-to-production-and-promote-to-staging.outputs.parameters.staging_version}}"
                 - name: mlflow_tracking_uri
                   value: "{{workflow.parameters.mlflow_tracking_uri}}"
-            when: "{{steps.compare-promote-staging.outputs.parameters.promoted}} == true"
+            when: "{{steps.compare-to-production-and-promote-to-staging.outputs.parameters.promoted}} == true"
 
         # Phase 5: Manual approval (only if promoted and tests pass)
         - - name: approval
             template: approval-gate
-            when: "{{workflow.parameters.approval_mode}} == manual && '{{steps.compare-promote-staging.outputs.parameters.promoted}}' == 'true' && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
+            when: "{{workflow.parameters.approval_mode}} == manual && '{{steps.compare-to-production-and-promote-to-staging.outputs.parameters.promoted}}' == 'true' && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
 
         # Phase 6: Promote to production (only if promoted and tests passed and approved or auto)
         - - name: promote-production
@@ -148,10 +148,10 @@ spec:
                 - name: model_name
                   value: "{{workflow.parameters.model_name}}"
                 - name: staging_version
-                  value: "{{steps.compare-promote-staging.outputs.parameters.staging_version}}"
+                  value: "{{steps.compare-to-production-and-promote-to-staging.outputs.parameters.staging_version}}"
                 - name: mlflow_tracking_uri
                   value: "{{workflow.parameters.mlflow_tracking_uri}}"
-            when: "'{{steps.compare-promote-staging.outputs.parameters.promoted}}' == 'true' && ({{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approve}}' == 'YES') && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
+            when: "'{{steps.compare-to-production-and-promote-to-staging.outputs.parameters.promoted}}' == 'true' && ({{workflow.parameters.approval_mode}} == automatic || '{{steps.approval.outputs.parameters.approve}}' == 'YES') && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
 
         # Phase 7: Deploy to production (only if promoted, tests passed, and approved)
         - - name: deploy-to-production
@@ -170,7 +170,7 @@ spec:
                   value: "pipeline"
                 - name: mlflow_tracking_uri
                   value: "{{workflow.parameters.mlflow_tracking_uri}}"
-            when: "'{{steps.compare-promote-staging.outputs.parameters.promoted}}' == 'true'"
+            when: "'{{steps.compare-to-production-and-promote-to-staging.outputs.parameters.promoted}}' == 'true'"
 
     # ==============================================
     # 🔹 SECTION: Additional Template Definitions
