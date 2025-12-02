@@ -19,7 +19,7 @@ spec:
         deployments:
           - name: FashionMNISTClassifier
             user_config:
-              model_uri: "models:/prod.fashion-mnist-classifier/1"
+              model_uri: "models:/prod.fashion-mnist-classifier/3"
             num_replicas: auto  # Enable autoscaling!
             max_ongoing_requests: 5
             autoscaling_config:
