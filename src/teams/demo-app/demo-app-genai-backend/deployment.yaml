@@ -63,7 +63,7 @@ spec:
               value: "true"
             - name: OTEL_SERVICE_NAME
               value: "demo-app-genai-backend"
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            - name: OTEL_EXPORTER_ENDPOINT
               value: "tempo.observability.svc.cluster.local:4317"
           # Liveness: Is the process alive? (checks if FastAPI is running)
           # livenessProbe:
