@@ -95,6 +95,8 @@ spec:
                   value: "{{steps.map-compute.outputs.parameters.memory_limit}}"
                 - name: replicas
                   value: "{{steps.map-compute.outputs.parameters.replicas}}"
+                - name: num_workers
+                  value: "{{steps.map-compute.outputs.parameters.num_workers}}"
                 - name: gpu
                   value: "{{steps.map-compute.outputs.parameters.gpu}}"
                 - name: mlflow_tracking_uri

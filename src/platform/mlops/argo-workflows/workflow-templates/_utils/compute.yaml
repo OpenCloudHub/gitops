@@ -4,143 +4,150 @@ metadata:
   name: compute-templates
   namespace: mlops
   annotations:
-    workflows.argoproj.io/description: 'Map compute resource configs.'
+    workflows.argoproj.io/description: "Map compute resource configs."
 spec:
   templates:
-  - name: map-compute-config
-    inputs:
-      parameters:
-      - name: compute_type
-    outputs:
-      parameters:
-      - name: cpu_request
-        valueFrom:
-          path: /tmp/cpu_request.txt
-      - name: cpu_limit
-        valueFrom:
-          path: /tmp/cpu_limit.txt
-      - name: memory_request
-        valueFrom:
-          path: /tmp/memory_request.txt
-      - name: memory_limit
-        valueFrom:
-          path: /tmp/memory_limit.txt
-      - name: replicas
-        valueFrom:
-          path: /tmp/replicas.txt
-      - name: gpu
-        valueFrom:
-          path: /tmp/gpu.txt
-    script:
-      image: alpine:latest
-      command: [sh]
-      source: |
-        #!/bin/sh
-        set -e
+    - name: map-compute-config
+      inputs:
+        parameters:
+          - name: compute_type
+      outputs:
+        parameters:
+          - name: cpu_request
+            valueFrom:
+              path: /tmp/cpu_request.txt
+          - name: cpu_limit
+            valueFrom:
+              path: /tmp/cpu_limit.txt
+          - name: memory_request
+            valueFrom:
+              path: /tmp/memory_request.txt
+          - name: memory_limit
+            valueFrom:
+              path: /tmp/memory_limit.txt
+          - name: replicas
+            valueFrom:
+              path: /tmp/replicas.txt
+          - name: gpu
+            valueFrom:
+              path: /tmp/gpu.txt
+      script:
+        image: alpine:latest
+        command: [sh]
+        source: |
+          #!/bin/sh
+          set -e
 
-        case "{{inputs.parameters.compute_type}}" in
-          cpu-small)
-            echo "2" > /tmp/cpu_request.txt
-            echo "3" > /tmp/cpu_limit.txt
-            echo "4Gi" > /tmp/memory_request.txt
-            echo "5Gi" > /tmp/memory_limit.txt
-            echo "1" > /tmp/replicas.txt
-            echo "0" > /tmp/gpu.txt
+          case "{{inputs.parameters.compute_type}}" in
+            cpu-small)
+              echo "2" > /tmp/cpu_request.txt
+              echo "3" > /tmp/cpu_limit.txt
+              echo "4Gi" > /tmp/memory_request.txt
+              echo "5Gi" > /tmp/memory_limit.txt
+              echo "1" > /tmp/replicas.txt
+              echo "1" > /tmp/num_workers.txt
+              echo "0" > /tmp/gpu.txt
 
-            echo ""
-            echo "Selected profile: cpu-small"
-            echo "  Description : Single small CPU node — good for lightweight inference, dev and smoke tests."
-            echo "  Resources   : CPU request=2, CPU limit=3, Memory request=4Gi, Memory limit=5Gi, Replicas=1, GPU=0"
-            echo ""
-            ;;
-          cpu-small-distributed)
-            echo "2" > /tmp/cpu_request.txt
-            echo "3" > /tmp/cpu_limit.txt
-            echo "4Gi" > /tmp/memory_request.txt
-            echo "5Gi" > /tmp/memory_limit.txt
-            echo "2" > /tmp/replicas.txt
-            echo "0" > /tmp/gpu.txt
+              echo ""
+              echo "Selected profile: cpu-small"
+              echo "  Description : Single small CPU node — good for lightweight inference, dev and smoke tests."
+              echo "  Resources   : CPU request=2, CPU limit=3, Memory request=4Gi, Memory limit=5Gi, Replicas=1, GPU=0"
+              echo ""
+              ;;
+            cpu-small-distributed)
+              echo "2" > /tmp/cpu_request.txt
+              echo "3" > /tmp/cpu_limit.txt
+              echo "4Gi" > /tmp/memory_request.txt
+              echo "5Gi" > /tmp/memory_limit.txt
+              echo "2" > /tmp/replicas.txt
+              echo "2" > /tmp/num_workers.txt
+              echo "0" > /tmp/gpu.txt
 
-            echo ""
-            echo "Selected profile: cpu-small-distributed"
-            echo "  Description : Small distributed setup — two small replicas for simple horizontal scaling."
-            echo "  Resources   : CPU request=2, CPU limit=3, Memory request=4Gi, Memory limit=5Gi, Replicas=2, GPU=0"
-            echo ""
-            ;;
-          cpu-medium)
-            echo "4" > /tmp/cpu_request.txt
-            echo "6" > /tmp/cpu_limit.txt
-            echo "8Gi" > /tmp/memory_request.txt
-            echo "10Gi" > /tmp/memory_limit.txt
-            echo "1" > /tmp/replicas.txt
-            echo "0" > /tmp/gpu.txt
+              echo ""
+              echo "Selected profile: cpu-small-distributed"
+              echo "  Description : Small distributed setup — two small replicas for simple horizontal scaling."
+              echo "  Resources   : CPU request=2, CPU limit=3, Memory request=4Gi, Memory limit=5Gi, Replicas=2, GPU=0"
+              echo ""
+              ;;
+            cpu-medium)
+              echo "4" > /tmp/cpu_request.txt
+              echo "6" > /tmp/cpu_limit.txt
+              echo "8Gi" > /tmp/memory_request.txt
+              echo "10Gi" > /tmp/memory_limit.txt
+              echo "1" > /tmp/replicas.txt
+              echo "1" > /tmp/num_workers.txt
+              echo "0" > /tmp/gpu.txt
 
-            echo ""
-            echo "Selected profile: cpu-medium"
-            echo "  Description : Medium CPU node — good for production CPU inference with moderate throughput."
-            echo "  Resources   : CPU request=4, CPU limit=6, Memory request=8Gi, Memory limit=10Gi, Replicas=1, GPU=0"
-            echo ""
-            ;;
-          cpu-large)
-            echo "8" > /tmp/cpu_request.txt
-            echo "12" > /tmp/cpu_limit.txt
-            echo "16Gi" > /tmp/memory_request.txt
-            echo "20Gi" > /tmp/memory_limit.txt
-            echo "2" > /tmp/replicas.txt
-            echo "0" > /tmp/gpu.txt
+              echo ""
+              echo "Selected profile: cpu-medium"
+              echo "  Description : Medium CPU node — good for production CPU inference with moderate throughput."
+              echo "  Resources   : CPU request=4, CPU limit=6, Memory request=8Gi, Memory limit=10Gi, Replicas=1, GPU=0"
+              echo ""
+              ;;
+            cpu-large)
+              echo "8" > /tmp/cpu_request.txt
+              echo "12" > /tmp/cpu_limit.txt
+              echo "16Gi" > /tmp/memory_request.txt
+              echo "20Gi" > /tmp/memory_limit.txt
+              echo "2" > /tmp/replicas.txt
+              echo "2" > /tmp/num_workers.txt
+              echo "0" > /tmp/gpu.txt
 
-            echo ""
-            echo "Selected profile: cpu-large"
-            echo "  Description : Large CPU profile — multi-replica heavy CPU workloads, high throughput."
-            echo "  Resources   : CPU request=8, CPU limit=12, Memory request=16Gi, Memory limit=20Gi, Replicas=2, GPU=0"
-            echo ""
-            ;;
-          gpu-small)
-            echo "4" > /tmp/cpu_request.txt
-            echo "6" > /tmp/cpu_limit.txt
-            echo "16Gi" > /tmp/memory_request.txt
-            echo "20Gi" > /tmp/memory_limit.txt
-            echo "1" > /tmp/replicas.txt
-            echo "1" > /tmp/gpu.txt
+              echo ""
+              echo "Selected profile: cpu-large"
+              echo "  Description : Large CPU profile — multi-replica heavy CPU workloads, high throughput."
+              echo "  Resources   : CPU request=8, CPU limit=12, Memory request=16Gi, Memory limit=20Gi, Replicas=2, GPU=0"
+              echo ""
+              ;;
+            gpu-small)
+              echo "4" > /tmp/cpu_request.txt
+              echo "6" > /tmp/cpu_limit.txt
+              echo "16Gi" > /tmp/memory_request.txt
+              echo "20Gi" > /tmp/memory_limit.txt
+              echo "1" > /tmp/replicas.txt
+              echo "1" > /tmp/num_workers.txt
+              echo "1" > /tmp/gpu.txt
 
-            echo ""
-            echo "Selected profile: gpu-small"
-            echo "  Description : Single GPU node — suitable for light GPU inference or small models."
-            echo "  Resources   : CPU request=4, CPU limit=6, Memory request=16Gi, Memory limit=20Gi, Replicas=1, GPU=1"
-            echo ""
-            ;;
-          gpu-medium)
-            echo "8" > /tmp/cpu_request.txt
-            echo "12" > /tmp/cpu_limit.txt
-            echo "32Gi" > /tmp/memory_request.txt
-            echo "40Gi" > /tmp/memory_limit.txt
-            echo "1" > /tmp/replicas.txt
-            echo "2" > /tmp/gpu.txt
+              echo ""
+              echo "Selected profile: gpu-small"
+              echo "  Description : Single GPU node — suitable for light GPU inference or small models."
+              echo "  Resources   : CPU request=4, CPU limit=6, Memory request=16Gi, Memory limit=20Gi, Replicas=1, GPU=1"
+              echo ""
+              ;;
+            gpu-medium)
+              echo "8" > /tmp/cpu_request.txt
+              echo "12" > /tmp/cpu_limit.txt
+              echo "32Gi" > /tmp/memory_request.txt
+              echo "40Gi" > /tmp/memory_limit.txt
+              echo "1" > /tmp/replicas.txt
+              echo "1" > /tmp/num_workers.txt
+              echo "2" > /tmp/gpu.txt
 
-            echo ""
-            echo "Selected profile: gpu-medium"
-            echo "  Description : Medium GPU profile — useful for larger models or moderate batch inference."
-            echo "  Resources   : CPU request=8, CPU limit=12, Memory request=32Gi, Memory limit=40Gi, Replicas=1, GPU=2"
-            echo ""
-            ;;
-          gpu-large)
-            echo "16" > /tmp/cpu_request.txt
-            echo "24" > /tmp/cpu_limit.txt
-            echo "64Gi" > /tmp/memory_request.txt
-            echo "80Gi" > /tmp/memory_limit.txt
-            echo "1" > /tmp/replicas.txt
-            echo "4" > /tmp/gpu.txt
+              echo ""
+              echo "Selected profile: gpu-medium"
+              echo "  Description : Medium GPU profile — useful for larger models or moderate batch inference."
+              echo "  Resources   : CPU request=8, CPU limit=12, Memory request=32Gi, Memory limit=40Gi, Replicas=1, GPU=2"
+              echo ""
+              ;;
+            gpu-large)
+              echo "16" > /tmp/cpu_request.txt
+              echo "24" > /tmp/cpu_limit.txt
+              echo "64Gi" > /tmp/memory_request.txt
+              echo "80Gi" > /tmp/memory_limit.txt
+              echo "1" > /tmp/replicas.txt
+              echo "1" > /tmp/num_workers.txt
+              echo "4" > /tmp/gpu.txt
 
-            echo ""
-            echo "Selected profile: gpu-large"
-            echo "  Description : Large GPU profile — for heavy GPU workloads, training, or high-throughput inference."
-            echo "  Resources   : CPU request=16, CPU limit=24, Memory request=64Gi, Memory limit=80Gi, Replicas=1, GPU=4"
-            echo ""
-            ;;
-          *)
-            echo "Unknown compute type: {{inputs.parameters.compute_type}}"
-            exit 1
-            ;;
-        esac
+              echo ""
+              echo "Selected profile: gpu-large"
+              echo "  Description : Large GPU profile — for heavy GPU workloads, training, or high-throughput inference."
+              echo "  Resources   : CPU request=16, CPU limit=24, Memory request=64Gi, Memory limit=80Gi, Replicas=1, GPU=4"
+              echo ""
+              ;;
+            *)
+              echo "Unknown compute type: {{inputs.parameters.compute_type}}"
+              exit 1
+              ;;
+          esac
 
-        echo "✅ Mapped {{inputs.parameters.compute_type}}"
+          echo "✅ Mapped {{inputs.parameters.compute_type}}"
