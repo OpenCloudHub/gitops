@@ -4,271 +4,271 @@ metadata:
   name: training-templates
   namespace: mlops
   annotations:
-    workflows.argoproj.io/description: 'Submit model training run to Ray.'
+    workflows.argoproj.io/description: "Submit model training run to Ray."
 spec:
   serviceAccountName: workflow-executor
 
   templates:
-  - name: submit-ray-job
-    inputs:
-      parameters:
-      - name: model_name
-      - name: dvc_data_version_tag
-      - name: experiment_name
-      - name: training_image
-      - name: training_entrypoint
-      - name: training_args
-      - name: cpu_request
-      - name: cpu_limit
-      - name: memory_request
-      - name: memory_limit
-      - name: replicas
-      - name: gpu
-      - name: mlflow_tracking_uri
-    outputs:
-      parameters:
-      - name: job-name
-        valueFrom:
-          path: /tmp/job-name.txt
-    script:
-      image: bitnami/kubectl:latest
-      command: [sh]
-      source: |
-        set -e
+    - name: submit-ray-job
+      inputs:
+        parameters:
+          - name: model_name
+          - name: dvc_data_version
+          - name: experiment_name
+          - name: training_image
+          - name: training_entrypoint
+          - name: training_args
+          - name: cpu_request
+          - name: cpu_limit
+          - name: memory_request
+          - name: memory_limit
+          - name: replicas
+          - name: gpu
+          - name: mlflow_tracking_uri
+      outputs:
+        parameters:
+          - name: job-name
+            valueFrom:
+              path: /tmp/job-name.txt
+      script:
+        image: bitnami/kubectl:latest
+        command: [sh]
+        source: |
+          set -e
 
-        MODEL_NAME="{{inputs.parameters.model_name}}"
-        DVC_DATA_VERSION_TAG="{{inputs.parameters.dvc_data_version_tag}}"
-        TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          MODEL_NAME="{{inputs.parameters.model_name}}"
+          DVC_DATA_VERSION="{{inputs.parameters.dvc_data_version}}"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
-        GPU="{{inputs.parameters.gpu}}"
+          GPU="{{inputs.parameters.gpu}}"
 
-        GPU_RESOURCES=""
-        GPU_NODE_SELECTOR=""
-        if [ "$GPU" != "0" ]; then
-          GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
-          GPU_NODE_SELECTOR="nodeSelector:
-          node.opencloudhub.org/gpu: \"true\""
-        fi
-
-        RUN_LABEL="${MODEL_NAME}-${DVC_DATA_VERSION_TAG}-${TIMESTAMP}"
-
-        TRAINING_ARGS="{{inputs.parameters.training_args}}"
-
-        echo "Creating RayJob with label: workflow-run=${RUN_LABEL} and training args:${TRAINING_ARGS}"
-
-        cat <<EOF | kubectl create -f -
-        apiVersion: ray.io/v1
-        kind: RayJob
-        metadata:
-          generateName: {{inputs.parameters.model_name}}-training-
-          namespace: mlops
-          labels:
-            workflow-run: "${RUN_LABEL}"
-            model: "{{inputs.parameters.model_name}}"
-        spec:
-          entrypoint: {{inputs.parameters.training_entrypoint}} ${TRAINING_ARGS}
-          shutdownAfterJobFinishes: true
-          ttlSecondsAfterFinished: 300
-          rayClusterSpec:
-            rayVersion: "2.51.0"
-            headGroupSpec:
-              serviceType: ClusterIP
-              template:
-                spec:
-                  ${GPU_NODE_SELECTOR}
-                  containers:
-                  - name: ray-head
-                    image: {{inputs.parameters.training_image}}
-                    readinessProbe:
-                      exec:
-                        command:
-                          - bash
-                          - -c
-                          - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success && wget --tries 1 -T 10 -q -O- http://localhost:8265/api/gcs_healthz | grep success
-                      initialDelaySeconds: 45
-                      periodSeconds: 5
-                      timeoutSeconds: 5
-                      failureThreshold: 10
-                    resources:
-                      requests:
-                        cpu: "{{inputs.parameters.cpu_request}}"
-                        memory: "{{inputs.parameters.memory_request}}"
-                      limits:
-                        cpu: "{{inputs.parameters.cpu_limit}}"
-                        memory: "{{inputs.parameters.memory_limit}}"
-                        ${GPU_RESOURCES}
-                    env:
-                    - name: MLFLOW_TRACKING_URI
-                      value: {{inputs.parameters.mlflow_tracking_uri}}
-                    - name: MLFLOW_EXPERIMENT_NAME
-                      value: {{inputs.parameters.experiment_name}}
-                    - name: MLFLOW_REGISTERED_MODEL_NAME
-                      value: "ci.{{inputs.parameters.model_name}}"
-                    - name: DVC_DATA_VERSION_TAG
-                      value: {{inputs.parameters.dvc_data_version_tag}}
-                    - name: DOCKER_IMAGE_TAG
-                      value: {{inputs.parameters.training_image}}
-                    - name: ARGO_WORKFLOW_UID
-                      value: "{{workflow.uid}}"
-                    - name: AWS_ACCESS_KEY_ID
-                      valueFrom:
-                        secretKeyRef:
-                          name: minio-tenant-secret
-                          key: accesskey
-                    - name: AWS_SECRET_ACCESS_KEY
-                      valueFrom:
-                        secretKeyRef:
-                          name: minio-tenant-secret
-                          key: secretkey
-                    - name: AWS_ENDPOINT_URL
-                      valueFrom:
-                        secretKeyRef:
-                          name: minio-tenant-secret
-                          key: endpoint-url
-            workerGroupSpecs:
-            - replicas: {{inputs.parameters.replicas}}
-              groupName: worker
-              template:
-                spec:
-                  ${GPU_NODE_SELECTOR}
-                  containers:
-                  - name: ray-worker
-                    image: {{inputs.parameters.training_image}}
-                    readinessProbe:
-                      exec:
-                        command:
-                          - bash
-                          - -c
-                          - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
-                      initialDelaySeconds: 30
-                      periodSeconds: 5
-                      timeoutSeconds: 5
-                      failureThreshold: 10
-                    resources:
-                      requests:
-                        cpu: "{{inputs.parameters.cpu_request}}"
-                        memory: "{{inputs.parameters.memory_request}}"
-                      limits:
-                        cpu: "{{inputs.parameters.cpu_limit}}"
-                        memory: "{{inputs.parameters.memory_limit}}"
-                        ${GPU_RESOURCES}
-                    env:
-                    - name: MLFLOW_TRACKING_URI
-                      value: {{inputs.parameters.mlflow_tracking_uri}}
-                    - name: MLFLOW_EXPERIMENT_NAME
-                      value: {{inputs.parameters.experiment_name}}
-                    - name: MLFLOW_REGISTERED_MODEL_NAME
-                      value: "ci.{{inputs.parameters.model_name}}"
-                    - name: DVC_DATA_VERSION
-                      value: {{inputs.parameters.dvc_data_version}}
-                    - name: DOCKER_IMAGE_TAG
-                      value: {{inputs.parameters.training_image}}
-                    - name: ARGO_WORKFLOW_UID
-                      value: "{{workflow.uid}}"
-                    - name: AWS_ACCESS_KEY_ID
-                      valueFrom:
-                        secretKeyRef:
-                          name: minio-tenant-secret
-                          key: accesskey
-                    - name: AWS_SECRET_ACCESS_KEY
-                      valueFrom:
-                        secretKeyRef:
-                          name: minio-tenant-secret
-                          key: secretkey
-                    - name: AWS_ENDPOINT_URL
-                      valueFrom:
-                        secretKeyRef:
-                          name: minio-tenant-secret
-                          key: endpoint-url
-        EOF
-
-        echo "⏳ Waiting for RayJob..."
-        sleep 3
-
-        JOB_NAME=$(kubectl get rayjobs -n mlops -l workflow-run="${RUN_LABEL}" -o jsonpath='{.items[0].metadata.name}')
-
-        if [ -z "$JOB_NAME" ]; then
-          echo "❌ Failed to get RayJob"
-          exit 1
-        fi
-
-        echo "✅ RayJob: $JOB_NAME"
-        echo "$JOB_NAME" > /tmp/job-name.txt
-
-        echo "⏳ Waiting for job to be submitted..."
-
-        MAX_WAIT=1200
-        ELAPSED=0
-
-        while [ $ELAPSED -lt $MAX_WAIT ]; do
-          JOB_DEPLOYMENT_STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}')
-
-          if [ "$JOB_DEPLOYMENT_STATUS" = "Running" ] || [ "$JOB_DEPLOYMENT_STATUS" = "Complete" ]; then
-            echo "✅ Job submitted successfully"
-            break
+          GPU_RESOURCES=""
+          GPU_NODE_SELECTOR=""
+          if [ "$GPU" != "0" ]; then
+            GPU_RESOURCES="nvidia.com/gpu: \"$GPU\""
+            GPU_NODE_SELECTOR="nodeSelector:
+            node.opencloudhub.org/gpu: \"true\""
           fi
 
-          sleep 5
-          ELAPSED=$((ELAPSED + 5))
-        done
+          RUN_LABEL="${MODEL_NAME}-${DVC_DATA_VERSION}-${TIMESTAMP}"
 
-        if [ $ELAPSED -ge $MAX_WAIT ]; then
-          echo "❌ Job submission timeout after ${MAX_WAIT}s"
-          kubectl describe rayjob -n mlops $JOB_NAME
-          exit 1
-        fi
+          TRAINING_ARGS="{{inputs.parameters.training_args}}"
 
-        # Then find the submitter pod
-        SUBMITTER_POD=$(kubectl get pods -n mlops -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
+          echo "Creating RayJob with label: workflow-run=${RUN_LABEL} and training args:${TRAINING_ARGS}"
 
-        echo "✅ Submitter pod: $SUBMITTER_POD"
-        echo ""
-        echo "Waiting for submitter pod to become ready..."
+          cat <<EOF | kubectl create -f -
+          apiVersion: ray.io/v1
+          kind: RayJob
+          metadata:
+            generateName: {{inputs.parameters.model_name}}-training-
+            namespace: mlops
+            labels:
+              workflow-run: "${RUN_LABEL}"
+              model: "{{inputs.parameters.model_name}}"
+          spec:
+            entrypoint: {{inputs.parameters.training_entrypoint}} ${TRAINING_ARGS}
+            shutdownAfterJobFinishes: true
+            ttlSecondsAfterFinished: 300
+            rayClusterSpec:
+              rayVersion: "2.51.0"
+              headGroupSpec:
+                serviceType: ClusterIP
+                template:
+                  spec:
+                    ${GPU_NODE_SELECTOR}
+                    containers:
+                    - name: ray-head
+                      image: {{inputs.parameters.training_image}}
+                      readinessProbe:
+                        exec:
+                          command:
+                            - bash
+                            - -c
+                            - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success && wget --tries 1 -T 10 -q -O- http://localhost:8265/api/gcs_healthz | grep success
+                        initialDelaySeconds: 45
+                        periodSeconds: 5
+                        timeoutSeconds: 5
+                        failureThreshold: 10
+                      resources:
+                        requests:
+                          cpu: "{{inputs.parameters.cpu_request}}"
+                          memory: "{{inputs.parameters.memory_request}}"
+                        limits:
+                          cpu: "{{inputs.parameters.cpu_limit}}"
+                          memory: "{{inputs.parameters.memory_limit}}"
+                          ${GPU_RESOURCES}
+                      env:
+                      - name: MLFLOW_TRACKING_URI
+                        value: {{inputs.parameters.mlflow_tracking_uri}}
+                      - name: MLFLOW_EXPERIMENT_NAME
+                        value: {{inputs.parameters.experiment_name}}
+                      - name: MLFLOW_REGISTERED_MODEL_NAME
+                        value: "ci.{{inputs.parameters.model_name}}"
+                      - name: DVC_DATA_VERSION
+                        value: {{inputs.parameters.dvc_data_version}}
+                      - name: DOCKER_IMAGE_TAG
+                        value: {{inputs.parameters.training_image}}
+                      - name: ARGO_WORKFLOW_UID
+                        value: "{{workflow.uid}}"
+                      - name: AWS_ACCESS_KEY_ID
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: accesskey
+                      - name: AWS_SECRET_ACCESS_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: secretkey
+                      - name: AWS_ENDPOINT_URL
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: endpoint-url
+              workerGroupSpecs:
+              - replicas: {{inputs.parameters.replicas}}
+                groupName: worker
+                template:
+                  spec:
+                    ${GPU_NODE_SELECTOR}
+                    containers:
+                    - name: ray-worker
+                      image: {{inputs.parameters.training_image}}
+                      readinessProbe:
+                        exec:
+                          command:
+                            - bash
+                            - -c
+                            - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
+                        initialDelaySeconds: 30
+                        periodSeconds: 5
+                        timeoutSeconds: 5
+                        failureThreshold: 10
+                      resources:
+                        requests:
+                          cpu: "{{inputs.parameters.cpu_request}}"
+                          memory: "{{inputs.parameters.memory_request}}"
+                        limits:
+                          cpu: "{{inputs.parameters.cpu_limit}}"
+                          memory: "{{inputs.parameters.memory_limit}}"
+                          ${GPU_RESOURCES}
+                      env:
+                      - name: MLFLOW_TRACKING_URI
+                        value: {{inputs.parameters.mlflow_tracking_uri}}
+                      - name: MLFLOW_EXPERIMENT_NAME
+                        value: {{inputs.parameters.experiment_name}}
+                      - name: MLFLOW_REGISTERED_MODEL_NAME
+                        value: "ci.{{inputs.parameters.model_name}}"
+                      - name: DVC_DATA_VERSION
+                        value: {{inputs.parameters.dvc_data_version}}
+                      - name: DOCKER_IMAGE_TAG
+                        value: {{inputs.parameters.training_image}}
+                      - name: ARGO_WORKFLOW_UID
+                        value: "{{workflow.uid}}"
+                      - name: AWS_ACCESS_KEY_ID
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: accesskey
+                      - name: AWS_SECRET_ACCESS_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: secretkey
+                      - name: AWS_ENDPOINT_URL
+                        valueFrom:
+                          secretKeyRef:
+                            name: minio-tenant-secret
+                            key: endpoint-url
+          EOF
 
-        kubectl wait --for=condition=Ready pod/$SUBMITTER_POD -n mlops --timeout=300s || true
+          echo "⏳ Waiting for RayJob..."
+          sleep 3
 
-        echo ""
-        echo "🔍 Streaming training logs..."
-        echo "================================"
-        # Stream logs in the background
-        kubectl logs -n mlops $SUBMITTER_POD -f 2>/dev/null &
-        LOG_PID=$!
+          JOB_NAME=$(kubectl get rayjobs -n mlops -l workflow-run="${RUN_LABEL}" -o jsonpath='{.items[0].metadata.name}')
 
-        # Wait for RayJob to complete
-        while true; do
-          STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null)
-
-          # Handle empty status (job not yet started)
-          if [ -z "$STATUS" ]; then
-            echo "⏳ Waiting for job to start..."
-            sleep 10
-            continue
+          if [ -z "$JOB_NAME" ]; then
+            echo "❌ Failed to get RayJob"
+            exit 1
           fi
 
-          case "$STATUS" in
-            "SUCCEEDED")
-              sleep 5  # Give logs time to catch up
-              kill $LOG_PID 2>/dev/null || true
-              wait $LOG_PID 2>/dev/null || true
-              echo ""
-              echo "✅ Training complete!"
-              exit 0
-              ;;
-            "FAILED"|"STOPPED")
-              kill $LOG_PID 2>/dev/null || true
-              wait $LOG_PID 2>/dev/null || true
-              echo ""
-              echo "❌ Training failed: $STATUS"
-              kubectl describe rayjob -n mlops $JOB_NAME
-              exit 1
-              ;;
-            "PENDING"|"RUNNING")
-              # Job is still running, continue waiting
+          echo "✅ RayJob: $JOB_NAME"
+          echo "$JOB_NAME" > /tmp/job-name.txt
+
+          echo "⏳ Waiting for job to be submitted..."
+
+          MAX_WAIT=1200
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            JOB_DEPLOYMENT_STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobDeploymentStatus}')
+
+            if [ "$JOB_DEPLOYMENT_STATUS" = "Running" ] || [ "$JOB_DEPLOYMENT_STATUS" = "Complete" ]; then
+              echo "✅ Job submitted successfully"
+              break
+            fi
+
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "❌ Job submission timeout after ${MAX_WAIT}s"
+            kubectl describe rayjob -n mlops $JOB_NAME
+            exit 1
+          fi
+
+          # Then find the submitter pod
+          SUBMITTER_POD=$(kubectl get pods -n mlops -l ray.io/is-ray-node!=yes | grep ${JOB_NAME} | awk '{print $1}' | head -n1)
+
+          echo "✅ Submitter pod: $SUBMITTER_POD"
+          echo ""
+          echo "Waiting for submitter pod to become ready..."
+
+          kubectl wait --for=condition=Ready pod/$SUBMITTER_POD -n mlops --timeout=300s || true
+
+          echo ""
+          echo "🔍 Streaming training logs..."
+          echo "================================"
+          # Stream logs in the background
+          kubectl logs -n mlops $SUBMITTER_POD -f 2>/dev/null &
+          LOG_PID=$!
+
+          # Wait for RayJob to complete
+          while true; do
+            STATUS=$(kubectl get rayjob -n mlops $JOB_NAME -o jsonpath='{.status.jobStatus}' 2>/dev/null)
+
+            # Handle empty status (job not yet started)
+            if [ -z "$STATUS" ]; then
+              echo "⏳ Waiting for job to start..."
               sleep 10
-              ;;
-            *)
-              echo "⏳ Job status: $STATUS"
-              sleep 10
-              ;;
-          esac
-        done
+              continue
+            fi
+
+            case "$STATUS" in
+              "SUCCEEDED")
+                sleep 5  # Give logs time to catch up
+                kill $LOG_PID 2>/dev/null || true
+                wait $LOG_PID 2>/dev/null || true
+                echo ""
+                echo "✅ Training complete!"
+                exit 0
+                ;;
+              "FAILED"|"STOPPED")
+                kill $LOG_PID 2>/dev/null || true
+                wait $LOG_PID 2>/dev/null || true
+                echo ""
+                echo "❌ Training failed: $STATUS"
+                kubectl describe rayjob -n mlops $JOB_NAME
+                exit 1
+                ;;
+              "PENDING"|"RUNNING")
+                # Job is still running, continue waiting
+                sleep 10
+                ;;
+              *)
+                echo "⏳ Job status: $STATUS"
+                sleep 10
+                ;;
+            esac
+          done
