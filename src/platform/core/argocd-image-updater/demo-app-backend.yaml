@@ -16,6 +16,6 @@ spec:
     - namePattern: "demo-app-genai-backend"
       images:
         - alias: demo-app-genai-backend-api
-          imageName: opencloudhuborg/demo-app-genai-backend:latest
+          imageName: opencloudhuborg/demo-app-genai-backend
           commonUpdateSettings:
             updateStrategy: digest
