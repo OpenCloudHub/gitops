@@ -3,3 +3,4 @@ kind: Kustomization
 
 resources:
   - fashion-mnist.yaml
+  - wine.yaml
