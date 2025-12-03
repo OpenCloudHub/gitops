@@ -5,6 +5,7 @@ namespace: mlops
 
 resources:
   - mlops-pipeline.yaml
+  - rag-evaluation-pipeline.yaml
   - modules/training.yaml
   - modules/mlflow.yaml
   - modules/deployment.yaml
