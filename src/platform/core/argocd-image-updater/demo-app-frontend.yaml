@@ -1,0 +1,20 @@
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: demo-app-frontend-updater
+  namespace: argocd-image-updater-system
+spec:
+  namespace: argocd
+  writeBackConfig:
+    method: "git:secret:argocd-image-updater-system/gitops-repo"
+    gitConfig:
+      repository: git@github.com:opencloudhub/gitops.git
+      branch: main
+  applicationRefs:
+    - namePattern: "demo-app-frontend"
+      images:
+        - alias: "demo-app-frontend"
+          imageName: "opencloudhuborg/demo-app-frontend"
+      commonUpdateSettings:
+        updateStrategy: "latest"
+        allowTags: "regexp:^main-[0-9a-f]+$"
