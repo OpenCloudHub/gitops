@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: demo-app-frontend
-          image: opencloudhuborg/demo-app-frontend:latest
+          image: opencloudhuborg/demo-app-frontend:main-6a9e90d
           ports:
             - containerPort: 3000
               name: http
