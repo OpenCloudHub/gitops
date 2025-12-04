@@ -24,15 +24,3 @@ spec:
           namespace: demo-app
           port: 8000
           weight: 1
-    # Frontend (catch-all)
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - group: ""
-          kind: Service
-          name: demo-app-frontend
-          namespace: demo-app
-          port: 3000
-          weight: 1

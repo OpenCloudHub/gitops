@@ -1,4 +1,0 @@
-kustomize:
-  images:
-  - opencloudhuborg/demo-app-genai-backend:main-1aa7344
-  - opencloudhuborg/demo-app-frontend:main-c96d788
