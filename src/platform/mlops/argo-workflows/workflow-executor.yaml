@@ -10,42 +10,42 @@ metadata:
   name: workflow-executor
   namespace: mlops
 rules:
-- apiGroups:
-  - argoproj.io
-  resources:
-  - workflowtaskresults
-  verbs:
-  - create
-  - patch
-- apiGroups:
-  - ray.io
-  resources:
-  - rayjobs
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - delete
-- apiGroups:
-  - ray.io
-  resources:
-  - rayservices
-  verbs:
-  - get
-  - patch
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  - pods/log
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["get", "list"]
+  - apiGroups:
+      - argoproj.io
+    resources:
+      - workflowtaskresults
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayjobs
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - delete
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayservices
+    verbs:
+      - get
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "list", "delete", "patch", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -57,6 +57,6 @@ roleRef:
   kind: Role
   name: workflow-executor
 subjects:
-- kind: ServiceAccount
-  name: workflow-executor
-  namespace: mlops
+  - kind: ServiceAccount
+    name: workflow-executor
+    namespace: mlops
