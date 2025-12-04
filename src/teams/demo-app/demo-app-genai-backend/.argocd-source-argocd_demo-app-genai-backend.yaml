@@ -1,0 +1,3 @@
+kustomize:
+  images:
+  - opencloudhuborg/demo-app-genai-backend:main-c1fc39d
