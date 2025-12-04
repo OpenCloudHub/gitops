@@ -59,6 +59,8 @@ spec:
           - name: MLFLOW_TRACKING_INSECURE_TLS
             value: "true"
           # Database
+          - name: DB_HOST
+            value: "demo-app-db-cluster-rw.storage.svc.cluster.local"
           - name: DB_USER
             valueFrom:
               secretKeyRef:
