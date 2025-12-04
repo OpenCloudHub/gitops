@@ -23,7 +23,7 @@ spec:
             - name: NODE_ENV
               value: "production"
             - name: NEXT_PUBLIC_API_URL
-              value: "http://demo-app-genai-backend.demo-app.svc.cluster.local:8000/api"
+              value: "http://demo-app-genai-backend.demo-app.svc.cluster.local:8000/api/v1"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://k8s-monitoring-alloy-receiver.observability.svc.cluster.local:4318"
           livenessProbe:

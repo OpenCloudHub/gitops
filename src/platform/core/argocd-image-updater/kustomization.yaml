@@ -4,8 +4,7 @@ namespace: argocd-image-updater-system
 
 resources:
   - https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/config/install.yaml
-  - demo-app-genai-backend.yaml
-  - demo-app-frontend.yaml
+  - demo-app.yaml
   - wine-classifier.yaml
 
 patches:

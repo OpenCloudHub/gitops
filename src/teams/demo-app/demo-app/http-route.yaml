@@ -12,11 +12,11 @@ spec:
   hostnames:
     - demo-app.opencloudhub.org
   rules:
-    # Backend API routes
+    # Backend API routes (must come first - more specific)
     - matches:
         - path:
             type: PathPrefix
-            value: /api
+            value: /api/v1
       backendRefs:
         - group: ""
           kind: Service
@@ -24,15 +24,15 @@ spec:
           namespace: demo-app
           port: 8000
           weight: 1
-
-    # Frontend (default/root path)
-    # - matches:
-    #     - path:
-    #         type: PathPrefix
-    #         value: /
-    #   backendRefs:
-    #     - group: ""
-    #       kind: Service
-    #       name: demo-app-frontend
-    #       namespace: demo-app
-    #       port: 80
+    # Frontend (catch-all)
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: demo-app-frontend
+          namespace: demo-app
+          port: 3000
+          weight: 1
