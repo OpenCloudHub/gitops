@@ -1,5 +1,9 @@
 # =============================================================================
-# MLOps Pipeline (Simplified)
+# MLOps Pipeline
+# =============================================================================
+#
+# End-to-end ML lifecycle: train → evaluate → promote → deploy
+# Uses compute-templates for resource mapping, ray-templates for training.
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
@@ -27,15 +31,18 @@ spec:
       # Data
       - name: dvc_data_version
 
-      # Compute (direct values, no mapping needed for simplicity)
-      - name: cpu
-        default: "2"
-      - name: memory
-        default: "4Gi"
-      - name: gpu
-        default: "0"
-      - name: workers
-        default: "1"
+      # Compute (uses compute-templates mapping)
+      - name: compute_type
+        enum:
+          [
+            cpu-small,
+            cpu-small-distributed,
+            cpu-medium,
+            cpu-large,
+            gpu-small,
+            gpu-medium,
+            gpu-large,
+          ]
 
       # Comparison
       - name: comparison_metric
@@ -52,7 +59,17 @@ spec:
   templates:
     - name: main
       steps:
-        # Phase 1: Training
+        # Phase 1: Map compute type to resources
+        - - name: map-compute
+            templateRef:
+              name: compute-templates
+              template: map-compute-config
+            arguments:
+              parameters:
+                - name: compute_type
+                  value: "{{workflow.parameters.compute_type}}"
+
+        # Phase 2: Training
         - - name: train
             templateRef:
               name: ray-templates
@@ -68,19 +85,17 @@ spec:
                 - name: model_configmap
                   value: "{{workflow.parameters.model_name}}-env"
                 - name: cpu
-                  value: "{{workflow.parameters.cpu}}"
+                  value: "{{steps.map-compute.outputs.parameters.cpu_request}}"
                 - name: memory
-                  value: "{{workflow.parameters.memory}}"
+                  value: "{{steps.map-compute.outputs.parameters.memory_request}}"
                 - name: gpu
-                  value: "{{workflow.parameters.gpu}}"
+                  value: "{{steps.map-compute.outputs.parameters.gpu}}"
                 - name: workers
-                  value: "{{workflow.parameters.workers}}"
+                  value: "{{steps.map-compute.outputs.parameters.worker_replicas}}"
                 - name: dvc_data_version
                   value: "{{workflow.parameters.dvc_data_version}}"
-                - name: num_workers
-                  value: "{{workflow.parameters.workers}}"
 
-        # Phase 2: Compare and promote to staging
+        # Phase 3: Compare and promote to staging
         - - name: compare-and-promote
             templateRef:
               name: mlflow-templates
@@ -96,12 +111,12 @@ spec:
                 - name: threshold
                   value: "{{workflow.parameters.comparison_threshold}}"
 
-        # Phase 3: Approval gate (manual mode only)
+        # Phase 4: Approval gate (manual mode only)
         - - name: approval
             template: approval-gate
             when: "'{{workflow.parameters.approval_mode}}' == 'manual' && '{{steps.compare-and-promote.outputs.parameters.promoted}}' == 'true'"
 
-        # Phase 4: Promote to production
+        # Phase 5: Promote to production
         - - name: promote-production
             templateRef:
               name: mlflow-templates
@@ -112,8 +127,9 @@ spec:
                   value: "{{workflow.parameters.model_name}}"
                 - name: staging_version
                   value: "{{steps.compare-and-promote.outputs.parameters.staging_version}}"
+            when: "'{{steps.compare-and-promote.outputs.parameters.promoted}}' == 'true'"
 
-        # Phase 5: Deploy
+        # Phase 6: Deploy
         - - name: deploy
             templateRef:
               name: deployment-templates
