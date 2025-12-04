@@ -112,7 +112,6 @@ spec:
                   value: "{{workflow.parameters.model_name}}"
                 - name: staging_version
                   value: "{{steps.compare-and-promote.outputs.parameters.staging_version}}"
-            when: "'{{steps.compare-and-promote.outputs.parameters.promoted}}' == 'true'"
 
         # Phase 5: Deploy
         - - name: deploy

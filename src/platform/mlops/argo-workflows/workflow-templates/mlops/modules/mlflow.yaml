@@ -2,7 +2,8 @@
 # MLflow Templates
 # =============================================================================
 #
-# Templates for MLflow model registry operations.
+# Model comparison and promotion operations.
+# Uses mlops-platform-env ConfigMap for MLFLOW_TRACKING_URI.
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
@@ -10,12 +11,10 @@ kind: WorkflowTemplate
 metadata:
   name: mlflow-templates
   namespace: mlops
-  annotations:
-    workflows.argoproj.io/description: "MLflow model registry operations"
 spec:
   templates:
     # =========================================================================
-    # COMPARE TO PRODUCTION AND PROMOTE TO STAGING
+    # Compare CI model to production and promote to staging if better
     # =========================================================================
     - name: compare-to-production-and-promote-to-staging
       inputs:
@@ -24,234 +23,187 @@ spec:
           - name: metric_name
           - name: higher_is_better
           - name: threshold
-          - name: mlflow_tracking_uri
       outputs:
         parameters:
-          - name: ci_version
-            valueFrom:
-              path: /tmp/ci_version.txt
-          - name: staging_version
-            valueFrom:
-              path: /tmp/staging_version.txt
-          - name: ci_run_id
-            valueFrom:
-              path: /tmp/ci_run_id.txt
           - name: promoted
             valueFrom:
               path: /tmp/promoted.txt
-          - name: reason
+          - name: staging_version
             valueFrom:
-              path: /tmp/reason.txt
-        artifacts:
-          - name: comparison-report
-            path: /tmp/comparison-report.json
-            archive:
-              none: {}
+              path: /tmp/staging_version.txt
+          - name: message
+            valueFrom:
+              path: /tmp/message.txt
       script:
-        image: ghcr.io/mlflow/mlflow:v2.18.0
+        image: python:3.12-slim
+        envFrom:
+          - configMapRef:
+              name: mlops-platform-env
         command: [python]
         source: |
-          from mlflow import MlflowClient
-          from mlflow.exceptions import MlflowException
+          import os
+          import subprocess
+          subprocess.run(["pip", "install", "-q", "mlflow"], check=True)
+
           import mlflow
-          from datetime import datetime
-          import sys
-          import json
+          from mlflow.tracking import MlflowClient
 
-          def write_outputs(promoted, reason, ci_version="", staging_version="", ci_run_id="", report=None):
-              """Write all required output files"""
-              with open("/tmp/promoted.txt", "w") as f:
-                  f.write("true" if promoted else "false")
-              with open("/tmp/reason.txt", "w") as f:
-                  f.write(reason)
-              with open("/tmp/ci_version.txt", "w") as f:
-                  f.write(str(ci_version))
-              with open("/tmp/staging_version.txt", "w") as f:
-                  f.write(str(staging_version))
-              with open("/tmp/ci_run_id.txt", "w") as f:
-                  f.write(ci_run_id)
-              if report:
-                  with open("/tmp/comparison-report.json", "w") as f:
-                      json.dump(report, f, indent=2)
+          MLFLOW_URI = os.environ["MLFLOW_TRACKING_URI"]
+          MODEL_NAME = "{{inputs.parameters.model_name}}"
+          METRIC = "{{inputs.parameters.metric_name}}"
+          HIGHER_BETTER = "{{inputs.parameters.higher_is_better}}" == "true"
+          THRESHOLD = float("{{inputs.parameters.threshold}}")
+          WORKFLOW_UID = "{{workflow.uid}}"
 
-          client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
-          mlflow.set_tracking_uri("{{inputs.parameters.mlflow_tracking_uri}}")
+          mlflow.set_tracking_uri(MLFLOW_URI)
+          client = MlflowClient()
 
-          model_name = "{{inputs.parameters.model_name}}"
-          metric_name = "{{inputs.parameters.metric_name}}"
-          higher_is_better = "{{inputs.parameters.higher_is_better}}" == "true"
-          threshold = float("{{inputs.parameters.threshold}}")
-          workflow_uid = "{{workflow.uid}}"
+          print(f"🔍 Looking for CI model from workflow {WORKFLOW_UID}")
 
-          print(f"🔍 Comparing {model_name}")
-          print(f"   Workflow: {workflow_uid}")
-          print(f"   Metric: {metric_name} ({'higher' if higher_is_better else 'lower'} is better)")
-          print(f"   Threshold: {threshold}")
-
-          report = {
-              "workflow_uid": workflow_uid,
-              "model_name": model_name,
-              "metric_name": metric_name,
-              "higher_is_better": higher_is_better,
-              "threshold": threshold,
-              "timestamp": datetime.utcnow().isoformat()
-          }
-
-          # Get most recent run from this workflow
-          print(f"\n📊 Getting most recent run from workflow {workflow_uid}...")
-          runs_df = mlflow.search_runs(
-              search_all_experiments=True,
-              filter_string=f"tags.argo_workflow_uid = '{workflow_uid}'",
-              max_results=1,
-              order_by=["start_time DESC"]
-          )
-
-          if runs_df.empty:
-              reason = f"No runs found with tag argo_workflow_uid='{workflow_uid}'"
-              print(f"❌ {reason}")
-              write_outputs(False, reason, report=report)
-              sys.exit(1)
-
-          run_id = runs_df.iloc[0]['run_id']
-          print(f"   Found run: {run_id[:8]}...")
-
-          # Get CI model from this run
-          print(f"\n📦 Looking for CI model from run {run_id[:8]}...")
-          ci_versions = client.search_model_versions(
-              filter_string=f"name='ci.{model_name}' and run_id='{run_id}'"
-          )
-
-          if not ci_versions:
-              reason = f"No CI model found from run {run_id}"
-              print(f"❌ {reason}")
-              write_outputs(False, reason, report=report)
-              sys.exit(1)
-
-          ci_model = ci_versions[0]
-          ci_version = ci_model.version
-          ci_run_id = ci_model.run_id
-          print(f"✅ Found CI model: v{ci_version}")
-
-          # Get CI metrics
-          ci_run = client.get_run(ci_run_id)
-          if metric_name not in ci_run.data.metrics:
-              reason = f"Metric '{metric_name}' not found in CI model run"
-              print(f"❌ {reason}")
-              write_outputs(False, reason, ci_version=ci_version, ci_run_id=ci_run_id, report=report)
-              sys.exit(1)
-
-          ci_value = ci_run.data.metrics[metric_name]
-          print(f"   CI {metric_name}: {ci_value}")
-          report["ci_metric_value"] = ci_value
-
-          # Compare to champion
-          print(f"\n🏆 Looking for champion...")
-          should_promote = False
+          # Find the CI model registered by this workflow
+          ci_model_name = f"ci.{MODEL_NAME}"
+          staging_model_name = f"staging.{MODEL_NAME}"
+          prod_model_name = f"prod.{MODEL_NAME}"
 
           try:
-              champion = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
-              champ_run = client.get_run(champion.run_id)
+              ci_versions = client.search_model_versions(f"name='{ci_model_name}'")
+              ci_version = None
+              for v in ci_versions:
+                  run = client.get_run(v.run_id)
+                  if run.data.tags.get("argo_workflow_uid") == WORKFLOW_UID:
+                      ci_version = v
+                      break
 
-              if metric_name not in champ_run.data.metrics:
-                  reason = f"Champion missing metric '{metric_name}'"
-                  print(f"❌ {reason}")
-                  write_outputs(False, reason, ci_version=ci_version, ci_run_id=ci_run_id, report=report)
-                  sys.exit(1)
+              if not ci_version:
+                  print(f"❌ No CI model found for workflow {WORKFLOW_UID}")
+                  with open("/tmp/promoted.txt", "w") as f: f.write("false")
+                  with open("/tmp/staging_version.txt", "w") as f: f.write("")
+                  with open("/tmp/message.txt", "w") as f: f.write("No CI model found")
+                  exit(0)
 
-              champion_value = champ_run.data.metrics[metric_name]
-              print(f"   Champion {metric_name}: {champion_value}")
-              report["champion_metric_value"] = champion_value
+              ci_run = client.get_run(ci_version.run_id)
+              ci_metric = ci_run.data.metrics.get(METRIC)
+              print(f"📊 CI model: version {ci_version.version}, {METRIC}={ci_metric}")
 
-              if higher_is_better:
-                  improvement = ci_value - champion_value
-              else:
-                  improvement = champion_value - ci_value
+          except Exception as e:
+              print(f"❌ Error finding CI model: {e}")
+              with open("/tmp/promoted.txt", "w") as f: f.write("false")
+              with open("/tmp/staging_version.txt", "w") as f: f.write("")
+              with open("/tmp/message.txt", "w") as f: f.write(str(e))
+              exit(0)
 
-              improvement_pct = (improvement / champion_value * 100) if champion_value != 0 else 0
-              print(f"   Improvement: {improvement:.6f} ({improvement_pct:.2f}%)")
-              report["improvement"] = improvement
+          # Get production champion metric
+          prod_metric = None
+          try:
+              prod_versions = client.search_model_versions(f"name='{prod_model_name}'")
+              for v in prod_versions:
+                  if "champion" in v.aliases:
+                      prod_run = client.get_run(v.run_id)
+                      prod_metric = prod_run.data.metrics.get(METRIC)
+                      print(f"📊 Production champion: version {v.version}, {METRIC}={prod_metric}")
+                      break
+          except:
+              print("ℹ️ No production champion found - first deployment")
 
-              if improvement >= threshold:
-                  reason = f"Improvement {improvement:.6f} exceeds threshold {threshold}"
-                  should_promote = True
-              else:
-                  reason = f"Insufficient improvement: {improvement:.6f} < {threshold}"
-
-          except MlflowException:
-              reason = "No champion exists, promoting first model"
-              print(f"   {reason}")
+          # Compare
+          should_promote = False
+          if prod_metric is None:
               should_promote = True
+              message = "First model - auto-promoting"
+          elif HIGHER_BETTER:
+              improvement = (ci_metric - prod_metric) / abs(prod_metric) if prod_metric != 0 else 1.0
+              should_promote = improvement >= THRESHOLD
+              message = f"Improvement: {improvement:.2%} (threshold: {THRESHOLD:.2%})"
+          else:
+              improvement = (prod_metric - ci_metric) / abs(prod_metric) if prod_metric != 0 else 1.0
+              should_promote = improvement >= THRESHOLD
+              message = f"Improvement: {improvement:.2%} (threshold: {THRESHOLD:.2%})"
 
-          if not should_promote:
-              print(f"❌ {reason}")
-              write_outputs(False, reason, ci_version=ci_version, ci_run_id=ci_run_id, report=report)
-              sys.exit(0)
+          print(f"📈 {message}")
 
-          # Promote to staging
-          print(f"\n📦 Copying ci.{model_name}/v{ci_version} → staging.{model_name}")
-          staging_mv = client.copy_model_version(
-              f"models:/ci.{model_name}/{ci_version}",
-              f"staging.{model_name}"
-          )
-          print(f"✅ Created staging.{model_name}/v{staging_mv.version}")
+          if should_promote:
+              # Copy to staging registry
+              staging_version = mlflow.register_model(
+                  f"models:/{ci_model_name}/{ci_version.version}",
+                  staging_model_name
+              )
+              client.set_registered_model_alias(staging_model_name, "candidate", staging_version.version)
+              print(f"✅ Promoted to staging: {staging_model_name} v{staging_version.version}")
 
-          write_outputs(
-              True, reason,
-              ci_version=ci_version,
-              staging_version=staging_mv.version,
-              ci_run_id=ci_run_id,
-              report=report
-          )
-          print(f"\n✅ Promoted to staging")
+              with open("/tmp/promoted.txt", "w") as f: f.write("true")
+              with open("/tmp/staging_version.txt", "w") as f: f.write(staging_version.version)
+          else:
+              print("⏸️ Not promoted - below threshold")
+              with open("/tmp/promoted.txt", "w") as f: f.write("false")
+              with open("/tmp/staging_version.txt", "w") as f: f.write("")
+
+          with open("/tmp/message.txt", "w") as f: f.write(message)
 
     # =========================================================================
-    # PROMOTE STAGING TO PRODUCTION
+    # Promote staging model to production
     # =========================================================================
     - name: promote-staging-to-production
       inputs:
         parameters:
           - name: model_name
           - name: staging_version
-          - name: mlflow_tracking_uri
       outputs:
         parameters:
           - name: prod_version
             valueFrom:
               path: /tmp/prod_version.txt
       script:
-        image: ghcr.io/mlflow/mlflow:v2.18.0
+        image: python:3.12-slim
+        envFrom:
+          - configMapRef:
+              name: mlops-platform-env
         command: [python]
         source: |
-          from mlflow import MlflowClient
+          import os
+          import subprocess
+          subprocess.run(["pip", "install", "-q", "mlflow"], check=True)
 
-          client = MlflowClient("{{inputs.parameters.mlflow_tracking_uri}}")
-          model_name = "{{inputs.parameters.model_name}}"
-          staging_version = "{{inputs.parameters.staging_version}}"
+          import mlflow
+          from mlflow.tracking import MlflowClient
 
-          print(f"🚀 Promoting to production: {model_name}")
+          MLFLOW_URI = os.environ["MLFLOW_TRACKING_URI"]
+          MODEL_NAME = "{{inputs.parameters.model_name}}"
+          STAGING_VERSION = "{{inputs.parameters.staging_version}}"
 
-          prod_mv = client.copy_model_version(
-              f"models:/staging.{model_name}/{staging_version}",
-              f"prod.{model_name}"
-          )
-          print(f"✅ Created prod.{model_name}/v{prod_mv.version}")
+          mlflow.set_tracking_uri(MLFLOW_URI)
+          client = MlflowClient()
 
-          # Move old champion to previous
+          staging_model_name = f"staging.{MODEL_NAME}"
+          prod_model_name = f"prod.{MODEL_NAME}"
+
+          print(f"🚀 Promoting {staging_model_name} v{STAGING_VERSION} to production")
+
+          # Move current champion to previous
           try:
-              old_champ = client.get_model_version_by_alias(f"prod.{model_name}", "champion")
-              print(f"   Moving old champion v{old_champ.version} → @previous")
-              client.set_registered_model_alias(f"prod.{model_name}", "previous", old_champ.version)
-          except:
-              print("   No previous champion")
+              prod_versions = client.search_model_versions(f"name='{prod_model_name}'")
+              for v in prod_versions:
+                  if "champion" in v.aliases:
+                      client.delete_registered_model_alias(prod_model_name, "champion")
+                      client.set_registered_model_alias(prod_model_name, "previous", v.version)
+                      print(f"📦 Moved v{v.version} to @previous")
+                      break
+          except Exception as e:
+              print(f"ℹ️ No existing champion: {e}")
 
-          client.set_registered_model_alias(f"prod.{model_name}", "champion", prod_mv.version)
-          print(f"✅ Set prod.{model_name}@champion → v{prod_mv.version}")
+          # Copy staging to production
+          prod_version = mlflow.register_model(
+              f"models:/{staging_model_name}/{STAGING_VERSION}",
+              prod_model_name
+          )
+
+          client.set_registered_model_alias(prod_model_name, "champion", prod_version.version)
+          print(f"✅ Promoted to production: {prod_model_name} v{prod_version.version} @champion")
 
           with open("/tmp/prod_version.txt", "w") as f:
-              f.write(prod_mv.version)
+              f.write(prod_version.version)
 
     # =========================================================================
-    # TAG DEPLOYMENT INFO
+    # Tag model with deployment info
     # =========================================================================
     - name: tag-deployment-info
       inputs:
@@ -259,47 +211,41 @@ spec:
           - name: model_uri
           - name: serving_image
           - name: deployed_by
-            default: "manual"
-          - name: mlflow_tracking_uri
-            default: "http://mlflow.mlops.svc.cluster.local:80"
       script:
-        image: ghcr.io/mlflow/mlflow:v2.18.0
+        image: python:3.12-slim
+        envFrom:
+          - configMapRef:
+              name: mlops-platform-env
         command: [python]
         source: |
-          from mlflow import MlflowClient
-          from datetime import datetime
-          import re
           import os
+          import subprocess
+          from datetime import datetime
+          subprocess.run(["pip", "install", "-q", "mlflow"], check=True)
 
-          mlflow_uri = "{{inputs.parameters.mlflow_tracking_uri}}"
-          model_uri = "{{inputs.parameters.model_uri}}".strip()
-          serving_image = "{{inputs.parameters.serving_image}}".strip()
-          deployed_by = "{{inputs.parameters.deployed_by}}".strip()
+          import mlflow
+          from mlflow.tracking import MlflowClient
 
-          client = MlflowClient(mlflow_uri)
+          MLFLOW_URI = os.environ["MLFLOW_TRACKING_URI"]
+          MODEL_URI = "{{inputs.parameters.model_uri}}"
+          SERVING_IMAGE = "{{inputs.parameters.serving_image}}"
+          DEPLOYED_BY = "{{inputs.parameters.deployed_by}}"
 
-          # Parse: models:/prod.wine-classifier/1
-          match = re.match(r'models:/([^/]+)/(\d+)', model_uri)
-          if not match:
-              print(f"❌ Invalid model URI: '{model_uri}'")
-              exit(1)
+          mlflow.set_tracking_uri(MLFLOW_URI)
+          client = MlflowClient()
 
-          full_name = match.group(1)
-          version = match.group(2)
+          # Parse model URI: models:/prod.wine-classifier/3
+          parts = MODEL_URI.replace("models:/", "").split("/")
+          model_name = parts[0]
+          version = parts[1].replace("@", "")
 
-          print(f"🏷️  Tagging deployment: {full_name}/v{version}")
+          print(f"🏷️ Tagging {model_name} v{version}")
 
-          tags = {
-              "deployment_status": "deployed",
-              "deployed_at": datetime.utcnow().isoformat(),
-              "deployed_by": deployed_by,
-              "serving_image": serving_image,
-              "kubernetes_namespace": "ai",
-              "argo_workflow_uid": "{{workflow.uid}}",
-              "argo_workflow_name": "{{workflow.name}}"
-          }
-
-          for key, value in tags.items():
-              client.set_model_version_tag(full_name, version, key, value)
-
-          print(f"✅ Tagged: {full_name}/v{version}")
+          try:
+              client.set_model_version_tag(model_name, version, "deployed_at", datetime.utcnow().isoformat())
+              client.set_model_version_tag(model_name, version, "deployed_by", DEPLOYED_BY)
+              client.set_model_version_tag(model_name, version, "serving_image", SERVING_IMAGE)
+              client.set_model_version_tag(model_name, version, "workflow_name", "{{workflow.name}}")
+              print(f"✅ Tagged deployment info")
+          except Exception as e:
+              print(f"⚠️ Could not tag model: {e}")

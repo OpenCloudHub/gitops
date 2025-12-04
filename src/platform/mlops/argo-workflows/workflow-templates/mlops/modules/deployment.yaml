@@ -3,6 +3,7 @@
 # =============================================================================
 #
 # GitOps-based model deployment.
+# Uses mlops-platform-env ConfigMap for MLFLOW_TRACKING_URI.
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
@@ -27,8 +28,6 @@ spec:
           - name: serving_image
           - name: deployed_by
             default: "manual"
-          - name: mlflow_tracking_uri
-            default: "http://mlflow.mlops.svc.cluster.local:80"
       steps:
         - - name: update-gitops
             template: update-gitops-repo
@@ -53,8 +52,6 @@ spec:
                   value: "{{inputs.parameters.serving_image}}"
                 - name: deployed_by
                   value: "{{inputs.parameters.deployed_by}}"
-                - name: mlflow_tracking_uri
-                  value: "{{inputs.parameters.mlflow_tracking_uri}}"
 
     # =========================================================================
     # UPDATE GITOPS REPOSITORY
