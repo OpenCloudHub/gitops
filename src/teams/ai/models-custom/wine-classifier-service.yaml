@@ -18,18 +18,16 @@ spec:
         route_prefix: /models/custom/wine-classifier
         deployments:
           - name: WineClassifier
-            user_config:
-              model_uri: "models:/prod.wine-classifier/2"
             num_replicas: 2
             max_ongoing_requests: 5
             ray_actor_options:
               num_cpus: 0.5
   rayClusterConfig:
-    rayVersion: '2.48.0'
+    rayVersion: "2.48.0"
     headGroupSpec:
       rayStartParams:
-        dashboard-host: '0.0.0.0'
-        metrics-export-port: '8080'
+        dashboard-host: "0.0.0.0"
+        metrics-export-port: "8080"
       template:
         spec:
           containers:
@@ -143,7 +141,7 @@ spec:
       timeouts:
         request: 30s
       backendRefs:
-        - group: ''
+        - group: ""
           kind: Service
           name: wine-classifier-service-serve-svc
           port: 8000
@@ -170,7 +168,7 @@ spec:
             type: PathPrefix
             value: "/"
       backendRefs:
-        - group: ''
+        - group: ""
           kind: Service
           name: wine-classifier-service-head-svc
           port: 8265

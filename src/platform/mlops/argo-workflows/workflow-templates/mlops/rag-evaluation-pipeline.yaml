@@ -43,7 +43,7 @@ spec:
     - name: evaluate-prompts
       container:
         image: "{{workflow.parameters.image}}"
-        command: [python, -m, src.evaluation.evaluate_prompts]
+        command: [python, -m, src.prompts.evaluate_prompts]
         args:
           - --prompt-name
           - "{{workflow.parameters.prompt_name}}"
