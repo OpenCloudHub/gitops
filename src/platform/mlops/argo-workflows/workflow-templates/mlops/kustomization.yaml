@@ -3,4 +3,6 @@ kind: Kustomization
 
 resources:
   - pipeline.yaml
+  - mlops-platform-env.yaml
+  - configmaps.yaml
   - modules/

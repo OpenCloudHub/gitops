@@ -4,7 +4,6 @@ namespace: mlops
 
 resources:
   - pod-monitors.yaml
-  - shared-env.yaml
 
 helmCharts:
   - name: kuberay-operator

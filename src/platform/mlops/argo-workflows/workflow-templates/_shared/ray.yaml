@@ -1,34 +1,14 @@
 # =============================================================================
-# Shared Ray Job Templates
+# Shared Ray Job Templates (Simplified)
 # =============================================================================
 #
-# Generic Ray job submission and monitoring. Caller prepares all config,
-# this template just runs containers with whatever env is provided.
+# Uses Argo's native resource template - no kubectl, no scripts.
+# Environment configured via static ConfigMaps + dynamic parameters.
 #
-# Templates:
-#   - submit-and-wait    : Main entry - submit job and wait for completion
-#   - submit-rayjob      : Create RayJob resource (Python-based, no YAML escaping issues)
-#   - wait-for-rayjob    : Poll status and stream logs
-#   - create-env-configmap : Helper to create run-specific ConfigMap
-#   - cleanup-env-configmap: Helper to delete run ConfigMap
-#
-# Usage:
-#   templateRef:
-#     name: ray-templates
-#     template: submit-and-wait
-#   arguments:
-#     parameters:
-#       - name: job_prefix
-#         value: "my-job"
-#       - name: image
-#         value: "myrepo/myimage:tag"
-#       - name: entrypoint
-#         value: "python train.py --config x"
-#       - name: configmap_refs
-#         value: "my-env-configmap,another-configmap"
-#       - name: secret_refs
-#         value: "minio-secret,db-secret"
-#       # ... resource params from compute mapping
+# Prerequisites:
+#   - ConfigMap: mlops-platform-env (MLFLOW_TRACKING_URI)
+#   - ConfigMap: <model>-env (model-specific config)
+#   - Secret: minio-tenant-secret
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
@@ -36,14 +16,12 @@ kind: WorkflowTemplate
 metadata:
   name: ray-templates
   namespace: mlops
-  annotations:
-    workflows.argoproj.io/description: "Generic Ray job submission and monitoring"
 spec:
   templates:
     # =========================================================================
-    # MAIN ENTRY POINT: Submit and wait for Ray job
+    # MAIN: Submit RayJob and wait for completion
     # =========================================================================
-    - name: submit-and-wait
+    - name: training-job
       inputs:
         parameters:
           # Job identity
@@ -51,402 +29,117 @@ spec:
           - name: image
           - name: entrypoint
 
-          # Resources (from compute mapping)
-          - name: cpu_request
-          - name: cpu_limit
-          - name: memory_request
-          - name: memory_limit
+          # Model config
+          - name: model_configmap
+            description: "Model-specific ConfigMap (e.g., wine-classifier-env)"
+
+          # Compute resources
+          - name: cpu
+            default: "2"
+          - name: memory
+            default: "4Gi"
           - name: gpu
             default: "0"
-          - name: worker_replicas
+          - name: workers
             default: "1"
 
-          # Environment - fully flexible
-          - name: configmap_refs
+          # Dynamic run values
+          - name: dvc_data_version
             default: ""
-            description: "Comma-separated ConfigMap names"
-          - name: secret_refs
-            default: ""
-            description: "Comma-separated Secret names"
-
-          # Timeouts
-          - name: submission_timeout
-            default: "300"
-          - name: job_timeout
-            default: "3600"
+          - name: num_workers
+            default: "1"
 
       outputs:
         parameters:
           - name: job_name
             valueFrom:
-              parameter: "{{steps.submit.outputs.parameters.job_name}}"
-          - name: job_status
-            valueFrom:
-              parameter: "{{steps.wait.outputs.parameters.job_status}}"
+              jsonPath: "{.metadata.name}"
 
-      steps:
-        - - name: submit
-            template: submit-rayjob
-            arguments:
-              parameters:
-                - name: job_prefix
-                  value: "{{inputs.parameters.job_prefix}}"
-                - name: image
-                  value: "{{inputs.parameters.image}}"
-                - name: entrypoint
-                  value: "{{inputs.parameters.entrypoint}}"
-                - name: cpu_request
-                  value: "{{inputs.parameters.cpu_request}}"
-                - name: cpu_limit
-                  value: "{{inputs.parameters.cpu_limit}}"
-                - name: memory_request
-                  value: "{{inputs.parameters.memory_request}}"
-                - name: memory_limit
-                  value: "{{inputs.parameters.memory_limit}}"
-                - name: gpu
-                  value: "{{inputs.parameters.gpu}}"
-                - name: worker_replicas
-                  value: "{{inputs.parameters.worker_replicas}}"
-                - name: configmap_refs
-                  value: "{{inputs.parameters.configmap_refs}}"
-                - name: secret_refs
-                  value: "{{inputs.parameters.secret_refs}}"
-
-        - - name: wait
-            template: wait-for-rayjob
-            arguments:
-              parameters:
-                - name: job_name
-                  value: "{{steps.submit.outputs.parameters.job_name}}"
-                - name: submission_timeout
-                  value: "{{inputs.parameters.submission_timeout}}"
-                - name: job_timeout
-                  value: "{{inputs.parameters.job_timeout}}"
-
-    # =========================================================================
-    # SUBMIT: Create RayJob resource using Python (no YAML escaping issues)
-    # =========================================================================
-    - name: submit-rayjob
-      inputs:
-        parameters:
-          - name: job_prefix
-          - name: image
-          - name: entrypoint
-          - name: cpu_request
-          - name: cpu_limit
-          - name: memory_request
-          - name: memory_limit
-          - name: gpu
-          - name: worker_replicas
-          - name: configmap_refs
-          - name: secret_refs
-      outputs:
-        parameters:
-          - name: job_name
-            valueFrom:
-              path: /tmp/job-name.txt
-      script:
-        image: python:3.12-slim
-        command: [python]
-        source: |
-          import json
-          import subprocess
-          import sys
-
-          # Install kubectl
-          subprocess.run([
-              "sh", "-c",
-              "apt-get update -qq && apt-get install -qq -y curl > /dev/null && "
-              "curl -sLO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl && "
-              "chmod +x kubectl && mv kubectl /usr/local/bin/"
-          ], check=True)
-
-          # Build container spec (shared between head and workers)
-          def build_container_spec(name):
-              container = {
-                  "name": name,
-                  "image": "{{inputs.parameters.image}}",
-                  "resources": {
-                      "requests": {
-                          "cpu": "{{inputs.parameters.cpu_request}}",
-                          "memory": "{{inputs.parameters.memory_request}}"
-                      },
-                      "limits": {
-                          "cpu": "{{inputs.parameters.cpu_limit}}",
-                          "memory": "{{inputs.parameters.memory_limit}}",
-                          "nvidia.com/gpu": "{{inputs.parameters.gpu}}"
-                      }
-                  },
-                  "envFrom": [],
-                  "env": [
-                      {"name": "ARGO_WORKFLOW_UID", "value": "{{workflow.uid}}"},
-                      {"name": "ARGO_WORKFLOW_NAME", "value": "{{workflow.name}}"}
-                  ]
-              }
-
-              # Add ConfigMaps
-              configmap_refs = "{{inputs.parameters.configmap_refs}}".strip()
-              if configmap_refs:
-                  for cm in configmap_refs.split(","):
-                      cm = cm.strip()
-                      if cm:
-                          container["envFrom"].append({"configMapRef": {"name": cm}})
-
-              # Add Secrets
-              secret_refs = "{{inputs.parameters.secret_refs}}".strip()
-              if secret_refs:
-                  for secret in secret_refs.split(","):
-                      secret = secret.strip()
-                      if secret:
-                          container["envFrom"].append({"secretRef": {"name": secret}})
-
-              return container
-
-          # Build manifest
-          manifest = {
-              "apiVersion": "ray.io/v1",
-              "kind": "RayJob",
-              "metadata": {
-                  "generateName": "{{inputs.parameters.job_prefix}}-",
-                  "namespace": "mlops",
-                  "labels": {
-                      "workflow": "{{workflow.name}}",
-                      "workflow-uid": "{{workflow.uid}}"
-                  }
-              },
-              "spec": {
-                  "entrypoint": "{{inputs.parameters.entrypoint}}",
-                  "shutdownAfterJobFinishes": True,
-                  "ttlSecondsAfterFinished": 300,
-                  "rayClusterSpec": {
-                      "rayVersion": "2.51.0",
-                      "headGroupSpec": {
-                          "serviceType": "ClusterIP",
-                          "template": {
-                              "spec": {
-                                  "containers": [build_container_spec("ray-head")]
-                              }
-                          }
-                      },
-                      "workerGroupSpecs": [{
-                          "replicas": {{inputs.parameters.worker_replicas}},
-                          "groupName": "workers",
-                          "template": {
-                              "spec": {
-                                  "containers": [build_container_spec("ray-worker")]
-                              }
-                          }
-                      }]
-                  }
-              }
-          }
-
-          # Write manifest
-          with open("/tmp/rayjob.json", "w") as f:
-              json.dump(manifest, f, indent=2)
-
-          print("Creating RayJob:")
-          print(json.dumps(manifest, indent=2))
-          print("\n" + "=" * 60)
-
-          # Apply
-          result = subprocess.run(
-              ["kubectl", "create", "-f", "/tmp/rayjob.json", "-o", "jsonpath={.metadata.name}"],
-              capture_output=True, text=True
-          )
-
-          if result.returncode != 0:
-              print(f"❌ Failed to create RayJob: {result.stderr}")
-              sys.exit(1)
-
-          job_name = result.stdout.strip()
-          print(f"✅ Created RayJob: {job_name}")
-
-          with open("/tmp/job-name.txt", "w") as f:
-              f.write(job_name)
-
-    # =========================================================================
-    # WAIT: Poll status and stream logs
-    # =========================================================================
-    - name: wait-for-rayjob
-      inputs:
-        parameters:
-          - name: job_name
-          - name: submission_timeout
-            default: "300"
-          - name: job_timeout
-            default: "3600"
-      outputs:
-        parameters:
-          - name: job_status
-            valueFrom:
-              path: /tmp/job-status.txt
-      script:
-        image: rayproject/ray:2.51.0-py312
-        command: [bash]
-        source: |
-          set -e
-
-          JOB_NAME="{{inputs.parameters.job_name}}"
-          SUBMISSION_TIMEOUT="{{inputs.parameters.submission_timeout}}"
-          JOB_TIMEOUT="{{inputs.parameters.job_timeout}}"
-
-          echo "PENDING" > /tmp/job-status.txt
-
-          # Install kubectl
-          wget -q "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl" -O /tmp/kubectl
-          chmod +x /tmp/kubectl
-
-          echo "=========================================="
-          echo "Job: $JOB_NAME"
-          echo "=========================================="
-
-          # Wait for job to be submitted and get Ray cluster info
-          ELAPSED=0
-          while [ $ELAPSED -lt $SUBMISSION_TIMEOUT ]; do
-            RAY_JOB_ID=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
-            CLUSTER_NAME=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}' 2>/dev/null || echo "")
-            DEPLOY_STATUS=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
-
-            if [ "$DEPLOY_STATUS" = "Failed" ]; then
-              echo "❌ RayJob deployment failed"
-              /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
-              echo "FAILED" > /tmp/job-status.txt
-              exit 1
-            fi
-
-            if [ -n "$RAY_JOB_ID" ] && [ -n "$CLUSTER_NAME" ]; then
-              break
-            fi
-
-            echo "⏳ Waiting for job to initialize... (${ELAPSED}s)"
-            sleep 5
-            ELAPSED=$((ELAPSED + 5))
-          done
-
-          if [ -z "$RAY_JOB_ID" ] || [ -z "$CLUSTER_NAME" ]; then
-            echo "❌ Timeout waiting for job to initialize"
-            echo "FAILED" > /tmp/job-status.txt
-            exit 1
-          fi
-
-          RAY_ADDRESS="http://${CLUSTER_NAME}-head-svc.mlops.svc.cluster.local:8265"
-          echo "Job ID:  $RAY_JOB_ID"
-          echo "Cluster: $CLUSTER_NAME"
-          echo "Address: $RAY_ADDRESS"
-          echo "=========================================="
-
-          # Stream logs in background
-          ray job logs -f "$RAY_JOB_ID" --address "$RAY_ADDRESS" 2>/dev/null &
-          LOG_PID=$!
-
-          # Poll for completion
-          ELAPSED=0
-          while [ $ELAPSED -lt $JOB_TIMEOUT ]; do
-            JOB_STATUS=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "")
-
-            case "$JOB_STATUS" in
-              "SUCCEEDED")
-                sleep 3
-                kill $LOG_PID 2>/dev/null || true
-                echo ""
-                echo "=========================================="
-                echo "✅ Job completed successfully"
-                echo "=========================================="
-                echo "SUCCEEDED" > /tmp/job-status.txt
-                exit 0
-                ;;
-              "FAILED"|"STOPPED")
-                kill $LOG_PID 2>/dev/null || true
-                echo ""
-                echo "=========================================="
-                echo "❌ Job failed: $JOB_STATUS"
-                echo "=========================================="
-                /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
-                echo "FAILED" > /tmp/job-status.txt
-                exit 1
-                ;;
-              *)
-                sleep 10
-                ELAPSED=$((ELAPSED + 10))
-                ;;
-            esac
-          done
-
-          kill $LOG_PID 2>/dev/null || true
-          echo "❌ Timeout after ${JOB_TIMEOUT}s"
-          echo "FAILED" > /tmp/job-status.txt
-          exit 1
-
-    # =========================================================================
-    # HELPER: Create run-specific ConfigMap from key=value pairs
-    # =========================================================================
-    - name: create-env-configmap
-      inputs:
-        parameters:
-          - name: name_prefix
-            default: "run-env"
-          - name: env_vars
-            description: "KEY=value pairs, comma or newline separated"
-      outputs:
-        parameters:
-          - name: configmap_name
-            valueFrom:
-              path: /tmp/configmap-name.txt
-      script:
-        image: bitnami/kubectl:latest
-        command: [bash]
-        source: |
-          set -e
-
-          NAME="{{inputs.parameters.name_prefix}}-{{workflow.uid}}"
-          ENV_VARS="{{inputs.parameters.env_vars}}"
-
-          # Parse env vars into a temp file, filtering out empty/placeholder values
-          touch /tmp/env_pairs.txt
-          echo "$ENV_VARS" | tr ',' '\n' | while IFS= read -r pair; do
-            pair=$(echo "$pair" | xargs)
-            # Skip empty, underscore placeholder, or malformed entries
-            if [ -n "$pair" ] && [ "$pair" != "_" ] && echo "$pair" | grep -q '='; then
-              echo "$pair" >> /tmp/env_pairs.txt
-            fi
-          done
-
-          # Build ConfigMap using kubectl create configmap
-          ARGS=""
-          if [ -s /tmp/env_pairs.txt ]; then
-            while IFS='=' read -r key value; do
-              if [ -n "$key" ]; then
-                ARGS="$ARGS --from-literal=${key}=${value}"
-              fi
-            done < /tmp/env_pairs.txt
-          fi
-
-          echo "Creating ConfigMap: $NAME"
-
-          if [ -n "$ARGS" ]; then
-            eval "kubectl create configmap $NAME -n mlops $ARGS --dry-run=client -o yaml" | kubectl apply -f -
-          else
-            # Create empty configmap if no env vars
-            kubectl create configmap $NAME -n mlops --dry-run=client -o yaml | kubectl apply -f -
-          fi
-
-          # Add labels
-          kubectl label configmap $NAME -n mlops workflow={{workflow.name}} workflow-uid={{workflow.uid}} --overwrite
-
-          echo -n "$NAME" > /tmp/configmap-name.txt
-          echo "✅ Created ConfigMap: $NAME"
-
-    # =========================================================================
-    # HELPER: Cleanup run-specific ConfigMap
-    # =========================================================================
-    - name: cleanup-env-configmap
-      inputs:
-        parameters:
-          - name: configmap_name
-      script:
-        image: bitnami/kubectl:latest
-        command: [sh]
-        source: |
-          kubectl delete configmap "{{inputs.parameters.configmap_name}}" -n mlops --ignore-not-found
-          echo "✅ Cleaned up ConfigMap: {{inputs.parameters.configmap_name}}"
+      resource:
+        action: create
+        successCondition: status.jobStatus == SUCCEEDED
+        failureCondition: status.jobStatus in (FAILED, STOPPED)
+        manifest: |
+          apiVersion: ray.io/v1
+          kind: RayJob
+          metadata:
+            generateName: {{inputs.parameters.job_prefix}}-
+            namespace: mlops
+            labels:
+              workflow: "{{workflow.name}}"
+              workflow-uid: "{{workflow.uid}}"
+          spec:
+            entrypoint: "{{inputs.parameters.entrypoint}}"
+            shutdownAfterJobFinishes: true
+            ttlSecondsAfterFinished: 300
+            rayClusterSpec:
+              rayVersion: "2.41.0"
+              headGroupSpec:
+                rayStartParams:
+                  dashboard-host: "0.0.0.0"
+                template:
+                  spec:
+                    containers:
+                      - name: ray-head
+                        image: "{{inputs.parameters.image}}"
+                        resources:
+                          requests:
+                            cpu: "{{inputs.parameters.cpu}}"
+                            memory: "{{inputs.parameters.memory}}"
+                          limits:
+                            cpu: "{{inputs.parameters.cpu}}"
+                            memory: "{{inputs.parameters.memory}}"
+                            nvidia.com/gpu: "{{inputs.parameters.gpu}}"
+                        envFrom:
+                          - configMapRef:
+                              name: mlops-platform-env
+                          - configMapRef:
+                              name: "{{inputs.parameters.model_configmap}}"
+                          - secretRef:
+                              name: minio-tenant-secret
+                        env:
+                          - name: ARGO_WORKFLOW_UID
+                            value: "{{workflow.uid}}"
+                          - name: ARGO_WORKFLOW_NAME
+                            value: "{{workflow.name}}"
+                          - name: DVC_DATA_VERSION
+                            value: "{{inputs.parameters.dvc_data_version}}"
+                          - name: DOCKER_IMAGE_TAG
+                            value: "{{inputs.parameters.image}}"
+                          - name: NUM_WORKERS
+                            value: "{{inputs.parameters.num_workers}}"
+              workerGroupSpecs:
+                - groupName: workers
+                  replicas: {{inputs.parameters.workers}}
+                  rayStartParams: {}
+                  template:
+                    spec:
+                      containers:
+                        - name: ray-worker
+                          image: "{{inputs.parameters.image}}"
+                          resources:
+                            requests:
+                              cpu: "{{inputs.parameters.cpu}}"
+                              memory: "{{inputs.parameters.memory}}"
+                            limits:
+                              cpu: "{{inputs.parameters.cpu}}"
+                              memory: "{{inputs.parameters.memory}}"
+                              nvidia.com/gpu: "{{inputs.parameters.gpu}}"
+                          envFrom:
+                            - configMapRef:
+                                name: mlops-platform-env
+                            - configMapRef:
+                                name: "{{inputs.parameters.model_configmap}}"
+                            - secretRef:
+                                name: minio-tenant-secret
+                          env:
+                            - name: ARGO_WORKFLOW_UID
+                              value: "{{workflow.uid}}"
+                            - name: ARGO_WORKFLOW_NAME
+                              value: "{{workflow.name}}"
+                            - name: DVC_DATA_VERSION
+                              value: "{{inputs.parameters.dvc_data_version}}"
+                            - name: DOCKER_IMAGE_TAG
+                              value: "{{inputs.parameters.image}}"
+                            - name: NUM_WORKERS
+                              value: "{{inputs.parameters.num_workers}}"

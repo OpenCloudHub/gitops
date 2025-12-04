@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlops-platform-env
+  namespace: mlops
+data:
+  MLFLOW_TRACKING_URI: "http://mlflow.mlops.svc.cluster.local:80"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wine-classifier-env
+  namespace: mlops
+data:
+  MLFLOW_EXPERIMENT_NAME: "wine-experiments"
+  MLFLOW_REGISTERED_MODEL_NAME: "ci.wine-classifier"
