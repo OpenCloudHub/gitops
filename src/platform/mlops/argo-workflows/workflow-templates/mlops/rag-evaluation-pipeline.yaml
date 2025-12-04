@@ -59,6 +59,16 @@ spec:
           - name: MLFLOW_TRACKING_INSECURE_TLS
             value: "true"
           # Database
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: demo-app-db-user
+                key: username
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: demo-app-db-user
+                key: password
           - name: DB_TABLE_NAME
             value: "readme_embeddings"
           - name: DB_TOP_K
