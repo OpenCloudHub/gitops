@@ -86,8 +86,8 @@ spec:
 
       # Environment (flexible)
       - name: extra_env
-        default: ""
-        description: "Additional env vars (KEY=value,KEY2=value2)"
+        default: "_"
+        description: "Additional env vars (KEY=value,KEY2=value2) or _ for none"
       - name: secret_refs
         default: "minio-tenant-secret"
         description: "Comma-separated secret names"
