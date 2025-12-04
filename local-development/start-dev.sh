@@ -231,6 +231,7 @@ step_wait_for_gateway_service() {
   return 1
 }
 
+# FIXME: failscurrnently
 step_start_tunnel() {
   log_step "Starting Minikube tunnel"
 
