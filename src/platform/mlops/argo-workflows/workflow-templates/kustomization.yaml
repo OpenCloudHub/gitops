@@ -4,6 +4,6 @@ kind: Kustomization
 namespace: mlops
 
 resources:
-- _utils
-- mlops
-- data
+  - _shared
+  - mlops
+  - data
