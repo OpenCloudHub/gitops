@@ -17,5 +17,6 @@ spec:
       images:
         - alias: demo-app-genai-backend-api
           imageName: opencloudhuborg/demo-app-genai-backend
+          versionConstraint: "~main"
           commonUpdateSettings:
             updateStrategy: digest
