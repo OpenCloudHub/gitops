@@ -1,4 +1,3 @@
-# src/argocd/image-updater/demo-app-backend.yaml
 apiVersion: argocd-image-updater.argoproj.io/v1alpha1
 kind: ImageUpdater
 metadata:
@@ -7,7 +6,6 @@ metadata:
 spec:
   namespace: argocd
   writeBackConfig:
-    # git:secret:<namespace>/<secret> - secret must have sshPrivateKey field
     method: "git:secret:argocd-image-updater-system/gitops-repo"
     gitConfig:
       repository: git@github.com:opencloudhub/gitops.git
@@ -15,8 +13,8 @@ spec:
   applicationRefs:
     - namePattern: "demo-app-genai-backend"
       images:
-        - alias: demo-app-genai-backend-api
-          imageName: opencloudhuborg/demo-app-genai-backend
-          versionConstraint: "~main"
+        - alias: "demo-app-genai-backend-api"
+          imageName: "opencloudhuborg/demo-app-genai-backend"
           commonUpdateSettings:
-            updateStrategy: digest
+            updateStrategy: "latest"
+            allowTags: "regexp:^main-[0-9a-f]+$"
