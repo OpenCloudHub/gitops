@@ -402,24 +402,34 @@ spec:
           NAME="{{inputs.parameters.name_prefix}}-{{workflow.uid}}"
           ENV_VARS="{{inputs.parameters.env_vars}}"
 
-          # Parse env vars into a temp file
+          # Parse env vars into a temp file, filtering out empty/placeholder values
+          touch /tmp/env_pairs.txt
           echo "$ENV_VARS" | tr ',' '\n' | while IFS= read -r pair; do
             pair=$(echo "$pair" | xargs)
-            if [ -n "$pair" ]; then
+            # Skip empty, underscore placeholder, or malformed entries
+            if [ -n "$pair" ] && [ "$pair" != "_" ] && echo "$pair" | grep -q '='; then
               echo "$pair" >> /tmp/env_pairs.txt
             fi
           done
 
           # Build ConfigMap using kubectl create configmap
           ARGS=""
-          if [ -f /tmp/env_pairs.txt ]; then
+          if [ -s /tmp/env_pairs.txt ]; then
             while IFS='=' read -r key value; do
-              ARGS="$ARGS --from-literal=${key}=${value}"
+              if [ -n "$key" ]; then
+                ARGS="$ARGS --from-literal=${key}=${value}"
+              fi
             done < /tmp/env_pairs.txt
           fi
 
           echo "Creating ConfigMap: $NAME"
-          eval "kubectl create configmap $NAME -n mlops $ARGS --dry-run=client -o yaml" | kubectl apply -f -
+
+          if [ -n "$ARGS" ]; then
+            eval "kubectl create configmap $NAME -n mlops $ARGS --dry-run=client -o yaml" | kubectl apply -f -
+          else
+            # Create empty configmap if no env vars
+            kubectl create configmap $NAME -n mlops --dry-run=client -o yaml | kubectl apply -f -
+          fi
 
           # Add labels
           kubectl label configmap $NAME -n mlops workflow={{workflow.name}} workflow-uid={{workflow.uid}} --overwrite
