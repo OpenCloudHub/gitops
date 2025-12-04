@@ -22,6 +22,7 @@ spec:
                 gpu_memory_utilization: 0.4  # 40% of GPU memory for model+KV cache
                 enforce_eager: true  # Disable CUDA graphs to reduce memory
                 use_tqdm_on_load: false
+                otlp_traces_endpoint: "grpc://k8s-monitoring-alloy-receiver.observability.svc.cluster.local:4317"
               deployment_config:
                 autoscaling_config:
                   min_replicas: 1
@@ -37,12 +38,16 @@ spec:
                   VLLM_USE_V1: "1"
                   VLLM_RAY_PER_WORKER_GPUS: "0.49"  # Must match placement_group_config
                   VLLM_DISABLE_COMPILE_CACHE: "1"  # Avoid resource contention
+                  # OpenTelemetry configuration
+                  OTEL_SERVICE_NAME: "qwen-llm-vllm"
+                  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "grpc://k8s-monitoring-alloy-receiver.observability.svc.cluster.local:4317"
+                  OTEL_EXPORTER_OTLP_TRACES_INSECURE: "true"
   rayClusterConfig:
-    rayVersion: '2.51.0'
+    rayVersion: "2.51.0"
     headGroupSpec:
       rayStartParams:
-        dashboard-host: '0.0.0.0'
-        metrics-export-port: '8080'
+        dashboard-host: "0.0.0.0"
+        metrics-export-port: "8080"
         num-cpus: "0"
         num-gpus: "0"
       template:
@@ -71,7 +76,7 @@ spec:
         maxReplicas: 1
         numOfHosts: 1
         rayStartParams:
-          num-gpus: "1"  # Worker HAS 1 physical GPU
+          num-gpus: "1" # Worker HAS 1 physical GPU
         template:
           spec:
             containers:
@@ -138,7 +143,7 @@ spec:
               type: ReplacePrefixMatch
               replacePrefixMatch: /v1
       backendRefs:
-        - group: ''
+        - group: ""
           kind: Service
           name: qwen-llm-service-serve-svc
           port: 8000
@@ -168,7 +173,7 @@ spec:
             type: PathPrefix
             value: "/"
       backendRefs:
-        - group: ''
+        - group: ""
           kind: Service
           name: qwen-llm-service-head-svc
           port: 8265

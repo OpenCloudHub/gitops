@@ -6,7 +6,6 @@ resources:
   - dashboards/k8s-dashboard-cm.yaml
   - dashboards/minio-dashboard-cm.yaml
 
-
 helmCharts:
   - name: grafana
     releaseName: grafana
@@ -16,11 +15,11 @@ helmCharts:
     valuesInline:
       # For Ray integration settings
       grafana.ini:
-          security:
-            allow_embedding: true
-          auth.anonymous:
-            enabled: true
-            org_role: Viewer
+        security:
+          allow_embedding: true
+        auth.anonymous:
+          enabled: true
+          org_role: Viewer
       persistence:
         type: pvc
         enabled: true
@@ -49,7 +48,7 @@ helmCharts:
               jsonData:
                 derivedFields:
                   - datasourceUid: tempo
-                    matcherRegex: "trace_id=(\\w+)"
+                    matcherRegex: '(?:trace_id[=:]["]*)?([a-f0-9]{32})'
                     name: TraceID
                     url: "$${__value.raw}"
 
@@ -106,62 +105,61 @@ helmCharts:
                   # customQuery: true
                   # query: '{service_name="$${__span.tags["service.name"]}"} |~ "(?i)$${__span.traceId}"'
 
-
       dashboardProviders:
         dashboardproviders.yaml:
           apiVersion: 1
           providers:
-            - name: 'default'
+            - name: "default"
               orgId: 1
-              folder: ''
+              folder: ""
               type: file
               disableDeletion: false
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/default
-            - name: 'kubernetes'
+            - name: "kubernetes"
               orgId: 1
-              folder: 'Kubernetes'
+              folder: "Kubernetes"
               type: file
               disableDeletion: false
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/kubernetes
-            - name: 'istio'
+            - name: "istio"
               orgId: 1
-              folder: 'Istio'
+              folder: "Istio"
               type: file
               disableDeletion: false
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/istio
-            - name: 'opencost'
+            - name: "opencost"
               orgId: 1
-              folder: 'Cost Management'
+              folder: "Cost Management"
               type: file
               disableDeletion: false
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/opencost
-            - name: 'ray'
+            - name: "ray"
               orgId: 1
-              folder: 'Ray'
+              folder: "Ray"
               type: file
               disableDeletion: false
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/ray
-            - name: 'storage'
+            - name: "storage"
               orgId: 1
-              folder: 'Storage'
+              folder: "Storage"
               type: file
               disableDeletion: false
               editable: true
               options:
                 path: /var/lib/grafana/dashboards/storage
-            - name: 'testing'
+            - name: "testing"
               orgId: 1
-              folder: 'Testing'
+              folder: "Testing"
               type: file
               disableDeletion: false
               editable: true
@@ -173,7 +171,7 @@ helmCharts:
           label: grafana_dashboard
           labelValue: "1"
           searchNamespace: observability
-          folderAnnotation: grafana_folder  # ← Enable folder annotations
+          folderAnnotation: grafana_folder # ← Enable folder annotations
           provider:
             foldersFromFilesStructure: true
 
