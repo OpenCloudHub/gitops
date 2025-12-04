@@ -6,4 +6,4 @@ namespace: mlops
 resources:
   - _shared
   - mlops
-  - data
+  # - data
