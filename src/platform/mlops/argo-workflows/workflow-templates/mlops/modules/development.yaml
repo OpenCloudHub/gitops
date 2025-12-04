@@ -1,0 +1,133 @@
+# =============================================================================
+# Deployment Templates
+# =============================================================================
+#
+# GitOps-based model deployment.
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: deployment-templates
+  namespace: mlops
+  annotations:
+    workflows.argoproj.io/description: "Model deployment via GitOps"
+spec:
+  serviceAccountName: workflow-executor
+
+  templates:
+    # =========================================================================
+    # DEPLOY MODEL (GitOps + MLflow tagging)
+    # =========================================================================
+    - name: deploy-model
+      inputs:
+        parameters:
+          - name: model_name
+          - name: model_uri
+          - name: serving_image
+          - name: deployed_by
+            default: "manual"
+          - name: mlflow_tracking_uri
+            default: "http://mlflow.mlops.svc.cluster.local:80"
+      steps:
+        - - name: update-gitops
+            template: update-gitops-repo
+            arguments:
+              parameters:
+                - name: model_name
+                  value: "{{inputs.parameters.model_name}}"
+                - name: model_uri
+                  value: "{{inputs.parameters.model_uri}}"
+                - name: serving_image
+                  value: "{{inputs.parameters.serving_image}}"
+
+        - - name: tag-mlflow
+            templateRef:
+              name: mlflow-templates
+              template: tag-deployment-info
+            arguments:
+              parameters:
+                - name: model_uri
+                  value: "{{inputs.parameters.model_uri}}"
+                - name: serving_image
+                  value: "{{inputs.parameters.serving_image}}"
+                - name: deployed_by
+                  value: "{{inputs.parameters.deployed_by}}"
+                - name: mlflow_tracking_uri
+                  value: "{{inputs.parameters.mlflow_tracking_uri}}"
+
+    # =========================================================================
+    # UPDATE GITOPS REPOSITORY
+    # =========================================================================
+    - name: update-gitops-repo
+      inputs:
+        parameters:
+          - name: model_name
+          - name: model_uri
+          - name: serving_image
+      volumes:
+        - name: git-secret
+          secret:
+            secretName: gitops-repo
+      script:
+        image: alpine/git:latest
+        command: [sh]
+        volumeMounts:
+          - name: git-secret
+            mountPath: /mnt/secrets
+            readOnly: true
+        source: |
+          set -e
+
+          # SSH setup
+          mkdir -p ~/.ssh
+          cat /mnt/secrets/sshPrivateKey > ~/.ssh/id_ed25519
+          echo "" >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+          MODEL_NAME="{{inputs.parameters.model_name}}"
+          MODEL_URI="{{inputs.parameters.model_uri}}"
+          SERVING_IMAGE="{{inputs.parameters.serving_image}}"
+
+          # Clean variables
+          MODEL_NAME=$(echo "$MODEL_NAME" | tr -d '\n\r\t ')
+          MODEL_URI=$(echo "$MODEL_URI" | tr -d '\n\r\t ')
+          SERVING_IMAGE=$(echo "$SERVING_IMAGE" | tr -d '\n\r\t ')
+
+          # Extract version
+          VERSION=$(echo "$MODEL_URI" | sed -n 's|.*/\([0-9]*\)$|\1|p')
+
+          echo "📦 Deployment: ${MODEL_NAME}"
+          echo "   Model: ${MODEL_URI}"
+          echo "   Image: ${SERVING_IMAGE}"
+
+          git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
+          cd /tmp/gitops
+
+          SERVICE_FILE="src/teams/ai/models-custom/${MODEL_NAME}-service.yaml"
+
+          if [ ! -f "$SERVICE_FILE" ]; then
+            echo "❌ Service file not found: $SERVICE_FILE"
+            exit 1
+          fi
+
+          # Update image
+          sed -i "s|image: opencloudhuborg/${MODEL_NAME}-serving:[a-zA-Z0-9_.-]*|image: ${SERVING_IMAGE}|g" "$SERVICE_FILE"
+
+          # Update or add model_uri
+          if grep -q "model_uri:" "$SERVICE_FILE"; then
+            sed -i "s|model_uri: \"models:/[^\"]*\"|model_uri: \"${MODEL_URI}\"|g" "$SERVICE_FILE"
+          fi
+
+          git config user.name "Argo Workflow"
+          git config user.email "workflow@opencloudhub.org"
+          git add "$SERVICE_FILE"
+
+          if git diff --cached --quiet; then
+            echo "ℹ️  No changes - already up to date"
+          else
+            git commit -m "🚀 Deploy ${MODEL_NAME} v${VERSION}"
+            git push
+            echo "✅ GitOps updated"
+          fi

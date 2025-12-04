@@ -1,0 +1,119 @@
+# =============================================================================
+# Compute Configuration Templates
+# =============================================================================
+#
+# Maps compute_type parameter to actual resource values.
+# Keep this simple - just a lookup table.
+#
+# Usage:
+#   templateRef:
+#     name: compute-templates
+#     template: map-compute-config
+#   arguments:
+#     parameters:
+#       - name: compute_type
+#         value: "gpu-small"
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: compute-templates
+  namespace: mlops
+  annotations:
+    workflows.argoproj.io/description: "Map compute type to resource specifications"
+spec:
+  templates:
+    - name: map-compute-config
+      inputs:
+        parameters:
+          - name: compute_type
+      outputs:
+        parameters:
+          - name: cpu_request
+            valueFrom:
+              path: /tmp/cpu_request.txt
+          - name: cpu_limit
+            valueFrom:
+              path: /tmp/cpu_limit.txt
+          - name: memory_request
+            valueFrom:
+              path: /tmp/memory_request.txt
+          - name: memory_limit
+            valueFrom:
+              path: /tmp/memory_limit.txt
+          - name: worker_replicas
+            valueFrom:
+              path: /tmp/worker_replicas.txt
+          - name: gpu
+            valueFrom:
+              path: /tmp/gpu.txt
+      script:
+        image: alpine:latest
+        command: [sh]
+        source: |
+          set -e
+
+          COMPUTE_TYPE="{{inputs.parameters.compute_type}}"
+
+          case "$COMPUTE_TYPE" in
+            cpu-small)
+              CPU_REQ="2"    ; CPU_LIM="3"
+              MEM_REQ="4Gi"  ; MEM_LIM="5Gi"
+              REPLICAS="1"   ; GPU="0"
+              DESC="Single small CPU node — dev and smoke tests"
+              ;;
+            cpu-small-distributed)
+              CPU_REQ="2"    ; CPU_LIM="3"
+              MEM_REQ="4Gi"  ; MEM_LIM="5Gi"
+              REPLICAS="2"   ; GPU="0"
+              DESC="Small distributed — two replicas for simple scaling"
+              ;;
+            cpu-medium)
+              CPU_REQ="4"    ; CPU_LIM="6"
+              MEM_REQ="8Gi"  ; MEM_LIM="10Gi"
+              REPLICAS="1"   ; GPU="0"
+              DESC="Medium CPU — production inference, moderate throughput"
+              ;;
+            cpu-large)
+              CPU_REQ="8"    ; CPU_LIM="12"
+              MEM_REQ="16Gi" ; MEM_LIM="20Gi"
+              REPLICAS="2"   ; GPU="0"
+              DESC="Large CPU — multi-replica heavy workloads"
+              ;;
+            gpu-small)
+              CPU_REQ="4"    ; CPU_LIM="6"
+              MEM_REQ="16Gi" ; MEM_LIM="20Gi"
+              REPLICAS="1"   ; GPU="1"
+              DESC="Single GPU — light inference or small models"
+              ;;
+            gpu-medium)
+              CPU_REQ="8"    ; CPU_LIM="12"
+              MEM_REQ="32Gi" ; MEM_LIM="40Gi"
+              REPLICAS="1"   ; GPU="1"
+              DESC="Medium GPU — larger models, moderate batch inference"
+              ;;
+            gpu-large)
+              CPU_REQ="16"   ; CPU_LIM="24"
+              MEM_REQ="64Gi" ; MEM_LIM="80Gi"
+              REPLICAS="1"   ; GPU="1"
+              DESC="Large GPU — heavy training, high-throughput inference"
+              ;;
+            *)
+              echo "❌ Unknown compute type: $COMPUTE_TYPE"
+              echo "   Valid options: cpu-small, cpu-small-distributed, cpu-medium, cpu-large, gpu-small, gpu-medium, gpu-large"
+              exit 1
+              ;;
+          esac
+
+          # Write outputs
+          echo -n "$CPU_REQ"  > /tmp/cpu_request.txt
+          echo -n "$CPU_LIM"  > /tmp/cpu_limit.txt
+          echo -n "$MEM_REQ"  > /tmp/memory_request.txt
+          echo -n "$MEM_LIM"  > /tmp/memory_limit.txt
+          echo -n "$REPLICAS" > /tmp/worker_replicas.txt
+          echo -n "$GPU"      > /tmp/gpu.txt
+
+          echo "✅ Compute: $COMPUTE_TYPE"
+          echo "   $DESC"
+          echo "   CPU: ${CPU_REQ}/${CPU_LIM}, Memory: ${MEM_REQ}/${MEM_LIM}, Workers: ${REPLICAS}, GPU: ${GPU}"

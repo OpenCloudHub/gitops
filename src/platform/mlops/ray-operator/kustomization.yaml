@@ -4,6 +4,7 @@ namespace: mlops
 
 resources:
   - pod-monitors.yaml
+  - shared-env.yaml
 
 helmCharts:
   - name: kuberay-operator
@@ -13,8 +14,8 @@ helmCharts:
     namespace: mlops
     includeCRDs: true
     valuesInline:
-      singleNamespaceInstall: false  # Must be false for multi-namespace watching
-      watchNamespace: "mlops,models"  # Watch multiple namespaces
+      singleNamespaceInstall: false # Must be false for multi-namespace watching
+      watchNamespace: "mlops,models" # Watch multiple namespaces
       metrics:
         enabled: true
       serviceMonitor:

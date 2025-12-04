@@ -1,0 +1,254 @@
+# =============================================================================
+# MLOps Pipeline
+# =============================================================================
+#
+# End-to-end ML lifecycle: train → evaluate → promote → deploy
+# Uses shared Ray templates for job execution.
+#
+# Flow:
+#   1. Map compute type → resource specs
+#   2. Create training env ConfigMap
+#   3. Submit Ray training job (via shared template)
+#   4. Compare to production, promote to staging if better
+#   5. Run staging tests
+#   6. Manual/automatic approval gate
+#   7. Promote to production
+#   8. Deploy via GitOps
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: mlops-pipeline
+  namespace: mlops
+  annotations:
+    workflows.argoproj.io/title: "MLOps Pipeline"
+    workflows.argoproj.io/description: "End-to-end ML lifecycle with automatic model comparison and promotion"
+spec:
+  serviceAccountName: workflow-executor
+  entrypoint: main
+
+  arguments:
+    parameters:
+      # Model identity
+      - name: model_name
+        description: "Model name (e.g., wine-classifier)"
+      - name: experiment_name
+        description: "MLflow experiment name"
+
+      # Training
+      - name: training_image
+        description: "Training container image"
+      - name: training_entrypoint
+        description: "Training command (e.g., python src/train.py)"
+      - name: training_args
+        default: ""
+        description: "Additional training arguments"
+
+      # Serving
+      - name: serving_image
+        description: "Serving container image"
+
+      # Data
+      - name: dvc_data_version
+        description: "DVC data version tag"
+
+      # Compute
+      - name: compute_type
+        enum:
+          [
+            cpu-small,
+            cpu-small-distributed,
+            cpu-medium,
+            cpu-large,
+            gpu-small,
+            gpu-medium,
+            gpu-large,
+          ]
+        description: "Compute configuration"
+
+      # Model comparison
+      - name: comparison_metric
+        default: "accuracy"
+        description: "Metric to compare against production"
+      - name: comparison_higher_is_better
+        default: "true"
+        description: "Whether higher metric values are better"
+      - name: comparison_threshold
+        default: "0.05"
+        description: "Minimum improvement required (e.g., 0.05 = 5%)"
+
+      # Approval
+      - name: approval_mode
+        default: "manual"
+        enum: [manual, automatic]
+        description: "Approval mode for production deployment"
+
+      # Environment (flexible)
+      - name: extra_env
+        default: ""
+        description: "Additional env vars (KEY=value,KEY2=value2)"
+      - name: secret_refs
+        default: "minio-tenant-secret"
+        description: "Comma-separated secret names"
+
+      # MLflow
+      - name: mlflow_tracking_uri
+        default: "http://mlflow.mlops.svc.cluster.local:80"
+
+  templates:
+    # =========================================================================
+    # MAIN FLOW
+    # =========================================================================
+    - name: main
+      steps:
+        # Phase 1: Map compute type to resources
+        - - name: map-compute
+            templateRef:
+              name: compute-templates
+              template: map-compute-config
+            arguments:
+              parameters:
+                - name: compute_type
+                  value: "{{workflow.parameters.compute_type}}"
+
+        # Phase 2: Create training environment ConfigMap
+        - - name: create-training-env
+            templateRef:
+              name: ray-templates
+              template: create-env-configmap
+            arguments:
+              parameters:
+                - name: name_prefix
+                  value: "train-{{workflow.parameters.model_name}}"
+                - name: env_vars
+                  value: "MLFLOW_TRACKING_URI={{workflow.parameters.mlflow_tracking_uri}},MLFLOW_EXPERIMENT_NAME={{workflow.parameters.experiment_name}},MLFLOW_REGISTERED_MODEL_NAME=ci.{{workflow.parameters.model_name}},DVC_DATA_VERSION={{workflow.parameters.dvc_data_version}},DOCKER_IMAGE_TAG={{workflow.parameters.training_image}},NUM_WORKERS={{steps.map-compute.outputs.parameters.worker_replicas}},{{workflow.parameters.extra_env}}"
+
+        # Phase 3: Submit training job
+        - - name: train
+            templateRef:
+              name: ray-templates
+              template: submit-and-wait
+            arguments:
+              parameters:
+                - name: job_prefix
+                  value: "{{workflow.parameters.model_name}}-train"
+                - name: image
+                  value: "{{workflow.parameters.training_image}}"
+                - name: entrypoint
+                  value: "{{workflow.parameters.training_entrypoint}} {{workflow.parameters.training_args}}"
+                - name: cpu_request
+                  value: "{{steps.map-compute.outputs.parameters.cpu_request}}"
+                - name: cpu_limit
+                  value: "{{steps.map-compute.outputs.parameters.cpu_limit}}"
+                - name: memory_request
+                  value: "{{steps.map-compute.outputs.parameters.memory_request}}"
+                - name: memory_limit
+                  value: "{{steps.map-compute.outputs.parameters.memory_limit}}"
+                - name: gpu
+                  value: "{{steps.map-compute.outputs.parameters.gpu}}"
+                - name: worker_replicas
+                  value: "{{steps.map-compute.outputs.parameters.worker_replicas}}"
+                - name: configmap_refs
+                  value: "{{steps.create-training-env.outputs.parameters.configmap_name}}"
+                - name: secret_refs
+                  value: "{{workflow.parameters.secret_refs}}"
+
+        # Phase 4: Compare and promote to staging
+        - - name: compare-and-promote
+            templateRef:
+              name: mlflow-templates
+              template: compare-to-production-and-promote-to-staging
+            arguments:
+              parameters:
+                - name: model_name
+                  value: "{{workflow.parameters.model_name}}"
+                - name: metric_name
+                  value: "{{workflow.parameters.comparison_metric}}"
+                - name: higher_is_better
+                  value: "{{workflow.parameters.comparison_higher_is_better}}"
+                - name: threshold
+                  value: "{{workflow.parameters.comparison_threshold}}"
+                - name: mlflow_tracking_uri
+                  value: "{{workflow.parameters.mlflow_tracking_uri}}"
+
+        # Phase 5: Run staging tests
+        - - name: test-staging
+            templateRef:
+              name: testing-templates
+              template: test-staging-model
+            arguments:
+              parameters:
+                - name: model_name
+                  value: "{{workflow.parameters.model_name}}"
+                - name: staging_version
+                  value: "{{steps.compare-and-promote.outputs.parameters.staging_version}}"
+                - name: mlflow_tracking_uri
+                  value: "{{workflow.parameters.mlflow_tracking_uri}}"
+            when: "{{steps.compare-and-promote.outputs.parameters.promoted}} == true"
+
+        # Phase 6: Approval gate (manual mode only)
+        - - name: approval
+            template: approval-gate
+            when: "'{{workflow.parameters.approval_mode}}' == 'manual' && '{{steps.compare-and-promote.outputs.parameters.promoted}}' == 'true' && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true'"
+
+        # Phase 7: Promote to production
+        - - name: promote-production
+            templateRef:
+              name: mlflow-templates
+              template: promote-staging-to-production
+            arguments:
+              parameters:
+                - name: model_name
+                  value: "{{workflow.parameters.model_name}}"
+                - name: staging_version
+                  value: "{{steps.compare-and-promote.outputs.parameters.staging_version}}"
+                - name: mlflow_tracking_uri
+                  value: "{{workflow.parameters.mlflow_tracking_uri}}"
+            when: "'{{steps.compare-and-promote.outputs.parameters.promoted}}' == 'true' && '{{steps.test-staging.outputs.parameters.test_passed}}' == 'true' && ('{{workflow.parameters.approval_mode}}' == 'automatic' || '{{steps.approval.outputs.parameters.approve}}' == 'YES')"
+
+        # Phase 8: Deploy to production
+        - - name: deploy
+            templateRef:
+              name: deployment-templates
+              template: deploy-model
+            arguments:
+              parameters:
+                - name: model_name
+                  value: "{{workflow.parameters.model_name}}"
+                - name: model_uri
+                  value: "models:/prod.{{workflow.parameters.model_name}}/{{steps.promote-production.outputs.parameters.prod_version}}"
+                - name: serving_image
+                  value: "{{workflow.parameters.serving_image}}"
+                - name: deployed_by
+                  value: "pipeline"
+                - name: mlflow_tracking_uri
+                  value: "{{workflow.parameters.mlflow_tracking_uri}}"
+            when: "'{{steps.compare-and-promote.outputs.parameters.promoted}}' == 'true'"
+
+        # Cleanup: Delete run-specific ConfigMap
+        - - name: cleanup
+            templateRef:
+              name: ray-templates
+              template: cleanup-env-configmap
+            arguments:
+              parameters:
+                - name: configmap_name
+                  value: "{{steps.create-training-env.outputs.parameters.configmap_name}}"
+
+    # =========================================================================
+    # APPROVAL GATE
+    # =========================================================================
+    - name: approval-gate
+      inputs:
+        parameters:
+          - name: approve
+            default: "NO"
+            enum: ["YES", "NO"]
+            description: "Choose YES to deploy to production"
+      outputs:
+        parameters:
+          - name: approve
+            valueFrom:
+              supplied: {}
+      suspend: {}
