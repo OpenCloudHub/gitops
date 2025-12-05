@@ -43,7 +43,8 @@ spec:
         source: |
           import os
           import subprocess
-          subprocess.run(["pip", "install", "-q", "mlflow"], check=True)
+          import sys
+          subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--root-user-action=ignore", "--disable-pip-version-check", "mlflow"], check=True, capture_output=True)
 
           import mlflow
           from mlflow.tracking import MlflowClient
@@ -58,7 +59,16 @@ spec:
           mlflow.set_tracking_uri(MLFLOW_URI)
           client = MlflowClient()
 
-          print(f"🔍 Looking for CI model from workflow {WORKFLOW_UID}")
+          print("")
+          print("==========================================")
+          print("🔍 MODEL COMPARISON")
+          print("==========================================")
+          print("")
+          print(f"  Model:     {MODEL_NAME}")
+          print(f"  Metric:    {METRIC}")
+          print(f"  Threshold: {THRESHOLD:.0%}")
+          print(f"  Workflow:  {WORKFLOW_UID[:8]}...")
+          print("")
 
           # Find the CI model registered by this workflow
           ci_model_name = f"ci.{MODEL_NAME}"
@@ -75,7 +85,10 @@ spec:
                       break
 
               if not ci_version:
-                  print(f"❌ No CI model found for workflow {WORKFLOW_UID}")
+                  print("------------------------------------------")
+                  print("❌ RESULT: No CI model found")
+                  print("------------------------------------------")
+                  print("")
                   with open("/tmp/promoted.txt", "w") as f: f.write("false")
                   with open("/tmp/staging_version.txt", "w") as f: f.write("")
                   with open("/tmp/message.txt", "w") as f: f.write("No CI model found")
@@ -83,10 +96,14 @@ spec:
 
               ci_run = client.get_run(ci_version.run_id)
               ci_metric = ci_run.data.metrics.get(METRIC)
-              print(f"📊 CI model: version {ci_version.version}, {METRIC}={ci_metric}")
+              print(f"  CI Model:  v{ci_version.version} ({METRIC}={ci_metric})")
 
           except Exception as e:
-              print(f"❌ Error finding CI model: {e}")
+              print("------------------------------------------")
+              print(f"❌ RESULT: Error finding CI model")
+              print(f"   {e}")
+              print("------------------------------------------")
+              print("")
               with open("/tmp/promoted.txt", "w") as f: f.write("false")
               with open("/tmp/staging_version.txt", "w") as f: f.write("")
               with open("/tmp/message.txt", "w") as f: f.write(str(e))
@@ -100,10 +117,15 @@ spec:
                   if "champion" in v.aliases:
                       prod_run = client.get_run(v.run_id)
                       prod_metric = prod_run.data.metrics.get(METRIC)
-                      print(f"📊 Production champion: version {v.version}, {METRIC}={prod_metric}")
+                      print(f"  Champion:  v{v.version} ({METRIC}={prod_metric})")
                       break
           except:
-              print("ℹ️ No production champion found - first deployment")
+              pass
+
+          if prod_metric is None:
+              print("  Champion:  (none - first deployment)")
+
+          print("")
 
           # Compare
           should_promote = False
@@ -119,8 +141,7 @@ spec:
               should_promote = improvement >= THRESHOLD
               message = f"Improvement: {improvement:.2%} (threshold: {THRESHOLD:.2%})"
 
-          print(f"📈 {message}")
-
+          print("------------------------------------------")
           if should_promote:
               # Copy to staging registry
               staging_version = mlflow.register_model(
@@ -128,14 +149,20 @@ spec:
                   staging_model_name
               )
               client.set_registered_model_alias(staging_model_name, "candidate", staging_version.version)
-              print(f"✅ Promoted to staging: {staging_model_name} v{staging_version.version}")
+              print(f"✅ PROMOTED TO STAGING")
+              print(f"   {staging_model_name} v{staging_version.version}")
+              print(f"   {message}")
 
               with open("/tmp/promoted.txt", "w") as f: f.write("true")
               with open("/tmp/staging_version.txt", "w") as f: f.write(staging_version.version)
           else:
-              print("⏸️ Not promoted - below threshold")
+              print(f"⏸️  NOT PROMOTED")
+              print(f"   {message}")
               with open("/tmp/promoted.txt", "w") as f: f.write("false")
               with open("/tmp/staging_version.txt", "w") as f: f.write("")
+
+          print("------------------------------------------")
+          print("")
 
           with open("/tmp/message.txt", "w") as f: f.write(message)
 
@@ -161,7 +188,8 @@ spec:
         source: |
           import os
           import subprocess
-          subprocess.run(["pip", "install", "-q", "mlflow"], check=True)
+          import sys
+          subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--root-user-action=ignore", "--disable-pip-version-check", "mlflow"], check=True, capture_output=True)
 
           import mlflow
           from mlflow.tracking import MlflowClient
@@ -176,7 +204,14 @@ spec:
           staging_model_name = f"staging.{MODEL_NAME}"
           prod_model_name = f"prod.{MODEL_NAME}"
 
-          print(f"🚀 Promoting {staging_model_name} v{STAGING_VERSION} to production")
+          print("")
+          print("==========================================")
+          print("🚀 PROMOTE TO PRODUCTION")
+          print("==========================================")
+          print("")
+          print(f"  Source:  {staging_model_name} v{STAGING_VERSION}")
+          print(f"  Target:  {prod_model_name}")
+          print("")
 
           # Move current champion to previous
           try:
@@ -185,10 +220,10 @@ spec:
                   if "champion" in v.aliases:
                       client.delete_registered_model_alias(prod_model_name, "champion")
                       client.set_registered_model_alias(prod_model_name, "previous", v.version)
-                      print(f"📦 Moved v{v.version} to @previous")
+                      print(f"  Previous champion v{v.version} → @previous")
                       break
           except Exception as e:
-              print(f"ℹ️ No existing champion: {e}")
+              print(f"  No existing champion to demote")
 
           # Copy staging to production
           prod_version = mlflow.register_model(
@@ -197,7 +232,13 @@ spec:
           )
 
           client.set_registered_model_alias(prod_model_name, "champion", prod_version.version)
-          print(f"✅ Promoted to production: {prod_model_name} v{prod_version.version} @champion")
+
+          print("")
+          print("------------------------------------------")
+          print(f"✅ PROMOTED TO PRODUCTION")
+          print(f"   {prod_model_name} v{prod_version.version} @champion")
+          print("------------------------------------------")
+          print("")
 
           with open("/tmp/prod_version.txt", "w") as f:
               f.write(prod_version.version)
@@ -220,8 +261,9 @@ spec:
         source: |
           import os
           import subprocess
+          import sys
           from datetime import datetime
-          subprocess.run(["pip", "install", "-q", "mlflow"], check=True)
+          subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--root-user-action=ignore", "--disable-pip-version-check", "mlflow"], check=True, capture_output=True)
 
           import mlflow
           from mlflow.tracking import MlflowClient
@@ -230,6 +272,7 @@ spec:
           MODEL_URI = "{{inputs.parameters.model_uri}}"
           SERVING_IMAGE = "{{inputs.parameters.serving_image}}"
           DEPLOYED_BY = "{{inputs.parameters.deployed_by}}"
+          WORKFLOW_NAME = "{{workflow.name}}"
 
           mlflow.set_tracking_uri(MLFLOW_URI)
           client = MlflowClient()
@@ -239,13 +282,30 @@ spec:
           model_name = parts[0]
           version = parts[1].replace("@", "")
 
-          print(f"🏷️ Tagging {model_name} v{version}")
+          print("")
+          print("==========================================")
+          print("🏷️  TAG DEPLOYMENT INFO")
+          print("==========================================")
+          print("")
+          print(f"  Model:    {model_name} v{version}")
+          print(f"  Image:    {SERVING_IMAGE}")
+          print(f"  Workflow: {WORKFLOW_NAME}")
+          print("")
 
           try:
-              client.set_model_version_tag(model_name, version, "deployed_at", datetime.utcnow().isoformat())
+              deployed_at = datetime.utcnow().isoformat()
+              client.set_model_version_tag(model_name, version, "deployed_at", deployed_at)
               client.set_model_version_tag(model_name, version, "deployed_by", DEPLOYED_BY)
               client.set_model_version_tag(model_name, version, "serving_image", SERVING_IMAGE)
-              client.set_model_version_tag(model_name, version, "workflow_name", "{{workflow.name}}")
-              print(f"✅ Tagged deployment info")
+              client.set_model_version_tag(model_name, version, "workflow_name", WORKFLOW_NAME)
+
+              print("------------------------------------------")
+              print("✅ TAGGED SUCCESSFULLY")
+              print(f"   deployed_at: {deployed_at}")
+              print("------------------------------------------")
+              print("")
           except Exception as e:
-              print(f"⚠️ Could not tag model: {e}")
+              print("------------------------------------------")
+              print(f"⚠️  TAGGING FAILED: {e}")
+              print("------------------------------------------")
+              print("")
