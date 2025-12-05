@@ -34,20 +34,22 @@ spec:
         command: [python]
         source: |
           import os
+          from mlflow import MlflowClient
+          import mlflow
 
           model_name = "{{inputs.parameters.model_name}}"
           staging_version = "{{inputs.parameters.staging_version}}"
           mlflow_uri = "{{inputs.parameters.mlflow_tracking_uri}}"
 
-          print(f"🧪 Testing staging model: staging.{model_name}/v{staging_version}")
-          print(f"   MLflow: {mlflow_uri}")
           print("")
-
-          # TODO: Implement actual model tests
-          # For now, basic validation that model exists and is loadable
-
-          from mlflow import MlflowClient
-          import mlflow
+          print("==========================================")
+          print("🧪 TEST STAGING MODEL")
+          print("==========================================")
+          print("")
+          print(f"  Model:   staging.{model_name}")
+          print(f"  Version: v{staging_version}")
+          print(f"  MLflow:  {mlflow_uri}")
+          print("")
 
           mlflow.set_tracking_uri(mlflow_uri)
           client = MlflowClient(mlflow_uri)
@@ -55,18 +57,31 @@ spec:
           try:
               # Verify model version exists
               mv = client.get_model_version(f"staging.{model_name}", staging_version)
-              print(f"✅ Model version exists: {mv.name}/v{mv.version}")
-              print(f"   Status: {mv.status}")
-              print(f"   Run ID: {mv.run_id}")
+              print(f"  Status:  {mv.status}")
+              print(f"  Run ID:  {mv.run_id[:8]}...")
+              print("")
+
+              # TODO: Implement actual model tests
+              # For now, basic validation that model exists and is loadable
 
               # Basic validation passed
               test_passed = True
-              print("")
-              print("✅ All tests passed")
+
+              print("------------------------------------------")
+              print("✅ ALL TESTS PASSED")
+              print("------------------------------------------")
 
           except Exception as e:
-              print(f"❌ Test failed: {e}")
               test_passed = False
+              print("------------------------------------------")
+              print("❌ TESTS FAILED")
+              print(f"   {e}")
+              print("------------------------------------------")
+
+          print("")
+          print("==========================================")
+          print("==========================================")
+          print("")
 
           with open("/tmp/test_passed.txt", "w") as f:
               f.write("true" if test_passed else "false")

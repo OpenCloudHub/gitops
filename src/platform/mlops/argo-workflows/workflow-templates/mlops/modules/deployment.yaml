@@ -95,9 +95,15 @@ spec:
           # Extract version
           VERSION=$(echo "$MODEL_URI" | sed -n 's|.*/\([0-9]*\)$|\1|p')
 
-          echo "📦 Deployment: ${MODEL_NAME}"
-          echo "   Model: ${MODEL_URI}"
-          echo "   Image: ${SERVING_IMAGE}"
+          echo ""
+          echo "=========================================="
+          echo "📦 UPDATE GITOPS REPO"
+          echo "=========================================="
+          echo ""
+          echo "  Model:   ${MODEL_NAME}"
+          echo "  URI:     ${MODEL_URI}"
+          echo "  Image:   ${SERVING_IMAGE}"
+          echo ""
 
           git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
@@ -105,9 +111,16 @@ spec:
           SERVICE_FILE="src/teams/ai/models-custom/${MODEL_NAME}-service.yaml"
 
           if [ ! -f "$SERVICE_FILE" ]; then
-            echo "❌ Service file not found: $SERVICE_FILE"
+            echo "------------------------------------------"
+            echo "❌ FAILED: Service file not found"
+            echo "   $SERVICE_FILE"
+            echo "------------------------------------------"
+            echo ""
             exit 1
           fi
+
+          echo "  File:    ${SERVICE_FILE}"
+          echo ""
 
           # Update image
           sed -i "s|image: opencloudhuborg/${MODEL_NAME}-serving:[a-zA-Z0-9_.-]*|image: ${SERVING_IMAGE}|g" "$SERVICE_FILE"
@@ -121,10 +134,18 @@ spec:
           git config user.email "workflow@opencloudhub.org"
           git add "$SERVICE_FILE"
 
+          echo "------------------------------------------"
           if git diff --cached --quiet; then
-            echo "ℹ️  No changes - already up to date"
+            echo "ℹ️  NO CHANGES"
+            echo "   Already up to date"
           else
             git commit -m "🚀 Deploy ${MODEL_NAME} v${VERSION}"
             git push
-            echo "✅ GitOps updated"
+            echo "✅ GITOPS UPDATED"
+            echo "   Committed: Deploy ${MODEL_NAME} v${VERSION}"
           fi
+          echo "------------------------------------------"
+          echo ""
+          echo "=========================================="
+          echo "=========================================="
+          echo ""
