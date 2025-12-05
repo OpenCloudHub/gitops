@@ -84,7 +84,7 @@ spec:
                   value: "{{inputs.parameters.dvc_data_version}}"
 
           - name: stream-job
-            dependencies: [submit]
+            dependencies: [submit-job]
             template: stream-rayjob
             arguments:
               parameters:
