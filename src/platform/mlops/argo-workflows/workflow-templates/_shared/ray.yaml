@@ -199,7 +199,7 @@ spec:
             valueFrom:
               path: /tmp/job_status.txt
       script:
-        image: rayproject/ray:2.41.0-py312
+        image: bitnami/kubectl:latest
         command: [bash]
         source: |
           set -e
@@ -209,83 +209,53 @@ spec:
 
           echo "PENDING" > /tmp/job_status.txt
 
-          # Install kubectl
-          wget -q "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl" -O /tmp/kubectl
-          chmod +x /tmp/kubectl
-
           echo "=========================================="
           echo "📋 RayJob: $JOB_NAME"
           echo "=========================================="
 
-          # Wait for job to initialize AND start running
-          echo "⏳ Waiting for job to start..."
+          # Wait for submitter pod to exist and be running
+          echo "⏳ Waiting for submitter pod..."
           ELAPSED=0
-          while [ $ELAPSED -lt 300 ]; do
-            RAY_JOB_ID=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
-            CLUSTER_NAME=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}' 2>/dev/null || echo "")
-            JOB_STATUS=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "")
-            DEPLOY_STATUS=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
+          SUBMITTER_POD=""
+          while [ $ELAPSED -lt 120 ]; do
+            # Submitter pod is {JOB_NAME}-{suffix}, excluding head/worker pods
+            SUBMITTER_POD=$(kubectl get pods -n mlops -o name 2>/dev/null | grep "^pod/${JOB_NAME}-" | grep -v -- "-head-" | grep -v -- "-worker" | head -1 | sed 's|pod/||' || echo "")
 
-            echo "   Status: deploy=$DEPLOY_STATUS job=$JOB_STATUS (${ELAPSED}s)"
-
-            if [ "$DEPLOY_STATUS" = "Failed" ] || [ "$JOB_STATUS" = "FAILED" ]; then
-              echo "❌ RayJob failed"
-              /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
-              echo "FAILED" > /tmp/job_status.txt
-              exit 1
+            if [ -n "$SUBMITTER_POD" ]; then
+              POD_PHASE=$(kubectl get pod -n mlops "$SUBMITTER_POD" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+              echo "   Found: $SUBMITTER_POD (phase: $POD_PHASE)"
+              if [ "$POD_PHASE" = "Running" ] || [ "$POD_PHASE" = "Succeeded" ]; then
+                break
+              fi
             fi
 
-            # Wait until job is actually RUNNING
-            if [ -n "$RAY_JOB_ID" ] && [ -n "$CLUSTER_NAME" ] && [ "$JOB_STATUS" = "RUNNING" ]; then
-              break
-            fi
-
-            # Also break if already succeeded (fast jobs)
-            if [ "$JOB_STATUS" = "SUCCEEDED" ]; then
-              echo "✅ Job completed quickly"
-              echo "SUCCEEDED" > /tmp/job_status.txt
-              exit 0
-            fi
-
-            sleep 5
-            ELAPSED=$((ELAPSED + 5))
+            sleep 3
+            ELAPSED=$((ELAPSED + 3))
           done
 
-          if [ -z "$RAY_JOB_ID" ] || [ -z "$CLUSTER_NAME" ]; then
-            echo "❌ Timeout waiting for job to initialize"
-            /tmp/kubectl describe rayjob -n mlops "$JOB_NAME"
+          if [ -z "$SUBMITTER_POD" ]; then
+            echo "❌ Could not find submitter pod after ${ELAPSED}s"
+            echo "Available pods:"
+            kubectl get pods -n mlops | grep "$JOB_NAME" || echo "(none)"
             echo "FAILED" > /tmp/job_status.txt
             exit 1
           fi
 
-          RAY_ADDRESS="http://${CLUSTER_NAME}-head-svc.mlops.svc.cluster.local:8265"
-
           echo ""
-          echo "🚀 Job running:"
-          echo "   Ray Job ID: $RAY_JOB_ID"
-          echo "   Cluster:    $CLUSTER_NAME"
-          echo "   Address:    $RAY_ADDRESS"
-
-          # Find submitter pod - it's {JOB_NAME}-{suffix} but NOT containing head/worker
-          SUBMITTER_POD=$(/tmp/kubectl get pods -n mlops -o name | grep "^pod/${JOB_NAME}-" | grep -v "\-head-" | grep -v "\-worker" | head -1 | sed 's|pod/||')
-
-          if [ -n "$SUBMITTER_POD" ]; then
-            echo "   Submitter:  $SUBMITTER_POD"
-          fi
-
+          echo "🚀 Streaming logs from: $SUBMITTER_POD"
           echo ""
           echo "=========================================="
           echo "📝 TRAINING LOGS"
           echo "=========================================="
 
-          # Stream logs using ray CLI
-          ray job logs "$RAY_JOB_ID" --address "$RAY_ADDRESS" --follow
+          # Stream logs - follows until pod completes
+          kubectl logs -n mlops -f "$SUBMITTER_POD" 2>&1 || true
 
           echo ""
           echo "=========================================="
 
           # Check final status
-          FINAL_STATUS=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobStatus}')
+          FINAL_STATUS=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "UNKNOWN")
 
           if [ "$FINAL_STATUS" = "SUCCEEDED" ]; then
             echo "✅ Training completed successfully"
@@ -293,7 +263,11 @@ spec:
             exit 0
           else
             echo "❌ Training failed: $FINAL_STATUS"
-            /tmp/kubectl describe rayjob -n mlops "$JOB_NAME" | tail -30
+            kubectl describe rayjob -n mlops "$JOB_NAME" | tail -30
             echo "FAILED" > /tmp/job_status.txt
             exit 1
           fi
+
+          echo "=========================================="
+          echo "=========================================="
+          echo ""
