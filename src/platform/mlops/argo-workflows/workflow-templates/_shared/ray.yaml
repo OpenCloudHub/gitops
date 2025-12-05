@@ -1,24 +1,6 @@
 # =============================================================================
 # Shared Ray Job Templates
 # =============================================================================
-#
-# Contract:
-#   Platform provides:
-#     - Tracking env vars (ARGO_WORKFLOW_UID, DOCKER_IMAGE_TAG, etc.)
-#     - Platform config (MLFLOW_TRACKING_URI via ConfigMap)
-#     - Model config (experiment/registry names via ConfigMap)
-#     - Secrets (MinIO credentials)
-#     - Compute resources (from compute-templates)
-#
-#   AI Team provides:
-#     - Training image (code baked in)
-#     - Entrypoint + training_args (hyperparameters, model config)
-#
-# Prerequisites:
-#   - ConfigMap: mlops-platform-env
-#   - ConfigMap: {model_name}-env
-#   - Secret: minio-tenant-secret
-# =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
@@ -27,6 +9,9 @@ metadata:
   namespace: mlops
 spec:
   templates:
+    # =========================================================================
+    # MAIN: Submit and wait with log streaming
+    # =========================================================================
     - name: training-job
       inputs:
         parameters:
@@ -48,12 +33,66 @@ spec:
         parameters:
           - name: job_name
             valueFrom:
+              parameter: "{{steps.submit.outputs.parameters.job_name}}"
+          - name: job_status
+            valueFrom:
+              parameter: "{{steps.wait.outputs.parameters.job_status}}"
+
+      steps:
+        - - name: submit
+            template: submit-rayjob
+            arguments:
+              parameters:
+                - name: job_prefix
+                  value: "{{inputs.parameters.job_prefix}}"
+                - name: image
+                  value: "{{inputs.parameters.image}}"
+                - name: entrypoint
+                  value: "{{inputs.parameters.entrypoint}}"
+                - name: model_configmap
+                  value: "{{inputs.parameters.model_configmap}}"
+                - name: cpu
+                  value: "{{inputs.parameters.cpu}}"
+                - name: memory
+                  value: "{{inputs.parameters.memory}}"
+                - name: gpu
+                  value: "{{inputs.parameters.gpu}}"
+                - name: replicas
+                  value: "{{inputs.parameters.replicas}}"
+                - name: dvc_data_version
+                  value: "{{inputs.parameters.dvc_data_version}}"
+
+        - - name: wait
+            template: stream-and-wait
+            arguments:
+              parameters:
+                - name: job_name
+                  value: "{{steps.submit.outputs.parameters.job_name}}"
+
+    # =========================================================================
+    # SUBMIT: Create RayJob (resource template - clean, no kubectl)
+    # =========================================================================
+    - name: submit-rayjob
+      inputs:
+        parameters:
+          - name: job_prefix
+          - name: image
+          - name: entrypoint
+          - name: model_configmap
+          - name: cpu
+          - name: memory
+          - name: gpu
+          - name: replicas
+          - name: dvc_data_version
+
+      outputs:
+        parameters:
+          - name: job_name
+            valueFrom:
               jsonPath: "{.metadata.name}"
 
       resource:
         action: create
-        successCondition: status.jobStatus == SUCCEEDED
-        failureCondition: status.jobStatus in (FAILED, STOPPED)
         manifest: |
           apiVersion: ray.io/v1
           kind: RayJob
@@ -138,3 +177,117 @@ spec:
                               value: "{{inputs.parameters.dvc_data_version}}"
                             - name: REPLICAS
                               value: "{{inputs.parameters.replicas}}"
+
+    # =========================================================================
+    # WAIT: Stream logs while waiting for completion
+    # =========================================================================
+    - name: stream-and-wait
+      inputs:
+        parameters:
+          - name: job_name
+          - name: timeout
+            default: "3600"
+      outputs:
+        parameters:
+          - name: job_status
+            valueFrom:
+              path: /tmp/job_status.txt
+      script:
+        image: rayproject/ray:2.41.0-py312
+        command: [bash]
+        source: |
+          set -e
+
+          JOB_NAME="{{inputs.parameters.job_name}}"
+          TIMEOUT="{{inputs.parameters.timeout}}"
+
+          echo "PENDING" > /tmp/job_status.txt
+
+          # Install kubectl
+          curl -sLO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
+          chmod +x kubectl && mv kubectl /usr/local/bin/
+
+          echo "=========================================="
+          echo "📋 RayJob: $JOB_NAME"
+          echo "=========================================="
+
+          # Wait for job to initialize and get Ray cluster info
+          ELAPSED=0
+          while [ $ELAPSED -lt 300 ]; do
+            RAY_JOB_ID=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
+            CLUSTER_NAME=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.rayClusterName}' 2>/dev/null || echo "")
+            DEPLOY_STATUS=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobDeploymentStatus}' 2>/dev/null || echo "")
+
+            if [ "$DEPLOY_STATUS" = "Failed" ]; then
+              echo "❌ RayJob deployment failed"
+              kubectl describe rayjob -n mlops "$JOB_NAME"
+              echo "FAILED" > /tmp/job_status.txt
+              exit 1
+            fi
+
+            if [ -n "$RAY_JOB_ID" ] && [ -n "$CLUSTER_NAME" ]; then
+              break
+            fi
+
+            echo "⏳ Waiting for Ray cluster... (${ELAPSED}s)"
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+
+          if [ -z "$RAY_JOB_ID" ] || [ -z "$CLUSTER_NAME" ]; then
+            echo "❌ Timeout waiting for Ray cluster"
+            echo "FAILED" > /tmp/job_status.txt
+            exit 1
+          fi
+
+          RAY_ADDRESS="http://${CLUSTER_NAME}-head-svc.mlops.svc.cluster.local:8265"
+          echo ""
+          echo "🚀 Job initialized:"
+          echo "   Ray Job ID: $RAY_JOB_ID"
+          echo "   Cluster:    $CLUSTER_NAME"
+          echo "   Dashboard:  $RAY_ADDRESS"
+          echo ""
+          echo "=========================================="
+          echo "📝 TRAINING LOGS"
+          echo "=========================================="
+
+          # Stream logs in background
+          ray job logs "$RAY_JOB_ID" --address "$RAY_ADDRESS" --follow 2>/dev/null &
+          LOG_PID=$!
+
+          # Poll for completion
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            JOB_STATUS=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "")
+
+            case "$JOB_STATUS" in
+              "SUCCEEDED")
+                sleep 2  # Let final logs flush
+                kill $LOG_PID 2>/dev/null || true
+                echo ""
+                echo "=========================================="
+                echo "✅ Training completed successfully"
+                echo "=========================================="
+                echo "SUCCEEDED" > /tmp/job_status.txt
+                exit 0
+                ;;
+              "FAILED"|"STOPPED")
+                kill $LOG_PID 2>/dev/null || true
+                echo ""
+                echo "=========================================="
+                echo "❌ Training failed: $JOB_STATUS"
+                echo "=========================================="
+                kubectl describe rayjob -n mlops "$JOB_NAME" | tail -50
+                echo "FAILED" > /tmp/job_status.txt
+                exit 1
+                ;;
+            esac
+
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+
+          kill $LOG_PID 2>/dev/null || true
+          echo "❌ Timeout after ${TIMEOUT}s"
+          echo "FAILED" > /tmp/job_status.txt
+          exit 1

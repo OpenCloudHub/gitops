@@ -69,7 +69,7 @@ spec:
           AWS_ACCESS_KEY_ID: "{{ .accesskey }}"
           AWS_SECRET_ACCESS_KEY: "{{ .secretkey }}"
           AWS_ENDPOINT_URL: "https://minio-api.internal.opencloudhub.org"
-          # MinIO config.env format (for MinIO operator if needed)
+          # MinIO config.env format (for MinIO operator)
           config.env: |
             export MINIO_ROOT_USER={{ .accesskey }}
             export MINIO_ROOT_PASSWORD={{ .secretkey }}

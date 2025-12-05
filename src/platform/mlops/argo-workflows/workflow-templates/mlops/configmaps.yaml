@@ -16,7 +16,7 @@ metadata:
   namespace: mlops
 data:
   MLFLOW_EXPERIMENT_NAME: "wine-quality"
-  MLFLOW_REGISTERED_MODEL_NAME: "wine-classifier"
+  MLFLOW_REGISTERED_MODEL_NAME: "ci.wine-classifier" # Downstream tasks loog for that ci.<model_name>
 
   DVC_DATA_PATH: "data/wine-quality/processed/wine-quality.csv"
   DVC_METRICS_PATH: "data/wine-quality/metadata.json"
