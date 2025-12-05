@@ -1,7 +1,5 @@
 githubConfigUrl: "https://github.com/OpenCloudHub"
-githubConfigSecret:
-  name: arc-github-secret
-  namespace: arc-systems
+githubConfigSecret: arc-github-secret
 minRunners: 0
 maxRunners: 2
 controllerServiceAccount:

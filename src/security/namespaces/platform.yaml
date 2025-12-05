@@ -238,11 +238,9 @@ metadata:
   name: arc-systems
   labels:
     istio.io/dataplane-mode: none
-    opencloudhub.org/secret-arc: "true"
   annotations:
     opencloudhub.org/description: "GitHub Actions Runner Controller"
     opencloudhub.org/mesh-reason: "Controller - reconciles runner scale sets, no inbound service traffic"
-
 ---
 apiVersion: v1
 kind: Namespace
@@ -250,6 +248,7 @@ metadata:
   name: arc-runners
   labels:
     istio.io/dataplane-mode: none
+    opencloudhub.org/secret-arc: "true"
   annotations:
     opencloudhub.org/description: "Ephemeral GitHub Actions runner pods"
     opencloudhub.org/mesh-reason: "Ephemeral pods - mesh startup delay slows CI job execution"
