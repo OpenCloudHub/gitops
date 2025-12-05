@@ -146,23 +146,45 @@ spec:
             exit 1
           fi
 
-          # Update image tag
+          # ===============================================================
+          # UPDATE IMAGE TAG
+          # ===============================================================
           sed -i "s|image: opencloudhuborg/${MODEL_NAME}-serving:[a-zA-Z0-9_.-]*|image: ${SERVING_IMAGE}|g" "$SERVICE_FILE"
 
-          # Update or add model_uri annotation
-          if grep -q "model_uri:" "$SERVICE_FILE"; then
-            # Update existing model_uri
-            sed -i "s|model_uri: \"models:/[^\"]*\"|model_uri: \"${MODEL_URI}\"|g" "$SERVICE_FILE"
-          else
-            # Add model_uri as annotation if not present
-            # Insert after 'annotations:' line, or after 'metadata:' if no annotations
-            if grep -q "^  annotations:" "$SERVICE_FILE"; then
-              sed -i "/^  annotations:/a\\    model_uri: \"${MODEL_URI}\"" "$SERVICE_FILE"
-            elif grep -q "^metadata:" "$SERVICE_FILE"; then
-              sed -i "/^metadata:/a\\  annotations:\\n    model_uri: \"${MODEL_URI}\"" "$SERVICE_FILE"
+          # ===============================================================
+          # UPDATE MODEL_URI IN USER_CONFIG
+          # ===============================================================
+          # Three cases:
+          #   1. user_config + model_uri exist → update model_uri
+          #   2. user_config exists, no model_uri → add model_uri line
+          #   3. no user_config → add user_config block after deployment name
+
+          if grep -q "user_config:" "$SERVICE_FILE"; then
+            if grep -q "model_uri:" "$SERVICE_FILE"; then
+              # Case 1: Update existing model_uri
+              sed -i "s|model_uri: \"models:/[^\"]*\"|model_uri: \"${MODEL_URI}\"|g" "$SERVICE_FILE"
+            else
+              # Case 2: Add model_uri after user_config line
+              sed -i "/user_config:/a\\              model_uri: \"${MODEL_URI}\"" "$SERVICE_FILE"
             fi
+          else
+            # Case 3: Add user_config block after first deployment's "- name:" line
+            awk -v model_uri="${MODEL_URI}" '
+              /deployments:/ { in_deployments = 1 }
+              in_deployments && /^[[:space:]]*- name:/ && !added {
+                print
+                print "            user_config:"
+                print "              model_uri: \"" model_uri "\""
+                added = 1
+                next
+              }
+              { print }
+            ' "$SERVICE_FILE" > "${SERVICE_FILE}.tmp" && mv "${SERVICE_FILE}.tmp" "$SERVICE_FILE"
           fi
 
+          # ===============================================================
+          # COMMIT AND PUSH
+          # ===============================================================
           git config user.name "Argo Workflow"
           git config user.email "workflow@opencloudhub.org"
           git add "$SERVICE_FILE"
@@ -175,6 +197,9 @@ spec:
             STATUS="✅ GITOPS UPDATED - Pushed: deploy(${MODEL_NAME}) v${VERSION}"
           fi
 
+          # ===============================================================
+          # REPORT
+          # ===============================================================
           {
             echo ""
             echo "##################################################"
