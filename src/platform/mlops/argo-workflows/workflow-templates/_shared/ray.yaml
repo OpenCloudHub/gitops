@@ -248,25 +248,40 @@ spec:
           echo "   Cluster:    $CLUSTER_NAME"
           echo ""
 
-          # Wait for head pod to be ready
-          echo "⏳ Waiting for head pod..."
-          kubectl wait --for=condition=ready pod \
-            -l ray.io/cluster=${CLUSTER_NAME},ray.io/node-type=head \
-            -n mlops --timeout=120s
+          # Wait for submitter pod to be ready
+          echo "⏳ Waiting for job submitter pod..."
+          sleep 5
 
-          HEAD_POD=$(kubectl get pods -n mlops \
-            -l ray.io/cluster=${CLUSTER_NAME},ray.io/node-type=head \
-            -o jsonpath='{.items[0].metadata.name}')
+          # Find the submitter pod (it has the ray-job-submitter container)
+          SUBMITTER_POD=""
+          ELAPSED=0
+          while [ $ELAPSED -lt 60 ]; do
+            SUBMITTER_POD=$(kubectl get pods -n mlops \
+              -l ray.io/cluster=${CLUSTER_NAME} \
+              -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.containers[*].name}{"\n"}{end}' \
+              | grep "ray-job-submitter" | awk '{print $1}' | head -1)
 
-          echo "   Head Pod:   $HEAD_POD"
-          echo ""
-          echo "=========================================="
-          echo "📝 TRAINING LOGS"
-          echo "=========================================="
+            if [ -n "$SUBMITTER_POD" ]; then
+              break
+            fi
 
-          # Stream logs from head pod in background
-          kubectl logs -n mlops -f "$HEAD_POD" -c ray-head 2>/dev/null &
-          LOG_PID=$!
+            sleep 3
+            ELAPSED=$((ELAPSED + 3))
+          done
+
+          if [ -z "$SUBMITTER_POD" ]; then
+            echo "⚠️ Could not find submitter pod, falling back to status polling only"
+          else
+            echo "   Submitter:  $SUBMITTER_POD"
+            echo ""
+            echo "=========================================="
+            echo "📝 TRAINING LOGS"
+            echo "=========================================="
+
+            # Stream logs from submitter pod in background
+            kubectl logs -n mlops -f "$SUBMITTER_POD" -c ray-job-submitter 2>&1 &
+            LOG_PID=$!
+          fi
 
           # Poll for completion
           ELAPSED=0
@@ -275,8 +290,8 @@ spec:
 
             case "$JOB_STATUS" in
               "SUCCEEDED")
-                sleep 3  # Let final logs flush
-                kill $LOG_PID 2>/dev/null || true
+                sleep 3
+                [ -n "${LOG_PID:-}" ] && kill $LOG_PID 2>/dev/null || true
                 echo ""
                 echo "=========================================="
                 echo "✅ Training completed successfully"
@@ -286,7 +301,7 @@ spec:
                 ;;
               "FAILED"|"STOPPED")
                 sleep 2
-                kill $LOG_PID 2>/dev/null || true
+                [ -n "${LOG_PID:-}" ] && kill $LOG_PID 2>/dev/null || true
                 echo ""
                 echo "=========================================="
                 echo "❌ Training failed: $JOB_STATUS"
@@ -301,7 +316,7 @@ spec:
             ELAPSED=$((ELAPSED + 5))
           done
 
-          kill $LOG_PID 2>/dev/null || true
+          [ -n "${LOG_PID:-}" ] && kill $LOG_PID 2>/dev/null || true
           echo "❌ Timeout after ${TIMEOUT}s"
           echo "FAILED" > /tmp/job_status.txt
           exit 1
