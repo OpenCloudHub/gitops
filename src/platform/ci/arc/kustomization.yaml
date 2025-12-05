@@ -15,9 +15,9 @@ helmCharts:
     includeCRDs: true
     valuesInline:
       metrics:
-      controllerManagerAddr: ":8080"
-      listenerAddr: ":8080"
-      listenerEndpoint: "/metrics"
+        controllerManagerAddr: "0.0.0.0:8080"
+        listenerAddr: "0.0.0.0:8080"
+        listenerEndpoint: "/metrics"
 
   # Runner Scale Set
   - name: gha-runner-scale-set
