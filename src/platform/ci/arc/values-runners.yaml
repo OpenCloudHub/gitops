@@ -2,3 +2,7 @@ githubConfigUrl: "https://github.com/OpenCloudHub"
 githubConfigSecret: arc-github-secret
 minRunners: 0
 maxRunners: 2
+
+controllerServiceAccount:
+  namespace: arc-systems
+  name: arc-gha-runner-scale-set-controller
