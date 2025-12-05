@@ -90,8 +90,8 @@ spec:
                   value: "{{steps.map-compute.outputs.parameters.memory_request}}"
                 - name: gpu
                   value: "{{steps.map-compute.outputs.parameters.gpu}}"
-                - name: workers
-                  value: "{{steps.map-compute.outputs.parameters.worker_replicas}}"
+                - name: replicas
+                  value: "{{steps.map-compute.outputs.parameters.replicas}}"
                 - name: dvc_data_version
                   value: "{{workflow.parameters.dvc_data_version}}"
 

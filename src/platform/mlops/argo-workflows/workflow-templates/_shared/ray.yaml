@@ -1,13 +1,22 @@
 # =============================================================================
-# Shared Ray Job Templates (Simplified)
+# Shared Ray Job Templates
 # =============================================================================
 #
-# Uses Argo's native resource template - no kubectl, no scripts.
-# Environment configured via static ConfigMaps + dynamic parameters.
+# Contract:
+#   Platform provides:
+#     - Tracking env vars (ARGO_WORKFLOW_UID, DOCKER_IMAGE_TAG, etc.)
+#     - Platform config (MLFLOW_TRACKING_URI via ConfigMap)
+#     - Model config (experiment/registry names via ConfigMap)
+#     - Secrets (MinIO credentials)
+#     - Compute resources (from compute-templates)
+#
+#   AI Team provides:
+#     - Training image (code baked in)
+#     - Entrypoint + training_args (hyperparameters, model config)
 #
 # Prerequisites:
-#   - ConfigMap: mlops-platform-env (MLFLOW_TRACKING_URI)
-#   - ConfigMap: <model>-env (model-specific config)
+#   - ConfigMap: mlops-platform-env
+#   - ConfigMap: {model_name}-env
 #   - Secret: minio-tenant-secret
 # =============================================================================
 
@@ -18,9 +27,6 @@ metadata:
   namespace: mlops
 spec:
   templates:
-    # =========================================================================
-    # MAIN: Submit RayJob and wait for completion
-    # =========================================================================
     - name: training-job
       inputs:
         parameters:
@@ -29,25 +35,21 @@ spec:
           - name: image
           - name: entrypoint
 
-          # Model config
+          # Model config (references ConfigMap by name)
           - name: model_configmap
-            description: "Model-specific ConfigMap (e.g., wine-classifier-env)"
 
-          # Compute resources
+          # Compute (from compute-templates)
           - name: cpu
             default: "2"
           - name: memory
             default: "4Gi"
           - name: gpu
             default: "0"
-          - name: workers
+          - name: replicas
             default: "1"
 
-          # Dynamic run values
+          # Data version (for traceability)
           - name: dvc_data_version
-            default: ""
-          - name: num_workers
-            default: "1"
 
       outputs:
         parameters:
@@ -73,7 +75,7 @@ spec:
             shutdownAfterJobFinishes: true
             ttlSecondsAfterFinished: 300
             rayClusterSpec:
-              rayVersion: "2.41.0"
+              rayVersion: "2.41.0"  # TODO: bumps
               headGroupSpec:
                 rayStartParams:
                   dashboard-host: "0.0.0.0"
@@ -91,26 +93,31 @@ spec:
                             memory: "{{inputs.parameters.memory}}"
                             nvidia.com/gpu: "{{inputs.parameters.gpu}}"
                         envFrom:
+                          # Platform config (MLFLOW_TRACKING_URI)
                           - configMapRef:
                               name: mlops-platform-env
+                          # Model config (MLFLOW_EXPERIMENT_NAME, MLFLOW_REGISTERED_MODEL_NAME)
                           - configMapRef:
                               name: "{{inputs.parameters.model_configmap}}"
+                          # Secrets (AWS_* for MinIO/DVC)
                           - secretRef:
                               name: minio-tenant-secret
                         env:
+                          # ===== TRACKING (AI team MUST use these for MLflow tagging) =====
                           - name: ARGO_WORKFLOW_UID
                             value: "{{workflow.uid}}"
                           - name: ARGO_WORKFLOW_NAME
                             value: "{{workflow.name}}"
-                          - name: DVC_DATA_VERSION
-                            value: "{{inputs.parameters.dvc_data_version}}"
+                          # ===== VERSIONING (links model to code + data) =====
                           - name: DOCKER_IMAGE_TAG
                             value: "{{inputs.parameters.image}}"
-                          - name: NUM_WORKERS
-                            value: "{{inputs.parameters.num_workers}}"
-              workerGroupSpecs:
+                          - name: DVC_DATA_VERSION
+                            value: "{{inputs.parameters.dvc_data_version}}"
+                          # ===== INFRASTRUCTURE (platform-controlled) =====
+                          - name: REPLICAS
+                            value: "{{inputs.parameters.replicas}}"
                 - groupName: workers
-                  replicas: {{inputs.parameters.workers}}
+                  replicas: {{inputs.parameters.replicas}}
                   rayStartParams: {}
                   template:
                     spec:
@@ -137,9 +144,9 @@ spec:
                               value: "{{workflow.uid}}"
                             - name: ARGO_WORKFLOW_NAME
                               value: "{{workflow.name}}"
-                            - name: DVC_DATA_VERSION
-                              value: "{{inputs.parameters.dvc_data_version}}"
                             - name: DOCKER_IMAGE_TAG
                               value: "{{inputs.parameters.image}}"
-                            - name: NUM_WORKERS
-                              value: "{{inputs.parameters.num_workers}}"
+                            - name: DVC_DATA_VERSION
+                              value: "{{inputs.parameters.dvc_data_version}}"
+                            - name: REPLICAS
+                              value: "{{inputs.parameters.replicas}}"
