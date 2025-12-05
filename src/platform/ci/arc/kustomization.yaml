@@ -13,11 +13,7 @@ helmCharts:
     repo: oci://ghcr.io/actions/actions-runner-controller-charts
     namespace: arc-systems
     includeCRDs: true
-    valuesInline:
-      metrics:
-        controllerManagerAddr: ":8080"
-        listenerAddr: ":8080"
-        listenerEndpoint: "/metrics"
+    valuesFile: values-controller.yaml
 
   # Runner Scale Set
   - name: gha-runner-scale-set
