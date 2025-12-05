@@ -162,6 +162,7 @@ spec:
               with open("/tmp/staging_version.txt", "w") as f: f.write("")
 
           print("------------------------------------------")
+          print("==========================================")
           print("")
 
           with open("/tmp/message.txt", "w") as f: f.write(message)
@@ -238,6 +239,7 @@ spec:
           print(f"✅ PROMOTED TO PRODUCTION")
           print(f"   {prod_model_name} v{prod_version.version} @champion")
           print("------------------------------------------")
+          print("==========================================")
           print("")
 
           with open("/tmp/prod_version.txt", "w") as f:
@@ -309,3 +311,4 @@ spec:
               print(f"⚠️  TAGGING FAILED: {e}")
               print("------------------------------------------")
               print("")
+          print("==========================================")
