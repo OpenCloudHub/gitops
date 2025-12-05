@@ -48,6 +48,11 @@ spec:
           - name: gpu
             valueFrom:
               path: /tmp/gpu.txt
+        artifacts:
+          - name: compute-report
+            path: /tmp/compute-report.md
+            archive:
+              none: {}
       script:
         image: alpine:latest
         command: [sh]
@@ -120,3 +125,18 @@ spec:
           echo "=========================================="
           echo "=========================================="
           echo ""
+
+          # Generate compute report
+          cat > /tmp/compute-report.md << EOF
+          # Compute Configuration
+
+          **Type:** \`$COMPUTE_TYPE\`
+
+          | Resource | Request | Limit |
+          |----------|---------|-------|
+          | CPU | $CPU_REQ | $CPU_LIM |
+          | Memory | $MEM_REQ | $MEM_LIM |
+          | GPU | $GPU | $GPU |
+
+          **Replicas:** $REPLICAS
+          EOF

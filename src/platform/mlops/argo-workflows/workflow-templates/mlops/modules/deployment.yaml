@@ -62,6 +62,12 @@ spec:
           - name: model_name
           - name: model_uri
           - name: serving_image
+      outputs:
+        artifacts:
+          - name: deployment-report
+            path: /tmp/deployment-report.md
+            archive:
+              none: {}
       volumes:
         - name: git-secret
           secret:
@@ -138,14 +144,36 @@ spec:
           if git diff --cached --quiet; then
             echo "ℹ️  NO CHANGES"
             echo "   Already up to date"
+            STATUS="No changes"
+            COMMIT_MSG="-"
           else
-            git commit -m "🚀 Deploy ${MODEL_NAME} v${VERSION}"
+            COMMIT_MSG="🚀 Deploy ${MODEL_NAME} v${VERSION}"
+            git commit -m "$COMMIT_MSG"
             git push
             echo "✅ GITOPS UPDATED"
             echo "   Committed: Deploy ${MODEL_NAME} v${VERSION}"
+            STATUS="Updated"
           fi
           echo "------------------------------------------"
           echo ""
           echo "=========================================="
           echo "=========================================="
           echo ""
+
+          # Generate deployment report
+          cat > /tmp/deployment-report.md << EOF
+          # GitOps Deployment Report
+
+          **Model:** \`${MODEL_NAME}\`
+          **Date:** $(date -u '+%Y-%m-%d %H:%M:%S') UTC
+          **Status:** ${STATUS}
+
+          ## Details
+
+          | Field | Value |
+          |-------|-------|
+          | Model URI | \`${MODEL_URI}\` |
+          | Image | \`${SERVING_IMAGE}\` |
+          | File | \`${SERVICE_FILE}\` |
+          | Commit | ${COMMIT_MSG} |
+          EOF
