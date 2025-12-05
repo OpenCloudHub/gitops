@@ -10,11 +10,13 @@ data:
   default: |
     s3:
       bucket: argo-workflows
-      endpoint: minio.minio-tenant.svc.cluster.local:80
       insecure: true
       accessKeySecret:
         name: minio-tenant-secret
-        key: accesskey
+        key: AWS_ACCESS_KEY_ID
       secretKeySecret:
         name: minio-tenant-secret
-        key: secretkey
+        key: AWS_SECRET_ACCESS_KEY
+      endpoint-url:
+        name: minio-tenant-secret
+        key: AWS_ENDPOINT_URL
