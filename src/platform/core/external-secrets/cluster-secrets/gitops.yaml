@@ -93,3 +93,27 @@ spec:
           conversionStrategy: Default
           decodingStrategy: None
           metadataPolicy: None
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterExternalSecret
+metadata:
+  name: arc-github-secret
+spec:
+  externalSecretName: arc-github-secret-es
+  namespaceSelectors:
+    - matchLabels:
+        opencloudhub.org/secret-arc: "true"
+  refreshTime: 1h
+  externalSecretSpec:
+    refreshInterval: 1h
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    target:
+      name: arc-github-secret
+      creationPolicy: Owner
+    data:
+      - secretKey: github_token
+        remoteRef:
+          key: secret/data/platform/github/arc-runner
+          property: github_token

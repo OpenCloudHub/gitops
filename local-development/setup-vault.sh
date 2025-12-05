@@ -299,6 +299,11 @@ step_seed_secrets() {
     username="$DOCKERHUB_USERNAME" \
     password="$DOCKERHUB_TOKEN"
 
+  # ARC Runner Controller
+  log_info "Seeding ARC runner controller secrets..."
+  vault_cmd kv put kv/platform/github/arc-runner \
+    github_token="$ARC_RUNNER_CONTROLLER_PAT"
+
   # Database credentials
   log_info "Seeding database secrets..."
   vault_cmd kv put kv/platform/storage/cnpg/superuser \
@@ -385,6 +390,7 @@ step_create_summary() {
     "kv/platform/gitops/repos/gitops",
     "kv/platform/gitops/argo-workflows/github-service-account-token",
     "kv/platform/docker/registry",
+    "kv/platform/github/arc-runner",
     "kv/platform/storage/cnpg/superuser",
     "kv/platform/storage/cnpg/keycloak",
     "kv/platform/storage/pgadmin/credentials",

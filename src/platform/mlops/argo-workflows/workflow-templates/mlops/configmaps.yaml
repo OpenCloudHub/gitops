@@ -7,6 +7,7 @@ metadata:
 data:
   MLFLOW_TRACKING_URI: "http://mlflow.mlops.svc.cluster.local:80"
   DVC_REPO_URL: "https://github.com/OpenCloudHub/data-registry"
+  LOG_LEVEL: "INFO"
 ---
 # Specific to this model
 apiVersion: v1

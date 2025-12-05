@@ -1,0 +1,29 @@
+# src/team-infra/arc/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespaces.yaml
+  - external-secret.yaml
+
+helmCharts:
+  # Controller
+  - name: gha-runner-scale-set-controller
+    releaseName: arc
+    version: 0.13.0
+    repo: oci://ghcr.io/actions/actions-runner-controller-charts
+    namespace: arc-systems
+    includeCRDs: true
+
+  # Runner Scale Set
+  - name: gha-runner-scale-set
+    releaseName: arc-runner-set
+    version: 0.13.0
+    repo: oci://ghcr.io/actions/actions-runner-controller-charts
+    namespace: arc-runners
+    valuesInline:
+      githubConfigUrl: "https://github.com/OpenCloudHub"
+      githubConfigSecret: arc-github-secret
+      minRunners: 0
+      maxRunners: 2
+      runnerScaleSetName: "arc-runner-set"
