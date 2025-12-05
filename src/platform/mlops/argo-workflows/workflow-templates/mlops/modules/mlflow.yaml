@@ -55,16 +55,14 @@ spec:
             archive:
               none: {}
       script:
-        image: python:3.12-slim
+        image: ghcr.io/mlflow/mlflow:v3.6.0
         envFrom:
           - configMapRef:
               name: mlops-platform-env
         command: [python]
         source: |
           import os
-          import subprocess
           import sys
-          subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--root-user-action=ignore", "--disable-pip-version-check", "mlflow"], check=True, capture_output=True)
 
           import mlflow
           from mlflow.tracking import MlflowClient
@@ -268,16 +266,14 @@ spec:
             archive:
               none: {}
       script:
-        image: python:3.12-slim
+        image: ghcr.io/mlflow/mlflow:v3.6.0
         envFrom:
           - configMapRef:
               name: mlops-platform-env
         command: [python]
         source: |
           import os
-          import subprocess
           import sys
-          subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--root-user-action=ignore", "--disable-pip-version-check", "mlflow"], check=True, capture_output=True)
 
           import mlflow
           from mlflow.tracking import MlflowClient
@@ -351,17 +347,15 @@ spec:
             archive:
               none: {}
       script:
-        image: python:3.12-slim
+        image: ghcr.io/mlflow/mlflow:v3.6.0
         envFrom:
           - configMapRef:
               name: mlops-platform-env
         command: [python]
         source: |
           import os
-          import subprocess
           import sys
           from datetime import datetime
-          subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--root-user-action=ignore", "--disable-pip-version-check", "mlflow"], check=True, capture_output=True)
 
           import mlflow
           from mlflow.tracking import MlflowClient
