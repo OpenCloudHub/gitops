@@ -49,6 +49,7 @@ spec:
           import os
           import subprocess
           import sys
+          from datetime import datetime
           subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--root-user-action=ignore", "--disable-pip-version-check", "mlflow"], check=True, capture_output=True)
 
           import mlflow
@@ -64,25 +65,39 @@ spec:
           mlflow.set_tracking_uri(MLFLOW_URI)
           client = MlflowClient()
 
-          print("")
-          print("==========================================")
-          print("🔍 MODEL COMPARISON")
-          print("==========================================")
-          print("")
-          print(f"  Model:     {MODEL_NAME}")
-          print(f"  Metric:    {METRIC}")
-          print(f"  Threshold: {THRESHOLD:.0%}")
-          print(f"  Workflow:  {WORKFLOW_UID[:8]}...")
-          print("")
+          # Helper to write outputs and exit
+          def write_outputs_and_exit(promoted, staging_ver, message, logs, exit_code=0):
+              with open("/tmp/promoted.txt", "w") as f: f.write("true" if promoted else "false")
+              with open("/tmp/staging_version.txt", "w") as f: f.write(staging_ver)
+              with open("/tmp/message.txt", "w") as f: f.write(message)
+              with open("/tmp/comparison-report.md", "w") as f: f.write(logs)
+              sys.exit(exit_code)
+
+          # Build log output
+          logs = []
+          logs.append("")
+          logs.append("##################################################")
+          logs.append("🔍 MODEL COMPARISON")
+          logs.append("##################################################")
+          logs.append("")
+          logs.append(f"  Model:     {MODEL_NAME}")
+          logs.append(f"  Metric:    {METRIC}")
+          logs.append(f"  Threshold: {THRESHOLD:.0%}")
+          logs.append(f"  Workflow:  {WORKFLOW_UID[:8]}...")
+          logs.append("")
 
           # Find the CI model registered by this workflow
           ci_model_name = f"ci.{MODEL_NAME}"
           staging_model_name = f"staging.{MODEL_NAME}"
           prod_model_name = f"prod.{MODEL_NAME}"
 
+          ci_version = None
+          ci_metric = None
+          prod_metric = None
+          prod_version_num = None
+
           try:
               ci_versions = client.search_model_versions(f"name='{ci_model_name}'")
-              ci_version = None
               for v in ci_versions:
                   run = client.get_run(v.run_id)
                   if run.data.tags.get("argo_workflow_uid") == WORKFLOW_UID:
@@ -90,47 +105,81 @@ spec:
                       break
 
               if not ci_version:
-                  print("------------------------------------------")
-                  print("❌ RESULT: No CI model found")
-                  print("------------------------------------------")
-                  print("")
-                  with open("/tmp/promoted.txt", "w") as f: f.write("false")
-                  with open("/tmp/staging_version.txt", "w") as f: f.write("")
-                  with open("/tmp/message.txt", "w") as f: f.write("No CI model found")
-                  exit(0)
+                  logs.append("------------------------------------------")
+                  logs.append("❌ FAILED: No CI model found for workflow")
+                  logs.append("------------------------------------------")
+                  logs.append("")
+                  logs.append("##################################################")
+                  logs.append("##################################################")
+                  logs.append("")
+                  print("\n".join(logs))
+                  write_outputs_and_exit(False, "", "No CI model found", "\n".join(logs), 1)
 
               ci_run = client.get_run(ci_version.run_id)
               ci_metric = ci_run.data.metrics.get(METRIC)
-              print(f"  CI Model:  v{ci_version.version} ({METRIC}={ci_metric})")
+
+              # Check if metric exists in CI model
+              if ci_metric is None:
+                  logs.append(f"  CI Model:  v{ci_version.version}")
+                  logs.append("")
+                  logs.append("------------------------------------------")
+                  logs.append(f"❌ FAILED: Metric '{METRIC}' not found in CI model")
+                  logs.append("   Check training code logs the correct metric")
+                  logs.append("------------------------------------------")
+                  logs.append("")
+                  logs.append("##################################################")
+                  logs.append("##################################################")
+                  logs.append("")
+                  print("\n".join(logs))
+                  write_outputs_and_exit(False, "", f"Metric '{METRIC}' not found in CI model", "\n".join(logs), 1)
+
+              logs.append(f"  CI Model:  v{ci_version.version} ({METRIC}={ci_metric})")
 
           except Exception as e:
-              print("------------------------------------------")
-              print(f"❌ RESULT: Error finding CI model")
-              print(f"   {e}")
-              print("------------------------------------------")
-              print("")
-              with open("/tmp/promoted.txt", "w") as f: f.write("false")
-              with open("/tmp/staging_version.txt", "w") as f: f.write("")
-              with open("/tmp/message.txt", "w") as f: f.write(str(e))
-              exit(0)
+              logs.append("------------------------------------------")
+              logs.append(f"❌ FAILED: Error finding CI model")
+              logs.append(f"   {e}")
+              logs.append("------------------------------------------")
+              logs.append("")
+              logs.append("##################################################")
+              logs.append("##################################################")
+              logs.append("")
+              print("\n".join(logs))
+              write_outputs_and_exit(False, "", str(e), "\n".join(logs), 1)
 
           # Get production champion metric
-          prod_metric = None
           try:
               prod_versions = client.search_model_versions(f"name='{prod_model_name}'")
               for v in prod_versions:
                   if "champion" in v.aliases:
                       prod_run = client.get_run(v.run_id)
                       prod_metric = prod_run.data.metrics.get(METRIC)
-                      print(f"  Champion:  v{v.version} ({METRIC}={prod_metric})")
+                      prod_version_num = v.version
+
+                      # Check if metric exists in champion
+                      if prod_metric is None:
+                          logs.append(f"  Champion:  v{v.version}")
+                          logs.append("")
+                          logs.append("------------------------------------------")
+                          logs.append(f"❌ FAILED: Metric '{METRIC}' not found in champion")
+                          logs.append("   Champion model may use different metric name")
+                          logs.append("------------------------------------------")
+                          logs.append("")
+                          logs.append("##################################################")
+                          logs.append("##################################################")
+                          logs.append("")
+                          print("\n".join(logs))
+                          write_outputs_and_exit(False, "", f"Metric '{METRIC}' not found in champion", "\n".join(logs), 1)
+
+                      logs.append(f"  Champion:  v{v.version} ({METRIC}={prod_metric})")
                       break
           except:
               pass
 
           if prod_metric is None:
-              print("  Champion:  (none - first deployment)")
+              logs.append("  Champion:  (none - first deployment)")
 
-          print("")
+          logs.append("")
 
           # Compare
           should_promote = False
@@ -146,7 +195,7 @@ spec:
               should_promote = improvement >= THRESHOLD
               message = f"Improvement: {improvement:.2%} (threshold: {THRESHOLD:.2%})"
 
-          print("------------------------------------------")
+          logs.append("------------------------------------------")
           if should_promote:
               # Copy to staging registry
               staging_version = mlflow.register_model(
@@ -154,43 +203,29 @@ spec:
                   staging_model_name
               )
               client.set_registered_model_alias(staging_model_name, "candidate", staging_version.version)
-              print(f"✅ PROMOTED TO STAGING")
-              print(f"   {staging_model_name} v{staging_version.version}")
-              print(f"   {message}")
-
-              with open("/tmp/promoted.txt", "w") as f: f.write("true")
-              with open("/tmp/staging_version.txt", "w") as f: f.write(staging_version.version)
+              logs.append(f"✅ PROMOTED TO STAGING")
+              logs.append(f"   {staging_model_name} v{staging_version.version}")
+              logs.append(f"   {message}")
+              staging_ver = staging_version.version
           else:
-              print(f"⏸️  NOT PROMOTED")
-              print(f"   {message}")
-              with open("/tmp/promoted.txt", "w") as f: f.write("false")
-              with open("/tmp/staging_version.txt", "w") as f: f.write("")
+              logs.append(f"⏸️  NOT PROMOTED")
+              logs.append(f"   {message}")
+              staging_ver = ""
 
-          print("------------------------------------------")
-          print("")
-          print("==========================================")
-          print("==========================================")
-          print("")
+          logs.append("------------------------------------------")
+          logs.append("")
+          logs.append("##################################################")
+          logs.append("##################################################")
+          logs.append("")
 
-          # Generate comparison report
-          from datetime import datetime
-          with open("/tmp/comparison-report.md", "w") as f:
-              f.write(f"# Model Comparison Report\n\n")
-              f.write(f"**Model:** `{MODEL_NAME}`\n")
-              f.write(f"**Date:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n")
-              f.write(f"**Status:** {'✅ PROMOTED' if should_promote else '⏸️ NOT PROMOTED'}\n\n")
-              f.write(f"## Comparison\n\n")
-              f.write(f"| | Version | {METRIC} |\n")
-              f.write(f"|---|---------|----------|\n")
-              f.write(f"| CI Model | v{ci_version.version} | {ci_metric} |\n")
-              if prod_metric is not None:
-                  f.write(f"| Champion | v{v.version} | {prod_metric} |\n\n")
-              else:
-                  f.write(f"| Champion | - | (none) |\n\n")
-              f.write(f"**Threshold:** {THRESHOLD:.0%}\n")
-              f.write(f"**Result:** {message}\n")
+          # Print logs and write artifact (same content)
+          output = "\n".join(logs)
+          print(output)
 
+          with open("/tmp/promoted.txt", "w") as f: f.write("true" if should_promote else "false")
+          with open("/tmp/staging_version.txt", "w") as f: f.write(staging_ver)
           with open("/tmp/message.txt", "w") as f: f.write(message)
+          with open("/tmp/comparison-report.md", "w") as f: f.write(output)
 
     # =========================================================================
     # Promote staging model to production
@@ -235,14 +270,15 @@ spec:
           staging_model_name = f"staging.{MODEL_NAME}"
           prod_model_name = f"prod.{MODEL_NAME}"
 
-          print("")
-          print("==========================================")
-          print("🚀 PROMOTE TO PRODUCTION")
-          print("==========================================")
-          print("")
-          print(f"  Source:  {staging_model_name} v{STAGING_VERSION}")
-          print(f"  Target:  {prod_model_name}")
-          print("")
+          logs = []
+          logs.append("")
+          logs.append("##################################################")
+          logs.append("🚀 PROMOTE TO PRODUCTION")
+          logs.append("##################################################")
+          logs.append("")
+          logs.append(f"  Source:  {staging_model_name} v{STAGING_VERSION}")
+          logs.append(f"  Target:  {prod_model_name}")
+          logs.append("")
 
           # Move current champion to previous
           try:
@@ -251,10 +287,10 @@ spec:
                   if "champion" in v.aliases:
                       client.delete_registered_model_alias(prod_model_name, "champion")
                       client.set_registered_model_alias(prod_model_name, "previous", v.version)
-                      print(f"  Previous champion v{v.version} → @previous")
+                      logs.append(f"  Previous champion v{v.version} → @previous")
                       break
           except Exception as e:
-              print(f"  No existing champion to demote")
+              logs.append(f"  No existing champion to demote")
 
           # Copy staging to production
           prod_version = mlflow.register_model(
@@ -264,31 +300,22 @@ spec:
 
           client.set_registered_model_alias(prod_model_name, "champion", prod_version.version)
 
-          print("")
-          print("------------------------------------------")
-          print(f"✅ PROMOTED TO PRODUCTION")
-          print(f"   {prod_model_name} v{prod_version.version} @champion")
-          print("------------------------------------------")
-          print("")
-          print("==========================================")
-          print("==========================================")
-          print("")
+          logs.append("")
+          logs.append("------------------------------------------")
+          logs.append(f"✅ PROMOTED TO PRODUCTION")
+          logs.append(f"   {prod_model_name} v{prod_version.version} @champion")
+          logs.append("------------------------------------------")
+          logs.append("")
+          logs.append("##################################################")
+          logs.append("##################################################")
+          logs.append("")
 
-          # Generate promotion report
-          from datetime import datetime
-          with open("/tmp/promotion-report.md", "w") as f:
-              f.write(f"# Production Promotion Report\n\n")
-              f.write(f"**Model:** `{MODEL_NAME}`\n")
-              f.write(f"**Date:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n")
-              f.write(f"**Status:** ✅ PROMOTED\n\n")
-              f.write(f"## Details\n\n")
-              f.write(f"| Stage | Version |\n")
-              f.write(f"|-------|--------|\n")
-              f.write(f"| Source (staging) | v{STAGING_VERSION} |\n")
-              f.write(f"| Target (prod) | v{prod_version.version} @champion |\n")
+          # Print logs and write artifact (same content)
+          output = "\n".join(logs)
+          print(output)
 
-          with open("/tmp/prod_version.txt", "w") as f:
-              f.write(prod_version.version)
+          with open("/tmp/promotion-report.md", "w") as f: f.write(output)
+          with open("/tmp/prod_version.txt", "w") as f: f.write(prod_version.version)
 
     # =========================================================================
     # Tag model with deployment info
@@ -330,9 +357,9 @@ spec:
           version = parts[1].replace("@", "")
 
           print("")
-          print("==========================================")
+          print("##################################################")
           print("🏷️  TAG DEPLOYMENT INFO")
-          print("==========================================")
+          print("##################################################")
           print("")
           print(f"  Model:    {model_name} v{version}")
           print(f"  Image:    {SERVING_IMAGE}")
@@ -357,6 +384,6 @@ spec:
               print("------------------------------------------")
               print("")
           print("")
-          print("==========================================")
-          print("==========================================")
+          print("##################################################")
+          print("##################################################")
           print("")

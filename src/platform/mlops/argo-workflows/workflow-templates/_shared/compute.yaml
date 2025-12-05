@@ -110,33 +110,21 @@ spec:
           echo -n "$REPLICAS" > /tmp/replicas.txt
           echo -n "$GPU"      > /tmp/gpu.txt
 
-          echo ""
-          echo "=========================================="
-          echo "⚙️  COMPUTE CONFIGURATION"
-          echo "=========================================="
-          echo ""
-          echo "  Type:      $COMPUTE_TYPE"
-          echo ""
-          echo "  CPU:       $CPU_REQ (request) / $CPU_LIM (limit)"
-          echo "  Memory:    $MEM_REQ (request) / $MEM_LIM (limit)"
-          echo "  GPU:       $GPU"
-          echo "  Replicas:  $REPLICAS"
-          echo ""
-          echo "=========================================="
-          echo "=========================================="
-          echo ""
-
-          # Generate compute report
-          cat > /tmp/compute-report.md << EOF
-          # Compute Configuration
-
-          **Type:** \`$COMPUTE_TYPE\`
-
-          | Resource | Request | Limit |
-          |----------|---------|-------|
-          | CPU | $CPU_REQ | $CPU_LIM |
-          | Memory | $MEM_REQ | $MEM_LIM |
-          | GPU | $GPU | $GPU |
-
-          **Replicas:** $REPLICAS
-          EOF
+          # Build output (same for logs and artifact)
+          {
+            echo ""
+            echo "##################################################"
+            echo "  COMPUTE CONFIGURATION"
+            echo "##################################################"
+            echo ""
+            echo "  Type ........ $COMPUTE_TYPE"
+            echo ""
+            echo "  CPU ......... $CPU_REQ (request) / $CPU_LIM (limit)"
+            echo "  Memory ...... $MEM_REQ (request) / $MEM_LIM (limit)"
+            echo "  GPU ......... $GPU"
+            echo "  Replicas .... $REPLICAS"
+            echo ""
+            echo "##################################################"
+            echo "##################################################"
+            echo ""
+          } | tee /tmp/compute-report.md

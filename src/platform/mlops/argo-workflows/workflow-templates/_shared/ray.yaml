@@ -244,15 +244,15 @@ spec:
           echo ""
           echo "🚀 Streaming logs from: $SUBMITTER_POD"
           echo ""
-          echo "=========================================="
+          echo "##################################################""
           echo "📝 TRAINING LOGS"
-          echo "=========================================="
+          echo "##################################################""
 
           # Stream logs - follows until pod completes
           kubectl logs -n mlops -f "$SUBMITTER_POD" 2>&1 || true
 
           echo ""
-          echo "=========================================="
+          echo "##################################################""
 
           # Check final status
           FINAL_STATUS=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "UNKNOWN")
@@ -268,6 +268,6 @@ spec:
             exit 1
           fi
 
-          echo "=========================================="
-          echo "=========================================="
+          echo "##################################################""
+          echo "##################################################""
           echo ""

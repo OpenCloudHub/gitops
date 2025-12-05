@@ -40,7 +40,6 @@ spec:
         command: [python]
         source: |
           from mlflow import MlflowClient
-          from datetime import datetime
           import random
 
           model_name = "{{inputs.parameters.model_name}}"
@@ -48,16 +47,6 @@ spec:
           mlflow_uri = "{{inputs.parameters.mlflow_tracking_uri}}"
 
           client = MlflowClient(mlflow_uri)
-
-          print("")
-          print("==========================================")
-          print("🧪 TEST STAGING MODEL")
-          print("==========================================")
-          print("")
-          print(f"  Model:   staging.{model_name}")
-          print(f"  Version: v{staging_version}")
-          print(f"  MLflow:  {mlflow_uri}")
-          print("")
 
           # Simulate test execution (dummy implementation)
           tests = {
@@ -76,41 +65,44 @@ spec:
               tests["sample_accuracy"] > 0.8
           )
 
-          print("  Tests:")
-          print(f"    Model Loading:     {'✓' if tests['model_loading'] else '✗'}")
-          print(f"    Schema Validation: {'✓' if tests['schema_validation'] else '✗'}")
-          print(f"    Smoke Test:        {'✓' if tests['smoke_test'] else '✗'}")
-          print(f"    Latency:           {tests['latency_ms']:.1f}ms (<100ms)")
-          print(f"    Sample Accuracy:   {tests['sample_accuracy']:.1%} (>80%)")
-          print("")
+          status = "✅ ALL TESTS PASSED" if all_passed else "❌ TESTS FAILED"
+          loading = '✓' if tests['model_loading'] else '✗'
+          schema = '✓' if tests['schema_validation'] else '✗'
+          smoke = '✓' if tests['smoke_test'] else '✗'
+          latency = f"{tests['latency_ms']:.1f}ms"
+          accuracy = f"{tests['sample_accuracy']:.1%}"
 
-          # Generate test report artifact
+          lines = [
+              "",
+              "##################################################",
+              "🧪 TEST STAGING MODEL",
+              "##################################################",
+              "",
+              f"  Model ........ staging.{model_name}",
+              f"  Version ...... v{staging_version}",
+              f"  MLflow ....... {mlflow_uri}",
+              "",
+              "  Tests",
+              f"    Model Loading ..... {loading}",
+              f"    Schema Validation . {schema}",
+              f"    Smoke Test ........ {smoke}",
+              f"    Latency ........... {latency} (<100ms)",
+              f"    Sample Accuracy ... {accuracy} (>80%)",
+              "",
+              "------------------------------------------",
+              status,
+              "------------------------------------------",
+              "⚠️ Dummy test suite - replace with real tests",
+              "##################################################",
+              "##################################################",
+              ""
+          ]
+          OUTPUT = "\n".join(lines)
+
+          print(OUTPUT)
+
           with open("/tmp/test-report.md", "w") as f:
-              f.write(f"# Staging Model Test Report\n\n")
-              f.write(f"**Model:** `staging.{model_name}/v{staging_version}`\n")
-              f.write(f"**Tested:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n")
-              f.write(f"**Status:** {'✅ PASSED' if all_passed else '❌ FAILED'}\n\n")
-              f.write(f"## Results\n\n")
-              f.write(f"| Test | Result |\n")
-              f.write(f"|------|--------|\n")
-              f.write(f"| Model Loading | {'✅' if tests['model_loading'] else '❌'} |\n")
-              f.write(f"| Schema Validation | {'✅' if tests['schema_validation'] else '❌'} |\n")
-              f.write(f"| Smoke Test | {'✅' if tests['smoke_test'] else '❌'} |\n")
-              f.write(f"| Latency | {tests['latency_ms']:.1f}ms |\n")
-              f.write(f"| Sample Accuracy | {tests['sample_accuracy']:.1%} |\n\n")
-              f.write(f"---\n")
-              f.write(f"*⚠️ Dummy test suite - replace with real tests*\n")
-
-          print("------------------------------------------")
-          if all_passed:
-              print("✅ ALL TESTS PASSED")
-          else:
-              print("❌ TESTS FAILED")
-          print("------------------------------------------")
-          print("")
-          print("==========================================")
-          print("==========================================")
-          print("")
+              f.write(OUTPUT)
 
           with open("/tmp/test_passed.txt", "w") as f:
               f.write("true" if all_passed else "false")

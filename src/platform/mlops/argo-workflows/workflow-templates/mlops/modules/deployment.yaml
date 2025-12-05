@@ -101,32 +101,31 @@ spec:
           # Extract version
           VERSION=$(echo "$MODEL_URI" | sed -n 's|.*/\([0-9]*\)$|\1|p')
 
-          echo ""
-          echo "=========================================="
-          echo "📦 UPDATE GITOPS REPO"
-          echo "=========================================="
-          echo ""
-          echo "  Model:   ${MODEL_NAME}"
-          echo "  URI:     ${MODEL_URI}"
-          echo "  Image:   ${SERVING_IMAGE}"
-          echo ""
-
           git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
 
           SERVICE_FILE="src/teams/ai/models-custom/${MODEL_NAME}-service.yaml"
 
           if [ ! -f "$SERVICE_FILE" ]; then
-            echo "------------------------------------------"
-            echo "❌ FAILED: Service file not found"
-            echo "   $SERVICE_FILE"
-            echo "------------------------------------------"
-            echo ""
+            {
+              echo ""
+              echo "##################################################"
+              echo "  UPDATE GITOPS REPO"
+              echo "##################################################"
+              echo ""
+              echo "  Model ........ ${MODEL_NAME}"
+              echo ""
+              echo "--------------------------------------------------"
+              echo "  FAILED - Service file not found"
+              echo "  $SERVICE_FILE"
+              echo "--------------------------------------------------"
+              echo ""
+              echo "##################################################"
+              echo "##################################################"
+              echo ""
+            } | tee /tmp/deployment-report.md
             exit 1
           fi
-
-          echo "  File:    ${SERVICE_FILE}"
-          echo ""
 
           # Update image
           sed -i "s|image: opencloudhuborg/${MODEL_NAME}-serving:[a-zA-Z0-9_.-]*|image: ${SERVING_IMAGE}|g" "$SERVICE_FILE"
@@ -140,40 +139,30 @@ spec:
           git config user.email "workflow@opencloudhub.org"
           git add "$SERVICE_FILE"
 
-          echo "------------------------------------------"
           if git diff --cached --quiet; then
-            echo "ℹ️  NO CHANGES"
-            echo "   Already up to date"
-            STATUS="No changes"
-            COMMIT_MSG="-"
+            STATUS="NO CHANGES - Already up to date"
           else
-            COMMIT_MSG="🚀 Deploy ${MODEL_NAME} v${VERSION}"
-            git commit -m "$COMMIT_MSG"
+            git commit -m "Deploy ${MODEL_NAME} v${VERSION}"
             git push
-            echo "✅ GITOPS UPDATED"
-            echo "   Committed: Deploy ${MODEL_NAME} v${VERSION}"
-            STATUS="Updated"
+            STATUS="GITOPS UPDATED - Committed: Deploy ${MODEL_NAME} v${VERSION}"
           fi
-          echo "------------------------------------------"
-          echo ""
-          echo "=========================================="
-          echo "=========================================="
-          echo ""
 
-          # Generate deployment report
-          cat > /tmp/deployment-report.md << EOF
-          # GitOps Deployment Report
-
-          **Model:** \`${MODEL_NAME}\`
-          **Date:** $(date -u '+%Y-%m-%d %H:%M:%S') UTC
-          **Status:** ${STATUS}
-
-          ## Details
-
-          | Field | Value |
-          |-------|-------|
-          | Model URI | \`${MODEL_URI}\` |
-          | Image | \`${SERVING_IMAGE}\` |
-          | File | \`${SERVICE_FILE}\` |
-          | Commit | ${COMMIT_MSG} |
-          EOF
+          # Build output (same for logs and artifact)
+          {
+            echo ""
+            echo "##################################################"
+            echo "  UPDATE GITOPS REPO"
+            echo "##################################################"
+            echo ""
+            echo "  Model ........ ${MODEL_NAME}"
+            echo "  URI .......... ${MODEL_URI}"
+            echo "  Image ........ ${SERVING_IMAGE}"
+            echo "  File ......... ${SERVICE_FILE}"
+            echo ""
+            echo "--------------------------------------------------"
+            echo "  ${STATUS}"
+            echo "--------------------------------------------------"
+            echo ""
+            echo "##################################################"
+            echo ""
+          } | tee /tmp/deployment-report.md
