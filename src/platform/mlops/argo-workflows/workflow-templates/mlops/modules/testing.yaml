@@ -2,8 +2,14 @@
 # Testing Templates
 # =============================================================================
 #
-# Model testing templates for staging validation.
-# ⚠️ Currently just dummy implementation, run load tests or integration tests or deploy in staging environment here if needed
+# Model testing templates for staging validation before production promotion.
+#
+# Templates:
+#   test-staging-model - Run validation tests against staging model
+#
+# ⚠️ Currently implements dummy tests for POC demonstration.
+# Replace with real tests: load testing, integration tests, shadow deployment.
+#
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
@@ -12,7 +18,7 @@ metadata:
   name: testing-templates
   namespace: mlops
   annotations:
-    workflows.argoproj.io/description: "Model testing templates"
+    workflows.argoproj.io/description: "Model testing and validation"
 spec:
   templates:
     # =========================================================================
@@ -23,8 +29,6 @@ spec:
         parameters:
           - name: model_name
           - name: staging_version
-          - name: mlflow_tracking_uri
-            default: "http://mlflow.mlops.svc.cluster.local:80"
       outputs:
         parameters:
           - name: test_passed
@@ -36,17 +40,18 @@ spec:
             archive:
               none: {}
       script:
-        image: ghcr.io/mlflow/mlflow:v2.18.0
+        image: python:3.12-slim
+        envFrom:
+          - configMapRef:
+              name: mlops-platform-env
         command: [python]
         source: |
-          from mlflow import MlflowClient
+          import os
           import random
 
-          model_name = "{{inputs.parameters.model_name}}"
-          staging_version = "{{inputs.parameters.staging_version}}"
-          mlflow_uri = "{{inputs.parameters.mlflow_tracking_uri}}"
-
-          client = MlflowClient(mlflow_uri)
+          MODEL_NAME = "{{inputs.parameters.model_name}}"
+          STAGING_VERSION = "{{inputs.parameters.staging_version}}"
+          MLFLOW_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow.mlops.svc.cluster.local:80")
 
           # Simulate test execution (dummy implementation)
           tests = {
@@ -65,45 +70,46 @@ spec:
               tests["sample_accuracy"] > 0.8
           )
 
-          status = "✅ ALL TESTS PASSED" if all_passed else "❌ TESTS FAILED"
-          loading = '✓' if tests['model_loading'] else '✗'
-          schema = '✓' if tests['schema_validation'] else '✗'
-          smoke = '✓' if tests['smoke_test'] else '✗'
+          loading = "✓" if tests["model_loading"] else "✗"
+          schema = "✓" if tests["schema_validation"] else "✗"
+          smoke = "✓" if tests["smoke_test"] else "✗"
           latency = f"{tests['latency_ms']:.1f}ms"
           accuracy = f"{tests['sample_accuracy']:.1%}"
 
-          lines = [
-              "",
-              "##################################################",
-              "🧪 TEST STAGING MODEL",
-              "##################################################",
-              "",
-              f"  Model ........ staging.{model_name}",
-              f"  Version ...... v{staging_version}",
-              f"  MLflow ....... {mlflow_uri}",
-              "",
-              "  Tests",
-              f"    Model Loading ..... {loading}",
-              f"    Schema Validation . {schema}",
-              f"    Smoke Test ........ {smoke}",
-              f"    Latency ........... {latency} (<100ms)",
-              f"    Sample Accuracy ... {accuracy} (>80%)",
-              "",
-              "------------------------------------------",
-              status,
-              "------------------------------------------",
-              "⚠️ Dummy test suite - replace with real tests",
-              "##################################################",
-              "##################################################",
-              ""
-          ]
-          OUTPUT = "\n".join(lines)
+          logs = []
+          logs.append("")
+          logs.append("##################################################")
+          logs.append("🧪 TEST STAGING MODEL")
+          logs.append("##################################################")
+          logs.append("")
+          logs.append(f"  Model ........ staging.{MODEL_NAME}")
+          logs.append(f"  Version ...... v{STAGING_VERSION}")
+          logs.append(f"  MLflow ....... {MLFLOW_URI}")
+          logs.append("")
+          logs.append("  Tests:")
+          logs.append(f"    Model Loading ..... {loading}")
+          logs.append(f"    Schema Validation . {schema}")
+          logs.append(f"    Smoke Test ........ {smoke}")
+          logs.append(f"    Latency ........... {latency} (<100ms)")
+          logs.append(f"    Sample Accuracy ... {accuracy} (>80%)")
+          logs.append("")
+          logs.append("--------------------------------------------------")
+          if all_passed:
+              logs.append("✅ ALL TESTS PASSED")
+          else:
+              logs.append("❌ TESTS FAILED")
+          logs.append("--------------------------------------------------")
+          logs.append("")
+          logs.append("⚠️  Dummy test suite - replace with real tests")
+          logs.append("")
+          logs.append("##################################################")
+          logs.append("")
 
-          print(OUTPUT)
+          output = "\n".join(logs)
+          print(output)
 
           with open("/tmp/test-report.md", "w") as f:
-              f.write(OUTPUT)
-
+              f.write(output)
           with open("/tmp/test_passed.txt", "w") as f:
               f.write("true" if all_passed else "false")
 

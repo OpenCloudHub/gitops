@@ -2,17 +2,18 @@
 # Compute Configuration Templates
 # =============================================================================
 #
-# Maps compute_type parameter to actual resource values.
-# Keep this simple - just a lookup table.
+# Maps compute_type parameter to resource specifications for Ray training jobs.
+# Platform-owned lookup table that controls resource allocation and cost.
 #
-# Usage:
-#   templateRef:
-#     name: compute-templates
-#     template: map-compute-config
-#   arguments:
-#     parameters:
-#       - name: compute_type
-#         value: "gpu-small"
+# Profiles:
+#   cpu-small            - Light workloads (sklearn, small datasets)
+#   cpu-small-distributed - Light distributed (2 replicas)
+#   cpu-medium           - Medium workloads (larger datasets)
+#   cpu-large            - Heavy CPU workloads (distributed)
+#   gpu-small            - Basic GPU (fine-tuning, small models)
+#   gpu-medium           - Medium GPU (BERT, medium models)
+#   gpu-large            - Large GPU (LLMs, vision models)
+#
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
@@ -110,11 +111,10 @@ spec:
           echo -n "$REPLICAS" > /tmp/replicas.txt
           echo -n "$GPU"      > /tmp/gpu.txt
 
-          # Build output (same for logs and artifact)
           {
             echo ""
             echo "##################################################"
-            echo "  COMPUTE CONFIGURATION"
+            echo "⚙️  COMPUTE CONFIGURATION"
             echo "##################################################"
             echo ""
             echo "  Type ........ $COMPUTE_TYPE"
@@ -124,7 +124,6 @@ spec:
             echo "  GPU ......... $GPU"
             echo "  Replicas .... $REPLICAS"
             echo ""
-            echo "##################################################"
             echo "##################################################"
             echo ""
           } | tee /tmp/compute-report.md

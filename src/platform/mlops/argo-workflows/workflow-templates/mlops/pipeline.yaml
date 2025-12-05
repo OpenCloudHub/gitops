@@ -2,8 +2,25 @@
 # MLOps Pipeline
 # =============================================================================
 #
-# End-to-end ML lifecycle: train → evaluate → promote → deploy
-# Uses compute-templates for resource mapping, ray-templates for training.
+# End-to-end ML lifecycle orchestration: train → evaluate → promote → deploy
+#
+# Phases:
+#   1. Map compute type to resources (compute-templates)
+#   2. Training via Ray (ray-templates)
+#   3. Compare to production and promote to staging (mlflow-templates)
+#   4. Approval gate (manual mode only)
+#   5. Promote staging to production (mlflow-templates)
+#   6. Deploy via GitOps (deployment-templates)
+#
+# Parameters:
+#   model_name        - Model identifier (e.g., wine-classifier)
+#   experiment_name   - MLflow experiment name
+#   training_image    - Docker image for training
+#   serving_image     - Docker image for serving
+#   dvc_data_version  - DVC tag for training data
+#   compute_type      - Resource profile (cpu-small, gpu-medium, etc.)
+#   approval_mode     - "automatic" or "manual" (requires human approval)
+#
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
@@ -11,6 +28,8 @@ kind: WorkflowTemplate
 metadata:
   name: mlops-pipeline
   namespace: mlops
+  annotations:
+    workflows.argoproj.io/description: "End-to-end MLOps pipeline"
 spec:
   serviceAccountName: workflow-executor
   entrypoint: main

@@ -2,8 +2,22 @@
 # Deployment Templates
 # =============================================================================
 #
-# GitOps-based model deployment.
-# Uses mlops-platform-env ConfigMap for MLFLOW_TRACKING_URI.
+# GitOps-based model deployment to production.
+# Updates serving configuration in gitops repo and tags MLflow model.
+#
+# Templates:
+#   deploy-model       - Orchestrates GitOps update + MLflow tagging
+#   update-gitops-repo - Updates or creates Ray Serve config in gitops repo
+#
+# GitOps Pattern:
+#   - Updates image tag in {model}-service.yaml
+#   - Adds/updates model_uri annotation for MLflow reference
+#   - ArgoCD syncs changes to cluster automatically
+#
+# Requires:
+#   - gitops-repo secret with SSH key for git push
+#   - Service file at: src/teams/ai/models-custom/{model}-service.yaml
+#
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
@@ -12,7 +26,7 @@ metadata:
   name: deployment-templates
   namespace: mlops
   annotations:
-    workflows.argoproj.io/description: "Model deployment via GitOps"
+    workflows.argoproj.io/description: "GitOps model deployment"
 spec:
   serviceAccountName: workflow-executor
 
@@ -27,7 +41,7 @@ spec:
           - name: model_uri
           - name: serving_image
           - name: deployed_by
-            default: "manual"
+            default: "argo-workflow"
       steps:
         - - name: update-gitops
             template: update-gitops-repo
@@ -98,41 +112,55 @@ spec:
           MODEL_URI=$(echo "$MODEL_URI" | tr -d '\n\r\t ')
           SERVING_IMAGE=$(echo "$SERVING_IMAGE" | tr -d '\n\r\t ')
 
-          # Extract version
+          # Extract version from URI
           VERSION=$(echo "$MODEL_URI" | sed -n 's|.*/\([0-9]*\)$|\1|p')
+          if [ -z "$VERSION" ]; then
+            VERSION=$(echo "$MODEL_URI" | sed 's|.*@||')
+          fi
 
           git clone git@github.com:OpenCloudHub/gitops.git /tmp/gitops
           cd /tmp/gitops
 
           SERVICE_FILE="src/teams/ai/models-custom/${MODEL_NAME}-service.yaml"
 
+          # Check if service file exists
           if [ ! -f "$SERVICE_FILE" ]; then
             {
               echo ""
               echo "##################################################"
-              echo "  UPDATE GITOPS REPO"
+              echo "📦 UPDATE GITOPS REPO"
               echo "##################################################"
               echo ""
               echo "  Model ........ ${MODEL_NAME}"
+              echo "  URI .......... ${MODEL_URI}"
+              echo "  Image ........ ${SERVING_IMAGE}"
               echo ""
               echo "--------------------------------------------------"
-              echo "  FAILED - Service file not found"
-              echo "  $SERVICE_FILE"
+              echo "❌ FAILED - Service file not found"
+              echo "   ${SERVICE_FILE}"
               echo "--------------------------------------------------"
               echo ""
-              echo "##################################################"
               echo "##################################################"
               echo ""
             } | tee /tmp/deployment-report.md
             exit 1
           fi
 
-          # Update image
+          # Update image tag
           sed -i "s|image: opencloudhuborg/${MODEL_NAME}-serving:[a-zA-Z0-9_.-]*|image: ${SERVING_IMAGE}|g" "$SERVICE_FILE"
 
-          # Update or add model_uri
+          # Update or add model_uri annotation
           if grep -q "model_uri:" "$SERVICE_FILE"; then
+            # Update existing model_uri
             sed -i "s|model_uri: \"models:/[^\"]*\"|model_uri: \"${MODEL_URI}\"|g" "$SERVICE_FILE"
+          else
+            # Add model_uri as annotation if not present
+            # Insert after 'annotations:' line, or after 'metadata:' if no annotations
+            if grep -q "^  annotations:" "$SERVICE_FILE"; then
+              sed -i "/^  annotations:/a\\    model_uri: \"${MODEL_URI}\"" "$SERVICE_FILE"
+            elif grep -q "^metadata:" "$SERVICE_FILE"; then
+              sed -i "/^metadata:/a\\  annotations:\\n    model_uri: \"${MODEL_URI}\"" "$SERVICE_FILE"
+            fi
           fi
 
           git config user.name "Argo Workflow"
@@ -140,18 +168,17 @@ spec:
           git add "$SERVICE_FILE"
 
           if git diff --cached --quiet; then
-            STATUS="NO CHANGES - Already up to date"
+            STATUS="⏸️  NO CHANGES - Already up to date"
           else
-            git commit -m "Deploy ${MODEL_NAME} v${VERSION}"
+            git commit -m "deploy(${MODEL_NAME}): v${VERSION} - ${SERVING_IMAGE##*:}"
             git push
-            STATUS="GITOPS UPDATED - Committed: Deploy ${MODEL_NAME} v${VERSION}"
+            STATUS="✅ GITOPS UPDATED - Pushed: deploy(${MODEL_NAME}) v${VERSION}"
           fi
 
-          # Build output (same for logs and artifact)
           {
             echo ""
             echo "##################################################"
-            echo "  UPDATE GITOPS REPO"
+            echo "📦 UPDATE GITOPS REPO"
             echo "##################################################"
             echo ""
             echo "  Model ........ ${MODEL_NAME}"
@@ -160,7 +187,7 @@ spec:
             echo "  File ......... ${SERVICE_FILE}"
             echo ""
             echo "--------------------------------------------------"
-            echo "  ${STATUS}"
+            echo "${STATUS}"
             echo "--------------------------------------------------"
             echo ""
             echo "##################################################"

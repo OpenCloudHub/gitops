@@ -1,5 +1,21 @@
 # =============================================================================
-# Shared Ray Job Templates
+# Ray Job Templates
+# =============================================================================
+#
+# Shared templates for submitting and monitoring Ray training jobs.
+# Provides log streaming from Ray job submitter pods to Argo UI.
+#
+# Templates:
+#   training-job    - Main entry: submit + wait with log streaming (DAG)
+#   submit-rayjob   - Create RayJob resource
+#   stream-and-wait - Stream logs and wait for completion
+#
+# Environment variables injected into Ray pods:
+#   Platform (mlops-platform-env):  MLFLOW_TRACKING_URI
+#   Model ({model}-env):            MLFLOW_EXPERIMENT_NAME, MLFLOW_REGISTERED_MODEL_NAME
+#   Secrets (minio-tenant-secret):  AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL
+#   Tracking (inline):              ARGO_WORKFLOW_UID, DOCKER_IMAGE_TAG, DVC_DATA_VERSION, REPLICAS
+#
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
@@ -7,6 +23,8 @@ kind: WorkflowTemplate
 metadata:
   name: ray-templates
   namespace: mlops
+  annotations:
+    workflows.argoproj.io/description: "Ray job submission and log streaming"
 spec:
   templates:
     # =========================================================================
@@ -42,7 +60,7 @@ spec:
 
       dag:
         tasks:
-          - name: submit
+          - name: submit-job
             template: submit-rayjob
             arguments:
               parameters:
@@ -65,7 +83,7 @@ spec:
                 - name: dvc_data_version
                   value: "{{inputs.parameters.dvc_data_version}}"
 
-          - name: wait
+          - name: watch-job
             dependencies: [submit]
             template: stream-and-wait
             arguments:
@@ -76,7 +94,7 @@ spec:
                   value: "{{inputs.parameters.timeout}}"
 
     # =========================================================================
-    # SUBMIT: Create RayJob (clean resource template)
+    # SUBMIT: Create RayJob resource
     # =========================================================================
     - name: submit-rayjob
       inputs:
@@ -185,7 +203,7 @@ spec:
                               value: "{{inputs.parameters.replicas}}"
 
     # =========================================================================
-    # WAIT: Stream logs while waiting for completion
+    # WAIT: Stream logs from submitter pod while waiting for completion
     # =========================================================================
     - name: stream-and-wait
       inputs:
@@ -198,6 +216,11 @@ spec:
           - name: job_status
             valueFrom:
               path: /tmp/job_status.txt
+        artifacts:
+          - name: training-logs
+            path: /tmp/training-logs.txt
+            archive:
+              none: {}
       script:
         image: bitnami/kubectl:latest
         command: [bash]
@@ -209,21 +232,27 @@ spec:
 
           echo "PENDING" > /tmp/job_status.txt
 
-          echo "=========================================="
-          echo "📋 RayJob: $JOB_NAME"
-          echo "=========================================="
+          {
+            echo ""
+            echo "##################################################"
+            echo "🚀 RAY TRAINING JOB"
+            echo "##################################################"
+            echo ""
+            echo "  Job ......... $JOB_NAME"
+            echo "  Timeout ..... ${TIMEOUT}s"
+            echo ""
+          } | tee /tmp/training-logs.txt
 
           # Wait for submitter pod to exist and be running
-          echo "⏳ Waiting for submitter pod..."
+          echo "⏳ Waiting for submitter pod..." | tee -a /tmp/training-logs.txt
           ELAPSED=0
           SUBMITTER_POD=""
           while [ $ELAPSED -lt 120 ]; do
-            # Submitter pod is {JOB_NAME}-{suffix}, excluding head/worker pods
             SUBMITTER_POD=$(kubectl get pods -n mlops -o name 2>/dev/null | grep "^pod/${JOB_NAME}-" | grep -v -- "-head-" | grep -v -- "-worker" | head -1 | sed 's|pod/||' || echo "")
 
             if [ -n "$SUBMITTER_POD" ]; then
               POD_PHASE=$(kubectl get pod -n mlops "$SUBMITTER_POD" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
-              echo "   Found: $SUBMITTER_POD (phase: $POD_PHASE)"
+              echo "  Found: $SUBMITTER_POD ($POD_PHASE)" | tee -a /tmp/training-logs.txt
               if [ "$POD_PHASE" = "Running" ] || [ "$POD_PHASE" = "Succeeded" ]; then
                 break
               fi
@@ -234,40 +263,63 @@ spec:
           done
 
           if [ -z "$SUBMITTER_POD" ]; then
-            echo "❌ Could not find submitter pod after ${ELAPSED}s"
-            echo "Available pods:"
-            kubectl get pods -n mlops | grep "$JOB_NAME" || echo "(none)"
+            {
+              echo ""
+              echo "--------------------------------------------------"
+              echo "❌ FAILED - Could not find submitter pod"
+              echo "--------------------------------------------------"
+              echo ""
+              kubectl get pods -n mlops | grep "$JOB_NAME" || echo "(no pods found)"
+              echo ""
+              echo "##################################################"
+              echo ""
+            } | tee -a /tmp/training-logs.txt
             echo "FAILED" > /tmp/job_status.txt
             exit 1
           fi
 
-          echo ""
-          echo "🚀 Streaming logs from: $SUBMITTER_POD"
-          echo ""
-          echo "##################################################""
-          echo "📝 TRAINING LOGS"
-          echo "##################################################""
+          {
+            echo ""
+            echo "##################################################"
+            echo "📝 TRAINING LOGS"
+            echo "##################################################"
+            echo ""
+          } | tee -a /tmp/training-logs.txt
 
           # Stream logs - follows until pod completes
-          kubectl logs -n mlops -f "$SUBMITTER_POD" 2>&1 || true
-
-          echo ""
-          echo "##################################################""
+          kubectl logs -n mlops -f "$SUBMITTER_POD" 2>&1 | tee -a /tmp/training-logs.txt || true
 
           # Check final status
           FINAL_STATUS=$(kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobStatus}' 2>/dev/null || echo "UNKNOWN")
 
+          {
+            echo ""
+            echo "##################################################"
+            echo ""
+          } >> /tmp/training-logs.txt
+
           if [ "$FINAL_STATUS" = "SUCCEEDED" ]; then
-            echo "✅ Training completed successfully"
+            {
+              echo "--------------------------------------------------"
+              echo "✅ TRAINING COMPLETED SUCCESSFULLY"
+              echo "--------------------------------------------------"
+            } | tee -a /tmp/training-logs.txt
             echo "SUCCEEDED" > /tmp/job_status.txt
+            echo "" | tee -a /tmp/training-logs.txt
+            echo "##################################################" | tee -a /tmp/training-logs.txt
+            echo "" | tee -a /tmp/training-logs.txt
             exit 0
           else
-            echo "❌ Training failed: $FINAL_STATUS"
-            kubectl describe rayjob -n mlops "$JOB_NAME" | tail -30
+            {
+              echo "--------------------------------------------------"
+              echo "❌ TRAINING FAILED: $FINAL_STATUS"
+              echo "--------------------------------------------------"
+              echo ""
+              kubectl describe rayjob -n mlops "$JOB_NAME" | tail -30
+            } | tee -a /tmp/training-logs.txt
             echo "FAILED" > /tmp/job_status.txt
+            echo "" | tee -a /tmp/training-logs.txt
+            echo "##################################################" | tee -a /tmp/training-logs.txt
+            echo "" | tee -a /tmp/training-logs.txt
             exit 1
           fi
-
-          echo "##################################################""
-          echo "##################################################""
-          echo ""
