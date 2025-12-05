@@ -30,15 +30,10 @@ spec:
     - name: training-job
       inputs:
         parameters:
-          # Job identity
           - name: job_prefix
           - name: image
           - name: entrypoint
-
-          # Model config (references ConfigMap by name)
           - name: model_configmap
-
-          # Compute (from compute-templates)
           - name: cpu
             default: "2"
           - name: memory
@@ -47,8 +42,6 @@ spec:
             default: "0"
           - name: replicas
             default: "1"
-
-          # Data version (for traceability)
           - name: dvc_data_version
 
       outputs:
@@ -75,7 +68,7 @@ spec:
             shutdownAfterJobFinishes: true
             ttlSecondsAfterFinished: 300
             rayClusterSpec:
-              rayVersion: "2.41.0"  # TODO: bumps
+              rayVersion: "2.41.0"
               headGroupSpec:
                 rayStartParams:
                   dashboard-host: "0.0.0.0"
@@ -93,29 +86,24 @@ spec:
                             memory: "{{inputs.parameters.memory}}"
                             nvidia.com/gpu: "{{inputs.parameters.gpu}}"
                         envFrom:
-                          # Platform config (MLFLOW_TRACKING_URI)
                           - configMapRef:
                               name: mlops-platform-env
-                          # Model config (MLFLOW_EXPERIMENT_NAME, MLFLOW_REGISTERED_MODEL_NAME)
                           - configMapRef:
                               name: "{{inputs.parameters.model_configmap}}"
-                          # Secrets (AWS_* for MinIO/DVC)
                           - secretRef:
                               name: minio-tenant-secret
                         env:
-                          # ===== TRACKING (AI team MUST use these for MLflow tagging) =====
                           - name: ARGO_WORKFLOW_UID
                             value: "{{workflow.uid}}"
                           - name: ARGO_WORKFLOW_NAME
                             value: "{{workflow.name}}"
-                          # ===== VERSIONING (links model to code + data) =====
                           - name: DOCKER_IMAGE_TAG
                             value: "{{inputs.parameters.image}}"
                           - name: DVC_DATA_VERSION
                             value: "{{inputs.parameters.dvc_data_version}}"
-                          # ===== INFRASTRUCTURE (platform-controlled) =====
                           - name: REPLICAS
                             value: "{{inputs.parameters.replicas}}"
+              workerGroupSpecs:
                 - groupName: workers
                   replicas: {{inputs.parameters.replicas}}
                   rayStartParams: {}
