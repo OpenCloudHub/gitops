@@ -117,3 +117,6 @@ spec:
         remoteRef:
           key: secret/data/platform/github/arc-runner
           property: github_token
+          conversionStrategy: Default
+          decodingStrategy: None
+          metadataPolicy: None
