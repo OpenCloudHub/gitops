@@ -1,9 +1,8 @@
-# src/team-infra/arc/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 helmCharts:
-  # Controller
+  # Controller (no special config needed)
   - name: gha-runner-scale-set-controller
     releaseName: arc
     version: 0.13.0
@@ -19,7 +18,6 @@ helmCharts:
     namespace: arc-runners
     valuesInline:
       githubConfigUrl: "https://github.com/OpenCloudHub"
-      githubConfigSecret: arc-github-secret
+      githubConfigSecret: "arc-github-secret"
       minRunners: 0
       maxRunners: 2
-      runnerScaleSetName: "arc-runner-set"
