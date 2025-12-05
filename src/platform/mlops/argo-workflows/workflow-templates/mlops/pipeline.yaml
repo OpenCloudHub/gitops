@@ -92,7 +92,7 @@ spec:
         - - name: train
             templateRef:
               name: ray-templates
-              template: training-job
+              template: submit-and-stream-rayjob
             arguments:
               parameters:
                 - name: job_prefix

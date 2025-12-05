@@ -30,7 +30,7 @@ spec:
     # =========================================================================
     # MAIN: Submit and wait with log streaming (DAG for proper output resolution)
     # =========================================================================
-    - name: training-job
+    - name: submit-and-stream-rayjob
       inputs:
         parameters:
           - name: job_prefix
@@ -53,10 +53,10 @@ spec:
         parameters:
           - name: job_name
             valueFrom:
-              parameter: "{{tasks.submit.outputs.parameters.job_name}}"
+              parameter: "{{tasks.submit-job.outputs.parameters.job_name}}"
           - name: job_status
             valueFrom:
-              parameter: "{{tasks.wait.outputs.parameters.job_status}}"
+              parameter: "{{tasks.stream-job.outputs.parameters.job_status}}"
 
       dag:
         tasks:
@@ -83,13 +83,13 @@ spec:
                 - name: dvc_data_version
                   value: "{{inputs.parameters.dvc_data_version}}"
 
-          - name: watch-job
+          - name: stream-job
             dependencies: [submit]
-            template: stream-and-wait
+            template: stream-rayjob
             arguments:
               parameters:
                 - name: job_name
-                  value: "{{tasks.submit.outputs.parameters.job_name}}"
+                  value: "{{tasks.submit-job.outputs.parameters.job_name}}"
                 - name: timeout
                   value: "{{inputs.parameters.timeout}}"
 
@@ -205,7 +205,7 @@ spec:
     # =========================================================================
     # WAIT: Stream logs from submitter pod while waiting for completion
     # =========================================================================
-    - name: stream-and-wait
+    - name: stream-rayjob
       inputs:
         parameters:
           - name: job_name
