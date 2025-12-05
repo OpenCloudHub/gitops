@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - servicemonitor.yaml
+  - service.yaml
 
 helmCharts:
   # Controller (no special config needed)
