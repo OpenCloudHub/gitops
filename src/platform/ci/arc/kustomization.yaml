@@ -16,8 +16,4 @@ helmCharts:
     version: 0.13.0
     repo: oci://ghcr.io/actions/actions-runner-controller-charts
     namespace: arc-runners
-    valuesInline:
-      githubConfigUrl: "https://github.com/OpenCloudHub"
-      githubConfigSecret: "arc-github-secret"
-      minRunners: 0
-      maxRunners: 2
+    valuesFile: values-runners.yaml
