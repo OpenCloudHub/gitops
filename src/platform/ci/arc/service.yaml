@@ -13,3 +13,19 @@ spec:
       port: 8080
       targetPort: 8080
       protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arc-listener-metrics
+  namespace: arc-systems
+  labels:
+    app.kubernetes.io/name: gha-runner-scale-set-listener
+spec:
+  selector:
+    app.kubernetes.io/component: runner-scale-set-listener
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+      protocol: TCP

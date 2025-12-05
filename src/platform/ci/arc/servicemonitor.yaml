@@ -3,12 +3,27 @@ kind: ServiceMonitor
 metadata:
   name: arc-controller
   namespace: arc-systems
-  labels:
-    app.kubernetes.io/name: arc-controller
 spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: gha-runner-scale-set-controller
+  namespaceSelector:
+    matchNames:
+      - arc-systems
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: arc-listener
+  namespace: arc-systems
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gha-runner-scale-set-listener
   namespaceSelector:
     matchNames:
       - arc-systems
