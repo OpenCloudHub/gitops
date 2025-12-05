@@ -105,5 +105,17 @@ spec:
           echo -n "$REPLICAS" > /tmp/replicas.txt
           echo -n "$GPU"      > /tmp/gpu.txt
 
-          echo "✅ Compute: $COMPUTE_TYPE"
-          echo "   CPU: ${CPU_REQ}/${CPU_LIM}, Mem: ${MEM_REQ}/${MEM_LIM}, Replicas: ${REPLICAS}, GPU: ${GPU}"
+          echo ""
+          echo "╔══════════════════════════════════════════════════════════╗"
+          echo "║  ⚙️  COMPUTE CONFIGURATION                                ║"
+          echo "╠══════════════════════════════════════════════════════════╣"
+          printf "║  %-56s ║\n" "Type: $COMPUTE_TYPE"
+          echo "╟──────────────────────────────────────────────────────────╢"
+          printf "║  %-20s │ %-16s │ %-12s ║\n" "Resource" "Request" "Limit"
+          echo "╟──────────────────────────────────────────────────────────╢"
+          printf "║  %-20s │ %-16s │ %-12s ║\n" "CPU" "$CPU_REQ" "$CPU_LIM"
+          printf "║  %-20s │ %-16s │ %-12s ║\n" "Memory" "$MEM_REQ" "$MEM_LIM"
+          printf "║  %-20s │ %-16s │ %-12s ║\n" "GPU" "$GPU" "$GPU"
+          printf "║  %-20s │ %-16s │ %-12s ║\n" "Replicas" "$REPLICAS" "-"
+          echo "╚══════════════════════════════════════════════════════════╝"
+          echo ""
