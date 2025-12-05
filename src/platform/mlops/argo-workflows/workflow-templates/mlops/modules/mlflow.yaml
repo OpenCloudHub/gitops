@@ -34,6 +34,11 @@ spec:
           - name: message
             valueFrom:
               path: /tmp/message.txt
+        artifacts:
+          - name: comparison-report
+            path: /tmp/comparison-report.md
+            archive:
+              none: {}
       script:
         image: python:3.12-slim
         envFrom:
@@ -167,6 +172,24 @@ spec:
           print("==========================================")
           print("")
 
+          # Generate comparison report
+          from datetime import datetime
+          with open("/tmp/comparison-report.md", "w") as f:
+              f.write(f"# Model Comparison Report\n\n")
+              f.write(f"**Model:** `{MODEL_NAME}`\n")
+              f.write(f"**Date:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n")
+              f.write(f"**Status:** {'✅ PROMOTED' if should_promote else '⏸️ NOT PROMOTED'}\n\n")
+              f.write(f"## Comparison\n\n")
+              f.write(f"| | Version | {METRIC} |\n")
+              f.write(f"|---|---------|----------|\n")
+              f.write(f"| CI Model | v{ci_version.version} | {ci_metric} |\n")
+              if prod_metric is not None:
+                  f.write(f"| Champion | v{v.version} | {prod_metric} |\n\n")
+              else:
+                  f.write(f"| Champion | - | (none) |\n\n")
+              f.write(f"**Threshold:** {THRESHOLD:.0%}\n")
+              f.write(f"**Result:** {message}\n")
+
           with open("/tmp/message.txt", "w") as f: f.write(message)
 
     # =========================================================================
@@ -182,6 +205,11 @@ spec:
           - name: prod_version
             valueFrom:
               path: /tmp/prod_version.txt
+        artifacts:
+          - name: promotion-report
+            path: /tmp/promotion-report.md
+            archive:
+              none: {}
       script:
         image: python:3.12-slim
         envFrom:
@@ -245,6 +273,19 @@ spec:
           print("==========================================")
           print("==========================================")
           print("")
+
+          # Generate promotion report
+          from datetime import datetime
+          with open("/tmp/promotion-report.md", "w") as f:
+              f.write(f"# Production Promotion Report\n\n")
+              f.write(f"**Model:** `{MODEL_NAME}`\n")
+              f.write(f"**Date:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n")
+              f.write(f"**Status:** ✅ PROMOTED\n\n")
+              f.write(f"## Details\n\n")
+              f.write(f"| Stage | Version |\n")
+              f.write(f"|-------|--------|\n")
+              f.write(f"| Source (staging) | v{STAGING_VERSION} |\n")
+              f.write(f"| Target (prod) | v{prod_version.version} @champion |\n")
 
           with open("/tmp/prod_version.txt", "w") as f:
               f.write(prod_version.version)
