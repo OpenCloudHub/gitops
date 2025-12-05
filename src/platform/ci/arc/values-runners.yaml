@@ -1,5 +1,6 @@
 githubConfigUrl: "https://github.com/OpenCloudHub"
 githubConfigSecret: arc-github-secret
+runnerGroup: local-minikube
 minRunners: 0
 maxRunners: 2
 controllerServiceAccount:
