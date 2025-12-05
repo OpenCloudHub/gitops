@@ -10,7 +10,7 @@ metadata:
 spec:
   templates:
     # =========================================================================
-    # MAIN: Submit and wait with log streaming
+    # MAIN: Submit and wait with log streaming (DAG for proper output resolution)
     # =========================================================================
     - name: training-job
       inputs:
@@ -28,18 +28,21 @@ spec:
           - name: replicas
             default: "1"
           - name: dvc_data_version
+          - name: timeout
+            default: "3600"
 
       outputs:
         parameters:
           - name: job_name
             valueFrom:
-              parameter: "{{steps.submit.outputs.parameters.job_name}}"
+              parameter: "{{tasks.submit.outputs.parameters.job_name}}"
           - name: job_status
             valueFrom:
-              parameter: "{{steps.wait.outputs.parameters.job_status}}"
+              parameter: "{{tasks.wait.outputs.parameters.job_status}}"
 
-      steps:
-        - - name: submit-training
+      dag:
+        tasks:
+          - name: submit
             template: submit-rayjob
             arguments:
               parameters:
@@ -62,15 +65,18 @@ spec:
                 - name: dvc_data_version
                   value: "{{inputs.parameters.dvc_data_version}}"
 
-        - - name: watch-training
+          - name: wait
+            dependencies: [submit]
             template: stream-and-wait
             arguments:
               parameters:
                 - name: job_name
-                  value: "{{steps.submit.outputs.parameters.job_name}}"
+                  value: "{{tasks.submit.outputs.parameters.job_name}}"
+                - name: timeout
+                  value: "{{inputs.parameters.timeout}}"
 
     # =========================================================================
-    # SUBMIT: Create RayJob (resource template - clean, no kubectl)
+    # SUBMIT: Create RayJob (clean resource template)
     # =========================================================================
     - name: submit-rayjob
       inputs:
@@ -203,7 +209,7 @@ spec:
 
           echo "PENDING" > /tmp/job_status.txt
 
-          # Install kubectl using wget
+          # Install kubectl
           wget -q "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl" -O /tmp/kubectl
           chmod +x /tmp/kubectl
 
@@ -211,7 +217,7 @@ spec:
           echo "📋 RayJob: $JOB_NAME"
           echo "=========================================="
 
-          # Wait for job to initialize and get Ray cluster info
+          # Wait for job to initialize
           ELAPSED=0
           while [ $ELAPSED -lt 300 ]; do
             RAY_JOB_ID=$(/tmp/kubectl get rayjob -n mlops "$JOB_NAME" -o jsonpath='{.status.jobId}' 2>/dev/null || echo "")
@@ -245,7 +251,6 @@ spec:
           echo "🚀 Job initialized:"
           echo "   Ray Job ID: $RAY_JOB_ID"
           echo "   Cluster:    $CLUSTER_NAME"
-          echo "   Dashboard:  $RAY_ADDRESS"
           echo ""
           echo "=========================================="
           echo "📝 TRAINING LOGS"
