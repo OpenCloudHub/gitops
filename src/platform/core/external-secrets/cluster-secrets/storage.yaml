@@ -1,3 +1,47 @@
+# apiVersion: external-secrets.io/v1
+# kind: ClusterExternalSecret
+# metadata:
+#   name: minio-tenant-secret
+#   annotations:
+#     argocd.argoproj.io/sync-wave: "2"
+# spec:
+#   externalSecretName: minio-tenant-secret-es
+#   refreshTime: 1h
+#   namespaceSelectors:
+#     - matchLabels:
+#         opencloudhub.org/secret-minio: "true"
+#   externalSecretSpec:
+#     refreshInterval: 1h
+#     secretStoreRef:
+#       name: vault-backend
+#       kind: ClusterSecretStore
+#     target:
+#       name: minio-tenant-secret
+#       creationPolicy: Owner
+#       deletionPolicy: Retain
+#       template:
+#         data:
+#           config.env: |
+#             export MINIO_ROOT_USER={{ .accesskey }}
+#             export MINIO_ROOT_PASSWORD={{ .secretkey }}
+#           accesskey: "{{ .accesskey }}"
+#           secretkey: "{{ .secretkey }}"
+#           endpoint-url: "https://minio-api.internal.opencloudhub.org"
+#     data:
+#       - secretKey: accesskey
+#         remoteRef:
+#           key: platform/storage/minio-tenant/credentials
+#           property: accesskey
+#           conversionStrategy: Default
+#           decodingStrategy: None
+#           metadataPolicy: None
+#       - secretKey: secretkey
+#         remoteRef:
+#           key: platform/storage/minio-tenant/credentials
+#           property: secretkey
+#           conversionStrategy: Default
+#           decodingStrategy: None
+#           metadataPolicy: None
 apiVersion: external-secrets.io/v1
 kind: ClusterExternalSecret
 metadata:
@@ -21,27 +65,23 @@ spec:
       deletionPolicy: Retain
       template:
         data:
+          # Standard AWS env var names (for secretRef in pods)
+          AWS_ACCESS_KEY_ID: "{{ .accesskey }}"
+          AWS_SECRET_ACCESS_KEY: "{{ .secretkey }}"
+          AWS_ENDPOINT_URL: "https://minio-api.internal.opencloudhub.org"
+          # MinIO config.env format (for MinIO operator if needed)
           config.env: |
             export MINIO_ROOT_USER={{ .accesskey }}
             export MINIO_ROOT_PASSWORD={{ .secretkey }}
-          accesskey: "{{ .accesskey }}"
-          secretkey: "{{ .secretkey }}"
-          endpoint-url: "https://minio-api.internal.opencloudhub.org"
     data:
       - secretKey: accesskey
         remoteRef:
           key: platform/storage/minio-tenant/credentials
           property: accesskey
-          conversionStrategy: Default
-          decodingStrategy: None
-          metadataPolicy: None
       - secretKey: secretkey
         remoteRef:
           key: platform/storage/minio-tenant/credentials
           property: secretkey
-          conversionStrategy: Default
-          decodingStrategy: None
-          metadataPolicy: None
 ---
 apiVersion: external-secrets.io/v1
 kind: ClusterExternalSecret
