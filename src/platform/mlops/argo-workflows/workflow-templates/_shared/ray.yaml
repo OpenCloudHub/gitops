@@ -73,8 +73,12 @@ spec:
                   value: "{{inputs.parameters.image}}"
                 - name: entrypoint
                   value: "{{inputs.parameters.entrypoint}}"
+                - name: base_configmap
+                  value: "{{inputs.parameters.base_configmap}}"
                 - name: job_configmap
                   value: "{{inputs.parameters.job_configmap}}"
+                - name: job_secret
+                  value: "{{inputs.parameters.job_secret}}"
                 - name: cpu
                   value: "{{inputs.parameters.cpu}}"
                 - name: memory
