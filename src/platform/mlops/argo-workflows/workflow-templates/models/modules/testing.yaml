@@ -43,7 +43,7 @@ spec:
         image: python:3.12-slim
         envFrom:
           - configMapRef:
-              name: mlops-platform-env
+              name: models-job-env
         command: [python]
         source: |
           import os

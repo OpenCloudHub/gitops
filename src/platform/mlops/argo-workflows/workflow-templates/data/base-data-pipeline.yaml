@@ -127,6 +127,16 @@ spec:
         - name: git-secret
           secret:
             secretName: data-registry-repo
+      podSpecPatch: |
+        containers:
+          - name: main
+            resources:
+              requests:
+                cpu: "{{inputs.parameters.cpu_request}}"
+                memory: "{{inputs.parameters.memory_request}}"
+              limits:
+                cpu: "{{inputs.parameters.cpu_limit}}"
+                memory: "{{inputs.parameters.memory_limit}}"
       script:
         image: "{{workflow.parameters.image}}"
         command: [bash]
