@@ -60,7 +60,7 @@ spec:
                 - name: image
                   value: "{{workflow.parameters.image}}"
                 - name: entrypoint
-                  value: "dvc repro {{=workflow.parameters.force == 'true' ? '--force' : ''}"
+                  value: "dvc repro {{= workflow.parameters.force == 'true' ? '--force' : '' }}"
                 - name: base_configmap
                   value: "data-job-env"
                 - name: job_configmap
