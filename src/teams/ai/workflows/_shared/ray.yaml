@@ -150,7 +150,7 @@ spec:
                   spec:
                     containers:
                       - name: ray-head
-                        image: rayproject/ray:2.51.0-py312
+                        image: "{{inputs.parameters.image}}"
                         resources:
                           requests:
                             cpu: "500m"
@@ -158,11 +158,24 @@ spec:
                           limits:
                             cpu: "1"
                             memory: "2Gi"
+                        envFrom:
+                          - configMapRef:
+                              name: "{{inputs.parameters.base_configmap}}"
+                          - configMapRef:
+                              name: "{{inputs.parameters.job_configmap}}"
+                          - secretRef:
+                              name: "{{inputs.parameters.job_secret}}"
                         env:
                           - name: ARGO_WORKFLOW_UID
                             value: "{{workflow.uid}}"
                           - name: ARGO_WORKFLOW_NAME
                             value: "{{workflow.name}}"
+                          - name: DOCKER_IMAGE_TAG
+                            value: "{{inputs.parameters.image}}"
+                          - name: DVC_DATA_VERSION
+                            value: "{{inputs.parameters.dvc_data_version}}"
+                          - name: REPLICAS
+                            value: "{{inputs.parameters.replicas}}"
               workerGroupSpecs:
                 - groupName: workers
                   replicas: {{inputs.parameters.replicas}}
@@ -181,12 +194,12 @@ spec:
                               memory: "{{inputs.parameters.memory}}"
                               nvidia.com/gpu: "{{inputs.parameters.gpu}}"
                           envFrom:
-                          - configMapRef:
-                              name: "{{inputs.parameters.base_configmap}}"
-                          - configMapRef:
-                              name: "{{inputs.parameters.job_configmap}}"
-                          - secretRef:
-                              name: "{{inputs.parameters.job_secret}}"
+                            - configMapRef:
+                                name: "{{inputs.parameters.base_configmap}}"
+                            - configMapRef:
+                                name: "{{inputs.parameters.job_configmap}}"
+                            - secretRef:
+                                name: "{{inputs.parameters.job_secret}}"
                           env:
                             - name: ARGO_WORKFLOW_UID
                               value: "{{workflow.uid}}"
