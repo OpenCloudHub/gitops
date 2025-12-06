@@ -66,6 +66,7 @@ spec:
 
           import mlflow
           from mlflow.tracking import MlflowClient
+          from mlflow.exceptions import MlflowException
 
           # =================================================================
           # CONFIG
@@ -85,7 +86,7 @@ spec:
           client = MlflowClient()
 
           # =================================================================
-          # RESULT STATE (populated by logic, consumed by report)
+          # RESULT STATE
           # =================================================================
           result = {
               "success": False,
@@ -104,26 +105,50 @@ spec:
           # =================================================================
           def find_ci_model():
               """Find CI model registered by this workflow."""
-              versions = client.search_model_versions(f"name='{ci_model_name}'")
-              for v in versions:
-                  run = client.get_run(v.run_id)
-                  if run.data.tags.get("argo_workflow_uid") == WORKFLOW_UID:
-                      metric = run.data.metrics.get(METRIC)
-                      return v.version, metric
-              return None, None
+              runs_df = mlflow.search_runs(
+                  search_all_experiments=True,
+                  filter_string=f"tags.argo_workflow_uid = '{WORKFLOW_UID}'",
+                  max_results=1,
+                  order_by=["start_time DESC"]
+              )
+
+              if runs_df.empty:
+                  return None, None, "No run found for this workflow"
+
+              run_id = runs_df.iloc[0]['run_id']
+
+              ci_versions = client.search_model_versions(
+                  filter_string=f"name='{ci_model_name}' and run_id='{run_id}'"
+              )
+
+              if not ci_versions:
+                  return None, None, f"No CI model found from run {run_id[:8]}"
+
+              ci_model = ci_versions[0]
+              run = client.get_run(ci_model.run_id)
+              metric = run.data.metrics.get(METRIC)
+
+              if metric is None:
+                  return ci_model.version, None, f"Metric '{METRIC}' not found in CI model"
+
+              return ci_model.version, metric, None
 
           def find_champion():
-              """Find current production champion."""
+              """Find current production champion using direct alias lookup."""
               try:
-                  versions = client.search_model_versions(f"name='{prod_model_name}'")
-                  for v in versions:
-                      if "champion" in v.aliases:
-                          run = client.get_run(v.run_id)
-                          metric = run.data.metrics.get(METRIC)
-                          return v.version, metric
-              except:
-                  pass
-              return None, None
+                  champion = client.get_model_version_by_alias(prod_model_name, "champion")
+                  run = client.get_run(champion.run_id)
+                  metric = run.data.metrics.get(METRIC)
+
+                  if metric is None:
+                      return champion.version, None, f"Metric '{METRIC}' not found in champion"
+
+                  return champion.version, metric, None
+
+              except MlflowException as e:
+                  # No champion exists - expected for first deployment
+                  print(f"   No champion found: {e}")
+                  return None, None, None
 
           def should_promote(ci_metric, prod_metric):
               """Determine if CI model should be promoted."""
@@ -150,21 +175,22 @@ spec:
               client.set_registered_model_alias(staging_model_name, "candidate", staging.version)
               return staging.version
 
-          # --- Execute logic ---
+          # =================================================================
+          # EXECUTE
+          # =================================================================
           try:
               # Find CI model
-              result["ci_version"], result["ci_metric"] = find_ci_model()
+              result["ci_version"], result["ci_metric"], ci_error = find_ci_model()
 
-              if result["ci_version"] is None:
-                  result["error"] = "No CI model found for this workflow"
-              elif result["ci_metric"] is None:
-                  result["error"] = f"Metric '{METRIC}' not found in CI model"
+              if ci_error:
+                  result["error"] = ci_error
               else:
                   # Find champion
-                  result["prod_version"], result["prod_metric"] = find_champion()
+                  result["prod_version"], result["prod_metric"], prod_error = find_champion()
 
-                  if result["prod_version"] and result["prod_metric"] is None:
-                      result["error"] = f"Metric '{METRIC}' not found in champion"
+                  if prod_error:
+                      # Champion exists but has issues (e.g., missing metric)
+                      result["error"] = prod_error
                   else:
                       # Compare and maybe promote
                       result["promoted"], result["message"] = should_promote(
@@ -177,7 +203,7 @@ spec:
                       result["success"] = True
 
           except Exception as e:
-              result["error"] = str(e)
+              result["error"] = f"Unexpected error: {str(e)}"
 
           # =================================================================
           # REPORT GENERATION
@@ -196,26 +222,23 @@ spec:
                   "",
               ]
 
-              # CI model info
               if result["ci_version"]:
                   if result["ci_metric"] is not None:
                       lines.append(f"  CI Model ..... v{result['ci_version']} ({METRIC}={result['ci_metric']:.4f})")
                   else:
                       lines.append(f"  CI Model ..... v{result['ci_version']}")
 
-              # Champion info
               if result["prod_version"]:
                   if result["prod_metric"] is not None:
                       lines.append(f"  Champion ..... v{result['prod_version']} ({METRIC}={result['prod_metric']:.4f})")
                   else:
-                      lines.append(f"  Champion ..... v{result['prod_version']}")
+                      lines.append(f"  Champion ..... v{result['prod_version']} (metric missing!)")
               elif result["success"]:
                   lines.append("  Champion ..... (none - first deployment)")
 
               lines.append("")
               lines.append("--------------------------------------------------")
 
-              # Result
               if result["error"]:
                   lines.append(f"❌ FAILED - {result['error']}")
               elif result["promoted"]:
