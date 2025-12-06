@@ -1,0 +1,26 @@
+# =============================================================================
+# Resource Limits for mlops namespace
+# =============================================================================
+# Demonstrates: LimitRange for ML workloads (higher defaults for training)
+# =============================================================================
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: mlops-limits
+  namespace: mlops
+spec:
+  limits:
+    - type: Container
+      default:
+        memory: "1Gi"
+        cpu: "500m"
+      defaultRequest:
+        memory: "256Mi"
+        cpu: "100m"
+      max:
+        memory: "32Gi" # Allow large training jobs
+        cpu: "8"
+      min:
+        memory: "64Mi"
+        cpu: "50m"

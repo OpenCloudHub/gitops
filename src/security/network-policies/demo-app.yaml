@@ -1,0 +1,178 @@
+# =============================================================================
+# Network Policies for demo-app namespace
+# =============================================================================
+# Demonstrates: Basic network segmentation
+#
+# Policies:
+#   1. Allow ingress from Istio gateway only
+#   2. Allow internal communication between frontend/backend
+#   3. Allow egress to required services (DB, MLflow, external APIs)
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Default deny all ingress (baseline security)
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# -----------------------------------------------------------------------------
+# Allow ingress from Istio gateway
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-istio-ingress
+  namespace: demo-app
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-ingress
+
+---
+# -----------------------------------------------------------------------------
+# Allow frontend -> backend communication
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend
+  namespace: demo-app
+spec:
+  podSelector:
+    matchLabels:
+      app: demo-app-genai-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: demo-app-frontend
+      ports:
+        - protocol: TCP
+          port: 8000
+
+---
+# -----------------------------------------------------------------------------
+# Backend egress: Allow DB, MLflow, MinIO, external LLM API
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-egress
+  namespace: demo-app
+spec:
+  podSelector:
+    matchLabels:
+      app: demo-app-genai-backend
+  policyTypes:
+    - Egress
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # PostgreSQL in storage namespace
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: storage
+      ports:
+        - protocol: TCP
+          port: 5432
+    # MLflow in mlops namespace
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mlops
+      ports:
+        - protocol: TCP
+          port: 5000
+    # MinIO in minio-tenant namespace
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: minio-tenant
+      ports:
+        - protocol: TCP
+          port: 80
+    # Tempo (observability) for tracing
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 4317
+    # Allow external HTTPS (for LLM API, GitHub, etc.)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+
+---
+# -----------------------------------------------------------------------------
+# Frontend egress: Allow backend only + DNS
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-egress
+  namespace: demo-app
+spec:
+  podSelector:
+    matchLabels:
+      app: demo-app-frontend
+  policyTypes:
+    - Egress
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Backend
+    - to:
+        - podSelector:
+            matchLabels:
+              app: demo-app-genai-backend
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Alloy (observability) for tracing
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 4318

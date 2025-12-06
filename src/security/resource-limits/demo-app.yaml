@@ -1,0 +1,54 @@
+# =============================================================================
+# Resource Limits for demo-app namespace
+# =============================================================================
+# Demonstrates: LimitRange to set default resource requests/limits
+# This ensures all pods have resource constraints even if not specified.
+# =============================================================================
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: demo-app-limits
+  namespace: demo-app
+spec:
+  limits:
+    # Default container limits if not specified
+    - type: Container
+      default:
+        memory: "512Mi"
+        cpu: "500m"
+      defaultRequest:
+        memory: "128Mi"
+        cpu: "100m"
+      max:
+        memory: "4Gi"
+        cpu: "2"
+      min:
+        memory: "64Mi"
+        cpu: "50m"
+---
+# =============================================================================
+# Resource Quota for demo-app namespace
+# =============================================================================
+# Demonstrates: Total resource limits for the namespace
+# Prevents any single team from consuming all cluster resources.
+# =============================================================================
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: demo-app-quota
+  namespace: demo-app
+spec:
+  hard:
+    # Compute limits
+    requests.cpu: "4"
+    requests.memory: "8Gi"
+    limits.cpu: "8"
+    limits.memory: "16Gi"
+    # Object count limits
+    pods: "20"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+    persistentvolumeclaims: "5"

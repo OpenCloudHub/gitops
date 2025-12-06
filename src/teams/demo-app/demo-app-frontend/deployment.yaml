@@ -13,9 +13,22 @@ spec:
       labels:
         app: demo-app-frontend
     spec:
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: demo-app-frontend
           image: opencloudhuborg/demo-app-frontend:main-2418fc7
+          # Container-level security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false # Next.js needs to write
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 3000
               name: http

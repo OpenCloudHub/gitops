@@ -16,6 +16,9 @@ spec:
           - name: resource-limits
             path: src/security/resource-limits
             syncWave: "2"
+          - name: network-policies
+            path: src/security/network-policies
+            syncWave: "2"
           - name: secrets
             path: src/security/secrets
             syncWave: "3"

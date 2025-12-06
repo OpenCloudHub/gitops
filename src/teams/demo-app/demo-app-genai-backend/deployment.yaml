@@ -13,9 +13,22 @@ spec:
       labels:
         app: demo-app-genai-backend
     spec:
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: demo-app-genai-backend-api
           image: opencloudhuborg/demo-app-genai-backend:main-6ba5433
+          # Container-level security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false # Python apps often need tmp writes
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8000
               name: http
