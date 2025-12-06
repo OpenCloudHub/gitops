@@ -1,4 +1,33 @@
 #!/bin/bash
+# =============================================================================
+# src/tests/run-test.sh
+# k6 Test Execution Script
+# =============================================================================
+#
+# Executes k6 performance tests in Kubernetes using the k6-operator.
+# Creates a TestRun custom resource and streams logs to the console.
+#
+# Usage:
+#   ./run-test.sh <name> <test_type> <test_target> <script_path> [cpu] [mem]
+#
+# Arguments:
+#   name        - Unique identifier for the test run
+#   test_type   - Category: smoke, load, stress, spike
+#   test_target - What's being tested: platform-mlops, model-wine, etc.
+#   script_path - Path to k6 script (relative to /tests/tests/)
+#   cpu         - CPU limit (default: 200m)
+#   mem         - Memory limit (default: 256Mi)
+#
+# Example:
+#   ./run-test.sh smoke-mlops smoke platform-mlops 01-smoke/platform/mlops.js
+#
+# Output:
+#   - Console logs from k6 execution
+#   - Metrics exported to Prometheus (via k6 experimental-prometheus-rw)
+#   - Test ID for Grafana filtering
+#
+# =============================================================================
+
 set -e
 
 # Usage: ./run-test.sh <name> <test_type> <test_target> <script_path> <cpu> <mem>

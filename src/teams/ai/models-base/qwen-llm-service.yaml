@@ -1,3 +1,35 @@
+# =============================================================================
+# src/teams/ai/models-base/qwen-llm-service.yaml
+# Qwen 2.5 0.5B LLM Service - Pre-built Foundation Model
+# =============================================================================
+#
+# Deploys a Qwen 2.5 0.5B Instruct model using Ray Serve with vLLM backend.
+# Provides an OpenAI-compatible API endpoint for chat completions.
+#
+# Architecture:
+#   - RayService manages the Ray cluster lifecycle
+#   - Head node: Coordinates workers, runs Ray Dashboard
+#   - Worker node: Runs vLLM with fractional GPU (0.49 GPU)
+#
+# API Endpoints:
+#   - /v1/chat/completions - OpenAI-compatible chat API
+#   - /v1/models - List available models
+#
+# Access URLs:
+#   - API: https://api.opencloudhub.org/models/base/qwen-0.5b/v1
+#   - Dashboard: https://qwen-0.5b.dashboard.opencloudhub.org
+#
+# GPU Configuration:
+#   Uses fractional GPU allocation (0.49) to allow multiple models
+#   to share a single GPU. Adjust gpu_memory_utilization for memory.
+#
+# Observability:
+#   - OpenTelemetry traces exported to Alloy collector
+#   - Prometheus metrics via Ray's metrics endpoint
+#   - Grafana dashboards linked in Ray Dashboard
+#
+# =============================================================================
+
 apiVersion: ray.io/v1
 kind: RayService
 metadata:

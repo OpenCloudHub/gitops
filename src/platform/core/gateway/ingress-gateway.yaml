@@ -1,3 +1,29 @@
+# =============================================================================
+# src/platform/core/gateway/ingress-gateway.yaml
+# Istio Gateway - Cluster Ingress Configuration
+# =============================================================================
+#
+# Defines the main ingress gateway for the cluster using Gateway API.
+# All external traffic enters through this gateway and is routed to
+# services via HTTPRoute resources.
+#
+# TLS Configuration:
+#   - Uses cert-manager to automatically provision certificates
+#   - ClusterIssuer: ca-issuer (self-signed CA for development)
+#   - For production: Switch to letsencrypt-prod ClusterIssuer
+#
+# Hostname Pattern:
+#   *.opencloudhub.org - Matches all subdomains
+#   Examples:
+#     - argocd.internal.opencloudhub.org
+#     - api.opencloudhub.org
+#     - grafana.internal.opencloudhub.org
+#
+# Allowed Routes:
+#   from: All - Any namespace can create HTTPRoutes to this gateway
+#
+# =============================================================================
+
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -8,16 +34,16 @@ metadata:
 spec:
   gatewayClassName: istio
   listeners:
-  - name: https
-    port: 443
-    protocol: HTTPS
-    hostname: "*.opencloudhub.org"  # Matches everything  # TODO: make more secure or team specific
-    allowedRoutes:
-      namespaces:
-        from: All
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - group: ''
-        kind: Secret
-        name: ingress-gateway-cert
+    - name: https
+      port: 443
+      protocol: HTTPS
+      hostname: "*.opencloudhub.org" # Wildcard for all subdomains (see header for examples)
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: ingress-gateway-cert

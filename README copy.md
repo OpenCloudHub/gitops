@@ -44,6 +44,10 @@
 
 <!-- TABLE OF CONTENTS -->
 
+<!-- TODO: make tunnel wait for ingress to be up -->
+
+<!-- TODO: cleanup ray jobs on failure of workflow -->
+
 <details>
   <summary>📑 Table of Contents</summary>
   <ol>
@@ -56,7 +60,6 @@
     <li><a href="#platform-components">Platform Components</a></li>
     <li><a href="#mlops-pipelines">MLOps Pipelines</a></li>
     <li><a href="#team-applications">Team Applications</a></li>
-    <li><a href="#performance-testing">Performance Testing</a></li>
     <li><a href="#troubleshooting">Troubleshooting</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
@@ -67,7 +70,7 @@ ______________________________________________________________________
 
 ## 🌐 Overview <a id="overview"></a>
 
-This repository contains the complete GitOps configuration for the OpenCloudHub Kubernetes platform. It implements a declarative, Git-driven approach to infrastructure and application management using [ArgoCD](https://argo-cd.readthedocs.io/en/stable/).
+This repository contains the complete GitOps configuration for the OpenCloudHub Kubernetes platform. It implements a declarative, Git-driven approach to infrastructure and application management using (ArgoCD)[https://argo-cd.readthedocs.io/en/stable/].
 
 **Key Principles:**
 
@@ -158,12 +161,7 @@ ______________________________________________________________________
 │
 ├── scripts/
 │   ├── bootstrap.sh                    # GitOps bootstrap (ArgoCD + Root App)
-│   ├── _utils.sh                       # Shared shell utilities
-│   ├── show-help.sh                    # Makefile help display
-│   ├── show-info.sh                    # Show environment summaries
-│   └── show-status.sh                  # Show cluster and test status
-│
-├── Makefile                            # Root Makefile (dev, test, status commands)
+│   └── _utils.sh                       # Shared shell utilities
 │
 └── src/
     ├── root-app.yaml                   # 🎯 Root Application (self-managed ArgoCD)
@@ -178,66 +176,44 @@ ______________________________________________________________________
     │   └── teams/                      # Watches src/teams/*/*
     │
     ├── security/                       # 🔐 Cluster-wide security (deployed first)
-    │   ├── namespaces/                 # All namespace definitions with mesh config
+    │   ├── namespaces/                 # All namespace definitions
     │   ├── rbac/                       # Role-based access control
-    │   ├── resource-limits/            # ResourceQuotas and LimitRanges
-    │   ├── network-policies/           # Network isolation policies
-    │   └── secrets/                    # ClusterExternalSecrets for secret distribution
+    │   └── resource-limits/            # ResourceQuotas and LimitRanges
     │
     ├── platform/                       # 🏗️ Platform infrastructure
     │   ├── core/                       # Essential services
-    │   │   ├── argocd/                 # ArgoCD (self-managed)
-    │   │   ├── argocd-image-updater/   # Automatic image updates
+    │   │   ├── argocd/                 # ArgoCD
+    │   │   ├── argo-image-updater/     # ArgoCD + Image Updater
     │   │   ├── cert-manager/           # TLS certificates
     │   │   ├── external-secrets/       # Vault integration
-    │   │   ├── gateway/                # Istio Gateway API
-    │   │   └── istio/                  # Service mesh (ambient mode)
-    │   │
-    │   ├── ci/                         # 🔄 CI/CD infrastructure
-    │   │   └── github-action-runners/  # Self-hosted GitHub Actions runners
+    │   │   ├── gateway/                # Istio Gateway
+    │   │   └── istio/                  # Service mesh
     │   │
     │   ├── storage/                    # 💾 Data layer
-    │   │   ├── cloudnative-pg/         # PostgreSQL operator + clusters
+    │   │   ├── cloudnative-pg/         # PostgreSQL clusters
     │   │   ├── minio-operator/         # MinIO operator
     │   │   ├── minio-tenant/           # S3-compatible storage
     │   │   └── pgadmin/                # Database UI (dev only)
     │   │
     │   ├── observability/              # 📊 Monitoring stack
     │   │   ├── prometheus/             # Metrics collection
-    │   │   ├── grafana/                # Dashboards + data sources
+    │   │   ├── grafana/                # Dashboards
     │   │   ├── loki/                   # Log aggregation
     │   │   ├── tempo/                  # Distributed tracing
-    │   │   └── k8s-monitoring/         # Kubernetes metrics (Alloy)
+    │   │   └── k8s-monitoring/         # Kubernetes metrics
     │   │
-    │   ├── mlops/                      # 🤖 ML infrastructure
-    │   │   ├── mlflow/                 # Experiment tracking & model registry
-    │   │   ├── argo-workflows/         # ML/Data pipeline orchestration
-    │   │   └── ray-operator/           # Distributed compute (KubeRay)
-    │   │
-    │   └── testing/                    # 🧪 Testing infrastructure
-    │       └── k6s-operator/           # k6 performance testing operator
+    │   └── mlops/                      # 🤖 ML infrastructure
+    │       ├── mlflow/                 # Experiment tracking & model registry
+    │       ├── argo-workflows/         # ML pipelines
+    │       └── ray-operator/           # Model serving (KubeRay)
     │
-    ├── teams/                          # 👥 Team workloads
-    │   ├── ai/
-    │   │   ├── models-base/            # Pre-built LLM services (Qwen 2.5)
-    │   │   ├── models-custom/          # Custom trained models (Wine, Fashion-MNIST)
-    │   │   └── workflows/              # Argo Workflow templates
-    │   │       ├── _shared/            # Reusable templates (compute, git, ray)
-    │   │       ├── models/             # MLOps pipeline + modules
-    │   │       └── data/               # Data pipeline templates
-    │   │
-    │   └── demo-app/
-    │       ├── demo-app-frontend/      # React frontend
-    │       └── demo-app-genai-backend/ # LangChain RAG backend
-    │
-    └── tests/                          # 🧪 k6 Performance tests
-        ├── Makefile                    # Test runner commands
-        ├── run-test.sh                 # Test execution script
-        └── tests/
-            ├── 01-smoke/               # Quick health checks
-            ├── 02-load/                # Sustained load tests
-            ├── 03-stress/              # Stress testing
-            └── 04-spike/               # Spike testing
+    └── teams/                          # 👥 Team workloads
+        ├── ai/
+        │   ├── models-base/            # Pre-built LLM services (Qwen, etc.)
+        │   └── models-custom/          # Custom trained models (Wine, Fashion-MNIST)
+        │
+        └── demo-app/
+            └── demo-app-genai-backend/ # LangChain RAG demo
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -313,7 +289,7 @@ cp local-development/.env.secrets.example local-development/.env.secrets
 # Edit .env.secrets with your credentials
 
 # 3. Start everything
-make dev
+bash local-development/start-dev.sh
 ```
 
 ### What the Setup Script Does
@@ -377,7 +353,7 @@ Once running, access services at:
 | pgAdmin                            | https://pgadmin.internal.opencloudhub.org                                |
 | Wine Classifier API                | https://api.opencloudhub.org/models/custom/wine-classifier/docs          |
 | Wine Classifier Dashboard          | https://wine-classifier.dashboard.opencloudhub.org/                      |
-| Fashion MNIST Classifier API       | https://api.opencloudhub.org/models/custom/fashion-mnist-classifier/docs |
+| Fashin MNIST Classifier API        | https://api.opencloudhub.org/models/custom/fashion-mnist-classifier/docs |
 | Fashion MNIST Classifier Dashboard | https://fashion-mnist-classifier.dashboard.opencloudhub.org/             |
 | Qwen Base Dashboard                | https://qwen-0.5b.dashboard.opencloudhub.org/                            |
 | Rag Demo App Backend               | https://demo-app.opencloudhub.org/api/docs                               |
@@ -399,7 +375,7 @@ pgAdmin is included for database inspection during development:
 | Password | (from `local-development/.env.secrets`)          |
 | SSL Mode | `disable`                                        |
 
-4. Repeat for the Demo App PGVector database (`demo-app-db-cluster-rw.storage.svc.cluster.local`)
+4. Do the PGVector database of the demo RAG app
 
 ### Environment Variables
 
@@ -516,27 +492,23 @@ ______________________________________________________________________
 
 ### Workflow Templates
 
-Located in `src/teams/ai/workflows/`:
+Located in `src/platform/mlops/argo-workflows/workflow-templates/`:
 
 ```text
-workflows/
-├── _shared/                             # 🔧 Reusable templates across all pipelines
-│   ├── compute.yaml                     # Compute type → resource mapping
-│   ├── git.yaml                         # Git operations (clone, commit, tag)
-│   └── ray.yaml                         # Ray job submission & log streaming
-│
-├── models/                              # 🤖 ML model training pipelines
-│   ├── mlops-pipeline.yaml              # Full CI/CD pipeline for ML models
-│   ├── configmaps.yaml                  # Environment configuration
+workflow-templates/
+├── mlops/
+│   ├── mlops-pipeline.yaml      # Full CI/CD pipeline for ML models
 │   └── modules/
-│       ├── mlflow.yaml                  # Model comparison & promotion
-│       ├── testing.yaml                 # Model validation
-│       └── deployment.yaml              # GitOps deployment trigger
+│       ├── training.yaml        # Model training step
+│       ├── mlflow.yaml          # MLflow integration (compare, promote)
+│       ├── testing.yaml         # Model testing/validation
+│       └── deployment.yaml      # GitOps deployment trigger
 │
-└── data/                                # 📊 Data processing pipelines
-    ├── base-data-pipeline.yaml          # Base data pipeline template
-    ├── readmes-embeddings-pipeline.yaml # README embeddings for RAG demo
-    └── configmaps.yaml                  # Data pipeline configuration
+└── data/
+    ├── base-data-pipeline.yaml          # Trigger base base pipelines
+    ├── readmes-embeddings-pipeline.yaml # Example: README embeddings
+    └── modules/
+        └── ...                          # Data processing modules
 ```
 
 ### MLOps Pipeline Stages
@@ -557,10 +529,10 @@ The main `mlops-pipeline.yaml` orchestrates:
 
 **Pipeline Features:**
 
-- **Training** (`ray.yaml`): Submits Ray jobs for distributed training, streams logs to Argo UI
-- **Compare & Promote** (`mlflow.yaml`): Compares CI model metrics against champion, promotes to staging if improved
-- **Testing** (`testing.yaml`): Runs validation tests on staging model
-- **Deployment** (`deployment.yaml`): Updates GitOps repo to trigger ArgoCD sync, tags MLflow model with deployment info
+- **Training** (`training.yaml`): Runs training job, logs to MLflow, registers model as `ci.<model_name>`
+- **Compare & Promote** (`mlflow.yaml`): Compares against current champion, promotes to staging if improved
+- **Testing** (`testing.yaml`): Runs validation tests on staging model (dummy currently)
+- **Deployment** (`deployment.yaml`): Updates GitOps repo to trigger ArgoCD sync as well as tagging mlflow prod model
 
 ### Model Registry Convention
 
@@ -619,48 +591,6 @@ A LangChain-based RAG application demonstrating:
 - FastAPI REST API
 
 Deployed via ArgoCD Image Updater for automatic updates.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-______________________________________________________________________
-
-## 🧪 Performance Testing <a id="performance-testing"></a>
-
-The repository includes a comprehensive k6 performance testing suite located in `src/tests/`.
-
-### Test Categories
-
-| Category   | Purpose                   | Duration |
-| ---------- | ------------------------- | -------- |
-| **Smoke**  | Quick health checks       | ~30s     |
-| **Load**   | Sustained load validation | ~5min    |
-| **Stress** | Find breaking points      | ~10min   |
-| **Spike**  | Sudden traffic bursts     | ~5min    |
-
-### Running Tests
-
-```bash
-# Run all smoke tests
-make test
-
-# Run specific test suites
-make test-smoke-models    # Model endpoints smoke tests
-make test-load            # Load tests
-make test-stress          # Stress tests
-
-# View running tests
-make status
-```
-
-### Test Targets
-
-Tests are organized by target:
-
-- **Platform**: MLflow, ArgoCD, Infrastructure, Observability
-- **Models**: Wine Classifier, Fashion MNIST, Qwen LLM
-- **Apps**: Demo app backend
-
-Results are exported to Prometheus and visualized in Grafana using the k6 dashboard.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

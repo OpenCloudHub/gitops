@@ -1,3 +1,35 @@
+# =============================================================================
+# src/teams/ai/models-custom/wine-classifier-service.yaml
+# Wine Classifier Service - Custom Trained ML Model
+# =============================================================================
+#
+# Deploys a custom-trained wine quality classifier using Ray Serve.
+# The model is trained via the MLOps pipeline and served via a FastAPI app.
+#
+# Model Details:
+#   - Algorithm: Scikit-learn classifier
+#   - Registry: MLflow (models:/prod.wine-classifier/@champion)
+#   - Training: src/teams/ai/workflows/models/mlops-pipeline.yaml
+#
+# Architecture:
+#   - RayService manages cluster lifecycle with auto-restart
+#   - Head node: Runs Ray Serve controller and API
+#   - Worker nodes: Execute inference replicas (2 replicas default)
+#
+# API Endpoints:
+#   - /models/custom/wine-classifier/predict - Inference endpoint
+#   - /models/custom/wine-classifier/docs - OpenAPI documentation
+#
+# Access URLs:
+#   - API: https://api.opencloudhub.org/models/custom/wine-classifier
+#   - Dashboard: https://wine-classifier.dashboard.opencloudhub.org
+#
+# Image Updates:
+#   ArgoCD Image Updater automatically updates the image tag when new
+#   versions are pushed to the container registry.
+#
+# =============================================================================
+
 # Wine Classifier - Complete Service Definition
 ---
 # RayService for model serving

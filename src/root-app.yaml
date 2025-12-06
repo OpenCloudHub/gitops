@@ -1,3 +1,29 @@
+# =============================================================================
+# src/root-app.yaml
+# Root ArgoCD Application - Entry Point for GitOps
+# =============================================================================
+#
+# This is the top-level ArgoCD Application that bootstraps the entire platform.
+# It implements the "App of Apps" pattern where this single application manages
+# all other applications through ApplicationSets.
+#
+# Deployment Order (via sync-waves in ApplicationSets):
+#   1. AppProjects      - RBAC boundaries for platform/teams
+#   2. Security AppSet  - Namespaces, RBAC, secrets (sync-wave: 0-3)
+#   3. Platform AppSet  - Infrastructure components (sync-wave: -3 to 1)
+#   4. Teams AppSet     - Team workloads
+#   5. Tests            - k6 performance testing resources
+#
+# Self-Management:
+#   ArgoCD manages itself through this root app. Changes to ArgoCD config
+#   in src/platform/core/argocd/ are automatically applied.
+#
+# Usage:
+#   Applied by bootstrap.sh after ArgoCD is installed:
+#   kubectl apply -f src/root-app.yaml
+#
+# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -1,4 +1,41 @@
-# TODO: use letsencrypt in prod
+# =============================================================================
+# src/platform/core/cert-manager/cluster-issuers.yaml
+# Certificate Issuers - TLS Certificate Configuration
+# =============================================================================
+#
+# Configures certificate issuers for automatic TLS certificate provisioning.
+# Currently uses a self-signed CA for local development.
+#
+# Issuer Chain:
+#   1. selfsigned-cluster-issuer - Creates the root CA certificate
+#   2. selfsigned-ca (Certificate) - The root CA stored in root-secret
+#   3. ca-issuer - Issues certificates signed by the root CA
+#
+# Usage:
+#   Add annotation to Gateway or Ingress:
+#     cert-manager.io/cluster-issuer: ca-issuer
+#
+# Production Configuration:
+#   For production, replace with Let's Encrypt:
+#   ```yaml
+#   apiVersion: cert-manager.io/v1
+#   kind: ClusterIssuer
+#   metadata:
+#     name: letsencrypt-prod
+#   spec:
+#     acme:
+#       server: https://acme-v02.api.letsencrypt.org/directory
+#       email: your-email@example.com
+#       privateKeySecretRef:
+#         name: letsencrypt-prod-key
+#       solvers:
+#         - http01:
+#             ingress:
+#               class: istio
+#   ```
+#
+# =============================================================================
+
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:

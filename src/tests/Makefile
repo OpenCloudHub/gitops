@@ -1,3 +1,30 @@
+# =============================================================================
+# src/tests/Makefile
+# k6 Performance Test Runner
+# =============================================================================
+#
+# Provides make targets for running k6 performance tests against the platform.
+# Tests are organized by type (smoke, load, stress, spike) and target.
+#
+# Usage:
+#   make smoke          # Run all smoke tests (quick health checks)
+#   make load           # Run load tests (sustained traffic)
+#   make stress         # Run stress tests (find limits)
+#   make spike          # Run spike tests (sudden bursts)
+#   make status         # Show running tests
+#   make clean          # Delete all test runs
+#
+# Test Targets:
+#   Platform: mlops, gitops, infra, obs (observability)
+#   Models: fashion-mnist, wine, qwen
+#   Apps: backend (demo-app)
+#
+# Results:
+#   Metrics are exported to Prometheus and viewable in Grafana
+#   using the k6 dashboard.
+#
+# =============================================================================
+
 # k6 Kubernetes Test Runner
 
 .PHONY: all test

@@ -1,3 +1,25 @@
+# =============================================================================
+# src/application-sets/security/applicationset.yaml
+# Security ApplicationSet - Cluster Security Policies
+# =============================================================================
+#
+# Deploys security-related resources in a specific order using sync-waves.
+# These resources are deployed FIRST before any platform or team workloads.
+#
+# Deployment Order:
+#   Wave 0: namespaces    - All namespace definitions with Istio mesh config
+#   Wave 1: rbac          - Role-based access control policies
+#   Wave 2: resource-limits, network-policies - Resource quotas and network isolation
+#   Wave 3: secrets       - ClusterExternalSecrets for secret distribution
+#
+# Design Rationale:
+#   - Namespaces must exist before any resources can be deployed to them
+#   - RBAC defines who can access what
+#   - Resource limits prevent runaway resource usage
+#   - Secrets are distributed via ClusterExternalSecret to labeled namespaces
+#
+# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:

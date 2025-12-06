@@ -80,7 +80,7 @@ helmCharts:
             useDefaultAllowList: false
           opencost:
             exporter:
-              defaultClusterId: "minikube"  # FIXME: change in prod
+              defaultClusterId: "minikube"  # Local dev cluster ID (update for production)
               extraEnv:
                 CURRENT_CLUSTER_ID_FILTER_ENABLED: "true"
                 PROM_CLUSTER_ID_LABEL: cluster

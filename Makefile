@@ -1,9 +1,24 @@
 # =============================================================================
+# Makefile
 # OpenCloudHub GitOps - Root Makefile
 # =============================================================================
 #
-# Entry point for common development tasks. Delegates to specialized scripts
-# and Makefiles in subdirectories.
+# Entry point for common development tasks. Provides a simple interface
+# to the various scripts and sub-Makefiles in the repository.
+#
+# Quick Start:
+#   make dev      # Start complete local development environment
+#   make test     # Run smoke tests
+#   make status   # Show cluster and test status
+#   make info     # Show all environment summaries (credentials, IPs, etc.)
+#
+# Development Workflow:
+#   1. make dev           - Sets up Minikube + Vault + ArgoCD
+#   2. (wait for sync)    - ArgoCD syncs all applications
+#   3. make test          - Verify everything is working
+#   4. make status        - Check cluster state
+#
+# For detailed help: make help
 #
 # =============================================================================
 

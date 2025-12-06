@@ -1,3 +1,26 @@
+# =============================================================================
+# src/application-sets/teams/applicationset.yaml
+# Teams ApplicationSet - Team Workload Generator
+# =============================================================================
+#
+# Automatically generates ArgoCD Applications for team-deployed workloads
+# by scanning the directory structure under src/teams/*/*.
+#
+# Directory Discovery:
+#   src/teams/ai/models-base/     → Application: models-base
+#   src/teams/ai/models-custom/   → Application: models-custom
+#   src/teams/ai/workflows/       → Application: workflows
+#   src/teams/demo-app/*/         → Applications for demo-app components
+#
+# Project: teams
+#   All generated applications belong to the 'teams' AppProject,
+#   which has restricted permissions compared to 'platform'.
+#
+# Server-Side Apply:
+#   Enabled for all team apps to handle large CRDs (RayService, etc.)
+#
+# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -7,11 +30,11 @@ spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
-  - git:
-      repoURL: git@github.com:opencloudhub/gitops.git
-      revision: HEAD
-      directories:
-      - path: src/teams/*/*
+    - git:
+        repoURL: git@github.com:opencloudhub/gitops.git
+        revision: HEAD
+        directories:
+          - path: src/teams/*/*
   template:
     metadata:
       name: "{{index .path.segments 3}}"
@@ -32,11 +55,11 @@ spec:
           prune: true
           selfHeal: true
         syncOptions:
-        - ServerSideApply=true  # Enable for all AI apps
-        - RespectIgnoreDifferences=true
+          - ServerSideApply=true # Enable for all AI apps
+          - RespectIgnoreDifferences=true
       ignoreDifferences:
-      - group: external-secrets.io
-        kind: ExternalSecret
-        jsonPointers:
-        - /status
-        - /spec/data
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jsonPointers:
+            - /status
+            - /spec/data

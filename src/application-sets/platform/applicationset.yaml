@@ -1,3 +1,30 @@
+# =============================================================================
+# src/application-sets/platform/applicationset.yaml
+# Platform ApplicationSet - Infrastructure Component Generator
+# =============================================================================
+#
+# Automatically generates ArgoCD Applications for all platform components
+# by scanning the directory structure under src/platform/*/*.
+#
+# Directory Discovery:
+#   src/platform/core/argocd/      → Application: argocd
+#   src/platform/storage/minio/    → Application: minio
+#   src/platform/observability/... → Application: grafana, prometheus, etc.
+#
+# Sync Waves (controls deployment order):
+#   -3: istio, cert-manager, external-secrets (prerequisites)
+#   -2: cloudnative-pg, minio-operator (storage operators)
+#   -1: minio-tenant, argocd-image-updater (depends on operators)
+#    0: Most components (default)
+#    1: gateway, mlflow, ray-operator, argo-workflows (depends on storage)
+#
+# Ignored Differences:
+#   - Istio webhook configurations (managed by Istio)
+#   - ExternalSecret operator-added fields
+#   - Resource field divisors (Istio ztunnel)
+#
+# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:

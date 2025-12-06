@@ -1,3 +1,23 @@
+# =============================================================================
+# src/app-projects/platform.yaml
+# ArgoCD AppProject - Platform Team Permissions
+# =============================================================================
+#
+# Defines the platform AppProject for infrastructure components.
+# Applications in this project have elevated permissions to manage
+# cluster-wide resources.
+#
+# Permissions:
+#   - sourceRepos: All repositories (platform needs access to various charts)
+#   - destinations: All namespaces on all clusters
+#   - clusterResourceWhitelist: All cluster-scoped resources (CRDs, ClusterRoles, etc.)
+#
+# Security Note:
+#   This project has broad permissions for platform administration.
+#   For production, consider restricting to specific repositories and namespaces.
+#
+# =============================================================================
+
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
@@ -6,8 +26,7 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  # TODO: adjust this
-  description: Platform wide access for admin users only
+  description: Platform infrastructure components with cluster-admin permissions
   sourceRepos:
     - "*"
   destinations:
