@@ -77,9 +77,10 @@ spec:
 
   templates:
     - name: main
-      steps:
-        # Phase 1: Map compute type to resources
-        - - name: map-compute
+      dag:
+        tasks:
+          # Phase 1: Map compute type to resources
+          - name: map-compute
             templateRef:
               name: compute-templates
               template: map-compute-config
@@ -88,8 +89,9 @@ spec:
                 - name: compute_type
                   value: "{{workflow.parameters.compute_type}}"
 
-        # Phase 2: Training
-        - - name: train
+          # Phase 2: Training
+          - name: train
+            depends: "map-compute.Succeeded"
             templateRef:
               name: ray-templates
               template: submit-and-stream-rayjob
@@ -104,18 +106,19 @@ spec:
                 - name: model_configmap
                   value: "{{workflow.parameters.model_name}}-env"
                 - name: cpu
-                  value: "{{steps.map-compute.outputs.parameters.cpu_request}}"
+                  value: "{{tasks.map-compute.outputs.parameters.cpu_request}}"
                 - name: memory
-                  value: "{{steps.map-compute.outputs.parameters.memory_request}}"
+                  value: "{{tasks.map-compute.outputs.parameters.memory_request}}"
                 - name: gpu
-                  value: "{{steps.map-compute.outputs.parameters.gpu}}"
+                  value: "{{tasks.map-compute.outputs.parameters.gpu}}"
                 - name: replicas
-                  value: "{{steps.map-compute.outputs.parameters.replicas}}"
+                  value: "{{tasks.map-compute.outputs.parameters.replicas}}"
                 - name: dvc_data_version
                   value: "{{workflow.parameters.dvc_data_version}}"
 
-        # Phase 3: Compare and promote to staging
-        - - name: compare-and-promote
+          # Phase 3: Compare and promote to staging
+          - name: compare-and-promote
+            depends: "train.Succeeded"
             templateRef:
               name: mlflow-templates
               template: compare-to-production-and-promote-to-staging
@@ -130,13 +133,30 @@ spec:
                 - name: threshold
                   value: "{{workflow.parameters.comparison_threshold}}"
 
-        # Phase 4: Approval gate (manual mode only)
-        - - name: approval
-            template: approval-gate
-            when: "'{{workflow.parameters.approval_mode}}' == 'manual' && '{{steps.compare-and-promote.outputs.parameters.promoted}}' == 'true'"
+          # Phase 4: Test staging model
+          - name: test-staging
+            depends: "compare-and-promote.Succeeded"
+            when: "'{{tasks.compare-and-promote.outputs.parameters.promoted}}' == 'true'"
+            templateRef:
+              name: testing-templates
+              template: test-staging-model
+            arguments:
+              parameters:
+                - name: model_name
+                  value: "{{workflow.parameters.model_name}}"
+                - name: staging_version
+                  value: "{{tasks.compare-and-promote.outputs.parameters.staging_version}}"
 
-        # Phase 5: Promote to production
-        - - name: promote-production
+          # Phase 5: Approval gate (manual mode only)
+          - name: approval
+            depends: "test-staging.Succeeded"
+            when: "'{{workflow.parameters.approval_mode}}' == 'manual'"
+            template: approval-gate
+
+          # Phase 6: Promote to production
+          - name: promote-production
+            depends: "test-staging.Succeeded && (approval.Succeeded || approval.Skipped)"
+            when: "'{{workflow.parameters.approval_mode}}' == 'automatic' || '{{tasks.approval.outputs.parameters.approve}}' == 'YES'"
             templateRef:
               name: mlflow-templates
               template: promote-staging-to-production
@@ -145,11 +165,11 @@ spec:
                 - name: model_name
                   value: "{{workflow.parameters.model_name}}"
                 - name: staging_version
-                  value: "{{steps.compare-and-promote.outputs.parameters.staging_version}}"
-            when: "'{{steps.compare-and-promote.outputs.parameters.promoted}}' == 'true'"
+                  value: "{{tasks.compare-and-promote.outputs.parameters.staging_version}}"
 
-        # Phase 6: Deploy
-        - - name: deploy
+          # Phase 7: Deploy
+          - name: deploy
+            depends: "promote-production.Succeeded"
             templateRef:
               name: deployment-templates
               template: deploy-model
@@ -161,7 +181,6 @@ spec:
                   value: "models:/prod.{{workflow.parameters.model_name}}/@champion"
                 - name: serving_image
                   value: "{{workflow.parameters.serving_image}}"
-            when: "'{{steps.compare-and-promote.outputs.parameters.promoted}}' == 'true'"
 
     # =========================================================================
     # APPROVAL GATE
