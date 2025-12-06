@@ -49,11 +49,11 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: qwen-radiology-env
+  name: qwen-vl-radiology-vqa-env
   namespace: mlops
 data:
-  MLFLOW_EXPERIMENT_NAME: "qwen-radiology"
-  MLFLOW_REGISTERED_MODEL_NAME: "ci.qwen-vl-radiology"
+  MLFLOW_EXPERIMENT_NAME: "qwen-vl-radiology-vqa"
+  MLFLOW_REGISTERED_MODEL_NAME: "ci.qwen-vl-radiology-vqa"
   # DVC paths
   DVC_PROCESSED_PATH: "data/roco-radiology/processed"
   DVC_METADATA_PATH: "data/roco-radiology/metadata.json"

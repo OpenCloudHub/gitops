@@ -10,6 +10,9 @@ helmCharts:
     namespace: observability
     valuesInline:
       tempo:
+        # Enable env var expansion in config
+        extraArgs:
+          - "-config.expand-env=true"
         extraEnvFrom:
           - secretRef:
               name: minio-tenant-secret
@@ -27,8 +30,8 @@ helmCharts:
               endpoint: minio.minio-tenant.svc.cluster.local:80
               bucket: tempo-traces
               region: us-east-1
-              access_key: admin
-              secret_key: 12345678  # TODO : fix: mount somehow
+              access_key: ${AWS_ACCESS_KEY_ID}
+              secret_key: ${AWS_SECRET_ACCESS_KEY}
               insecure: true
 
         reportingEnabled: false
