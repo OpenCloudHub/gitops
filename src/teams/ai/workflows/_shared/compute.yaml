@@ -81,7 +81,7 @@ spec:
             cpu-large)
               CPU_REQ="8"    ; CPU_LIM="12"
               MEM_REQ="16Gi" ; MEM_LIM="20Gi"
-              REPLICAS="2"   ; GPU="0"
+              REPLICAS="1"   ; GPU="0"
               ;;
             gpu-small)
               CPU_REQ="4"    ; CPU_LIM="6"
