@@ -7,6 +7,3 @@ resources:
   - configmaps.yaml
   - base-data-pipeline.yaml
   - readmes-embeddings-pipeline.yaml
-  - modules/data-templates.yaml
-  - modules/rayjob-configmap.yaml
-  - modules/ray-templates.yaml
