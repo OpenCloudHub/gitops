@@ -4,6 +4,16 @@
 # GitOps Bootstrap - Installs ArgoCD and configures GitOps for the cluster
 # =============================================================================
 #
+# Bootstrap Order:
+#   1. Prerequisites check (kubectl, kustomize, SSH keys)
+#   2. Prepare cluster (namespaces, CRDs, Vault token secret)
+#   3. Install ArgoCD (Helm chart via kustomize)
+#   4. Install External Secrets Operator + ClusterSecretStore (Vault connection)
+#   5. Deploy ApplicationSets:
+#      - Security (namespaces, RBAC, secrets) - can now use ExternalSecrets
+#      - Platform (all other platform components)
+#      - Root app (teams)
+#
 # Usage:
 #   ./bootstrap.sh                    # Bootstrap current kubectl context
 #   DRY_RUN=true ./bootstrap.sh       # Preview without applying changes
@@ -12,6 +22,7 @@
 #   - kubectl configured and connected to target cluster
 #   - kustomize installed
 #   - SSH keys for ArgoCD repository access (see SSH_KEYS_BASE_PATH)
+#   - Vault running and accessible (for External Secrets)
 #
 # Environment Variables:
 #   VAULT_TOKEN          - Token for Vault access (default: 1234)
@@ -252,6 +263,56 @@ step_install_argocd() {
   log_success "ArgoCD installed successfully"
 }
 
+step_install_external_secrets() {
+  log_step "Installing External Secrets Operator (prerequisite for secrets)"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log_info "(DRY RUN) Would install External Secrets Operator"
+    return 0
+  fi
+
+  # Build and apply ESO manifests (operator + CRDs only, no ClusterSecretStore)
+  log_info "Building External Secrets Operator manifests..."
+  local manifests
+  if ! manifests=$(kustomize build --enable-helm "${REPO_ROOT}/src/platform/core/external-secrets"); then
+    log_error "Failed to build External Secrets manifests"
+    return 1
+  fi
+
+  log_info "Applying External Secrets Operator..."
+  echo "$manifests" | kubectl apply -f -
+
+  # Wait for ESO to be ready before creating ClusterSecretStore
+  log_info "Waiting for External Secrets Operator to be ready..."
+  kubectl wait --for=condition=available deployment/external-secrets \
+    -n external-secrets --timeout="$KUBECTL_TIMEOUT"
+  kubectl wait --for=condition=available deployment/external-secrets-webhook \
+    -n external-secrets --timeout="$KUBECTL_TIMEOUT"
+  kubectl wait --for=condition=available deployment/external-secrets-cert-controller \
+    -n external-secrets --timeout="$KUBECTL_TIMEOUT"
+
+  # Wait for CRDs to be established
+  log_info "Waiting for External Secrets CRDs to be established..."
+  kubectl wait --for=condition=established crd/clustersecretstores.external-secrets.io --timeout=60s
+  kubectl wait --for=condition=established crd/externalsecrets.external-secrets.io --timeout=60s
+  kubectl wait --for=condition=established crd/clusterexternalsecrets.external-secrets.io --timeout=60s
+
+  # Now create the ClusterSecretStore (Vault connection)
+  log_info "Creating ClusterSecretStore for Vault..."
+  kubectl apply -f "${REPO_ROOT}/src/platform/core/external-secrets/cluster-secret-stores.yaml"
+
+  # Verify ClusterSecretStore is ready
+  log_info "Waiting for ClusterSecretStore to be ready..."
+  sleep 5  # Give it a moment to reconcile
+  if kubectl get clustersecretstore vault-backend -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' | grep -q "True"; then
+    log_success "ClusterSecretStore vault-backend is ready"
+  else
+    log_warning "ClusterSecretStore may not be fully ready yet (Vault connectivity)"
+  fi
+
+  log_success "External Secrets Operator installed successfully"
+}
+
 step_deploy_applications() {
   log_step "Deploying ArgoCD applications"
 
@@ -260,22 +321,26 @@ step_deploy_applications() {
     return 0
   fi
 
-  # Stage 1: Projects and Security (namespaces, RBAC)
-  log_info "Stage 1: Deploying projects and security..."
+  # Stage 1: Projects
+  log_info "Stage 1: Deploying ArgoCD projects..."
   kubectl apply -k "${REPO_ROOT}/src/app-projects/"
-  kubectl apply -f "${REPO_ROOT}/src/application-sets/security/applicationset.yaml"
-  sleep 10
 
-  # Stage 2: Platform ApplicationSet (creates all platform apps)
-  log_info "Stage 2: Deploying platform ApplicationSet..."
+  # Stage 2: Security ApplicationSet (namespaces, RBAC, secrets)
+  # ESO is already installed, so ExternalSecrets can be created
+  log_info "Stage 2: Deploying security policies (namespaces, RBAC, secrets)..."
+  kubectl apply -f "${REPO_ROOT}/src/application-sets/security/applicationset.yaml"
+
+  # Wait for namespaces to be created before platform apps
+  log_info "Waiting for security resources to sync..."
+  sleep 15
+
+  # Stage 3: Platform ApplicationSet (creates all platform apps)
+  # ESO will be detected as already in-sync
+  log_info "Stage 3: Deploying platform ApplicationSet..."
   kubectl apply -f "${REPO_ROOT}/src/application-sets/platform/applicationset.yaml"
 
-  # Stage 3: Wait for core infrastructure
-  log_info "Stage 3: Waiting for core infrastructure..."
-
-  log_info "Waiting for external-secrets operator..."
-  kubectl wait --for=condition=available deployment/external-secrets \
-    -n external-secrets --timeout="$KUBECTL_TIMEOUT" 2>/dev/null || true
+  # Stage 4: Wait for core infrastructure
+  log_info "Stage 4: Waiting for core infrastructure..."
 
   log_info "Waiting for cert-manager..."
   kubectl wait --for=condition=available deployment/cert-manager \
@@ -285,8 +350,8 @@ step_deploy_applications() {
   kubectl wait --for=condition=available deployment/istiod \
     -n istio-system --timeout="$KUBECTL_TIMEOUT" 2>/dev/null || true
 
-  # Stage 4: Root app (adds teams apps now that platform is ready)
-  log_info "Stage 4: Deploying root application..."
+  # Stage 5: Root app (adds teams apps now that platform is ready)
+  log_info "Stage 5: Deploying root application..."
   kubectl apply -f "${REPO_ROOT}/src/root-app.yaml"
 
   log_success "Applications deployed successfully"
@@ -373,6 +438,7 @@ main() {
   step_check_prerequisites
   step_prepare_cluster
   step_install_argocd
+  step_install_external_secrets  # ESO + ClusterSecretStore before security appset
   step_deploy_applications
   step_create_summary
   print_completion_summary

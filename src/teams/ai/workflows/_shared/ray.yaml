@@ -145,7 +145,7 @@ spec:
               headGroupSpec:
                 rayStartParams:
                   dashboard-host: "0.0.0.0"
-                  num-cpus: "1"
+                  num-cpus: "0"
                 template:
                   spec:
                     containers:
@@ -154,10 +154,10 @@ spec:
                         resources:
                           requests:
                             cpu: "500m"
-                            memory: "1Gi"
+                            memory: "4Gi"
                           limits:
                             cpu: "1"
-                            memory: "2Gi"
+                            memory: "6Gi"
                         envFrom:
                           - configMapRef:
                               name: "{{inputs.parameters.base_configmap}}"

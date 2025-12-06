@@ -3,8 +3,6 @@ kind: Kustomization
 
 resources:
   - cluster-secret-stores.yaml
-  - cluster-secrets
-  - external-secrets
 
 helmCharts:
   - name: external-secrets
@@ -14,14 +12,3 @@ helmCharts:
     includeCRDs: true
     valuesInline:
       namespaceOverride: external-secrets
-      # certController:
-      #   enabled: true
-      # webhook:
-      #   certManager:
-      #     enabled: true
-      #     addInjectorAnnotations: true
-      #     cert:
-      #       create: true
-      #       issuerRef:
-      #         kind: ClusterIssuer
-      #         name: ca-issuer
