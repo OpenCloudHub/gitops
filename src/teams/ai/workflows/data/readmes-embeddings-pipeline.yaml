@@ -60,7 +60,7 @@ spec:
                 - name: image
                   value: "{{workflow.parameters.image}}"
                 - name: entrypoint
-                  value: "cd /workspace/project/pipelines/opencloudhub-readmes-embeddings && dvc repro {{workflow.parameters.force == 'true' && '--force' || ''}}"
+                  value: "cd /workspace/project/pipelines/opencloudhub-readmes-embeddings && dvc repro $([ '{{workflow.parameters.force}}' = 'true' ] && echo '--force' || echo '')"
                 - name: base_configmap
                   value: "data-job-env"
                 - name: job_configmap
