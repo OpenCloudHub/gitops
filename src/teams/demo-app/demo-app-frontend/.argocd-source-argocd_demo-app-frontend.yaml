@@ -1,0 +1,3 @@
+kustomize:
+  images:
+  - opencloudhuborg/demo-app-frontend:main-59e1155
