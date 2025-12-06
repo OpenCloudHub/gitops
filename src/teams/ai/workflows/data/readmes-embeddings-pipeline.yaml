@@ -115,8 +115,8 @@ spec:
         image: alpine:latest
         command: [sh]
         source: |
+          FORCE_FLAG=""
           if [ "{{inputs.parameters.force}}" = "true" ]; then
-            echo -n "dvc repro --force" > /tmp/entrypoint.txt
-          else
-            echo -n "dvc repro" > /tmp/entrypoint.txt
+            FORCE_FLAG="--force"
           fi
+          echo -n "dvc repro $FORCE_FLAG pipelines/opencloudhub-readmes-embeddings/dvc.yaml" > /tmp/entrypoint.txt
