@@ -29,7 +29,8 @@ metadata:
   name: mlops-pipeline
   namespace: mlops
   annotations:
-    workflows.argoproj.io/description: "End-to-end MLOps pipeline"
+    workflows.argoproj.io/title: "**MLOPS Pipeline**"
+    workflows.argoproj.io/description: "End-to-end MLOps pipeline: Train -> Compare -> Promote -> Deploy"
 spec:
   serviceAccountName: workflow-executor
   entrypoint: main
@@ -38,20 +39,28 @@ spec:
     parameters:
       # Model identity
       - name: model_name
+        description: "Unique model identifier used for MLflow registration and K8s resources (e.g., wine-classifier)"
       - name: experiment_name
+        description: "MLflow experiment name for tracking training runs"
 
       # Images
       - name: training_image
+        description: "Docker image containing training code and dependencies"
       - name: serving_image
+        description: "Docker image for model serving (updated in GitOps repo on deploy)"
       - name: training_entrypoint
+        description: "Command to execute training script (e.g., python src/training/train.py)"
       - name: training_args
+        description: "Additional arguments passed to the training entrypoint"
         default: ""
 
       # Data
       - name: dvc_data_version
+        description: "DVC tag specifying which version of training data to use"
 
       # Compute (uses compute-templates mapping)
       - name: compute_type
+        description: "Resource profile for Ray cluster (maps to CPU, memory, GPU, replicas)"
         enum:
           [
             cpu-small,
@@ -65,14 +74,18 @@ spec:
 
       # Comparison
       - name: comparison_metric
+        description: "MLflow metric name to compare between CI model and production champion"
         default: "accuracy"
       - name: comparison_higher_is_better
+        description: "Are higher metric values better"
         default: "true"
       - name: comparison_threshold
+        description: "Minimum improvement required over champion to promote (e.g., 0.05 = 5%)"
         default: "0.05"
 
       # Approval
       - name: approval_mode
+        description: "Set to 'manual' to require human approval before production deployment"
         default: "automatic"
 
   templates:

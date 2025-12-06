@@ -78,9 +78,9 @@ spec:
 
           logs = []
           logs.append("")
-          logs.append("##################################################")
+          logs.append("══════════════════════════════════════════════════")
           logs.append("🧪 TEST STAGING MODEL")
-          logs.append("##################################################")
+          logs.append("══════════════════════════════════════════════════")
           logs.append("")
           logs.append(f"  Model ........ staging.{MODEL_NAME}")
           logs.append(f"  Version ...... v{STAGING_VERSION}")
@@ -102,7 +102,7 @@ spec:
           logs.append("")
           logs.append("⚠️  Dummy test suite - replace with real tests")
           logs.append("")
-          logs.append("##################################################")
+          logs.append("══════════════════════════════════════════════════")
           logs.append("")
 
           output = "\n".join(logs)

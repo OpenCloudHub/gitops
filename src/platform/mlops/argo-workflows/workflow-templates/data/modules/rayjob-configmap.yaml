@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: embeddings-rayjob-template
+  namespace: mlops
+data:
+  rayjob.yaml: |
+    apiVersion: ray.io/v1
+    kind: RayJob
+    metadata:
+      generateName: embeddings-
+      namespace: mlops
+      labels:
+        run: "${RUN_LABEL}"
+        pipeline: "embeddings"
+    spec:
+      entrypoint: "${ENTRYPOINT}"
+      submissionMode: HTTPMode
+      shutdownAfterJobFinishes: true
+      ttlSecondsAfterFinished: 300
+      rayClusterSpec:
+        rayVersion: "2.51.0"
+        headGroupSpec:
+          serviceType: ClusterIP
+          template:
+            spec:
+              containers:
+              - name: ray-head
+                image: "${IMAGE}"
+                imagePullPolicy: Always
+                resources:
+                  requests:
+                    cpu: "${CPU_REQUEST}"
+                    memory: "${MEMORY_REQUEST}"
+                  limits:
+                    cpu: "${CPU_LIMIT}"
+                    memory: "${MEMORY_LIMIT}"
+                env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-tenant-secret
+                      key: accesskey
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-tenant-secret
+                      key: secretkey
+                - name: AWS_ENDPOINT_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-tenant-secret
+                      key: endpoint-url
+                - name: PGVECTOR_HOST
+                  value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                - name: POSTGRES_DEMO_APP_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: demo-app-db-user
+                      key: password
+                - name: DVC_REPO
+                  value: "https://github.com/OpenCloudHub/data-registry"
+        workerGroupSpecs:
+        - replicas: ${REPLICAS}
+          groupName: worker
+          template:
+            spec:
+              containers:
+              - name: ray-worker
+                image: "${IMAGE}"
+                imagePullPolicy: Always
+                resources:
+                  requests:
+                    cpu: "${CPU_REQUEST}"
+                    memory: "${MEMORY_REQUEST}"
+                  limits:
+                    cpu: "${CPU_LIMIT}"
+                    memory: "${MEMORY_LIMIT}"
+                env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-tenant-secret
+                      key: accesskey
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-tenant-secret
+                      key: secretkey
+                - name: AWS_ENDPOINT_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: minio-tenant-secret
+                      key: endpoint-url
+                - name: PGVECTOR_HOST
+                  value: "cnpg-cluster-rw.storage.svc.cluster.local"
+                - name: POSTGRES_DEMO_APP_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: demo-app-db-user
+                      key: password
+                - name: DVC_REPO
+                  value: "https://github.com/OpenCloudHub/data-registry"
