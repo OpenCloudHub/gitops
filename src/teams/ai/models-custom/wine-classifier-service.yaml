@@ -34,7 +34,7 @@ spec:
         spec:
           containers:
             - name: ray-head
-              image: opencloudhuborg/wine-classifier-serving:main-e702d2f
+              image: opencloudhuborg/wine-classifier-serving:main-d36b8f0
               imagePullPolicy: Always
               ports:
                 - containerPort: 8000
@@ -84,7 +84,7 @@ spec:
           spec:
             containers:
               - name: ray-worker
-                image: opencloudhuborg/wine-classifier-serving:main-e702d2f
+                image: opencloudhuborg/wine-classifier-serving:main-d36b8f0
                 imagePullPolicy: Always
                 # Override the readiness probe - workers don't run Serve
                 readinessProbe:
