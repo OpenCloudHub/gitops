@@ -105,6 +105,8 @@ spec:
           # =================================================================
           def find_ci_model():
               """Find CI model registered by this workflow."""
+              print(f"   Searching for runs with tag argo_workflow_uid='{WORKFLOW_UID}'...")
+
               runs_df = mlflow.search_runs(
                   search_all_experiments=True,
                   filter_string=f"tags.argo_workflow_uid = '{WORKFLOW_UID}'",
@@ -116,6 +118,7 @@ spec:
                   return None, None, "No run found for this workflow"
 
               run_id = runs_df.iloc[0]['run_id']
+              print(f"   Found run: {run_id[:8]}...")
 
               ci_versions = client.search_model_versions(
                   filter_string=f"name='{ci_model_name}' and run_id='{run_id}'"
@@ -135,8 +138,16 @@ spec:
 
           def find_champion():
               """Find current production champion using direct alias lookup."""
+              print(f"   Looking for champion at {prod_model_name}@champion...")
+
               try:
                   champion = client.get_model_version_by_alias(prod_model_name, "champion")
+                  print(f"   Found champion: v{champion.version}")
+
+                  # Check if run_id exists (can be empty if model was copied incorrectly)
+                  if not champion.run_id:
+                      return champion.version, None, f"Champion v{champion.version} has no linked run_id - cannot compare metrics"
+
                   run = client.get_run(champion.run_id)
                   metric = run.data.metrics.get(METRIC)
 
@@ -146,9 +157,11 @@ spec:
                   return champion.version, metric, None
 
               except MlflowException as e:
-                  # No champion exists - expected for first deployment
-                  print(f"   No champion found: {e}")
-                  return None, None, None
+                  if "RESOURCE_DOES_NOT_EXIST" in str(e) or "not found" in str(e).lower():
+                      print(f"   No champion found (first deployment)")
+                      return None, None, None
+                  else:
+                      return None, None, f"Error finding champion: {e}"
 
           def should_promote(ci_metric, prod_metric):
               """Determine if CI model should be promoted."""
@@ -167,8 +180,10 @@ spec:
               return promoted, message
 
           def promote_to_staging(ci_version):
-              """Copy CI model to staging registry."""
-              staging = mlflow.register_model(
+              """Copy CI model to staging registry (preserves run_id)."""
+              print(f"   Copying {ci_model_name}/v{ci_version} → {staging_model_name}...")
+
+              staging = client.copy_model_version(
                   f"models:/{ci_model_name}/{ci_version}",
                   staging_model_name
               )
@@ -178,27 +193,49 @@ spec:
           # =================================================================
           # EXECUTE
           # =================================================================
+          print("")
+          print("=" * 50)
+          print(f"🔍 MODEL COMPARISON: {MODEL_NAME}")
+          print("=" * 50)
+          print(f"   Metric: {METRIC} ({'higher' if HIGHER_BETTER else 'lower'} is better)")
+          print(f"   Threshold: {THRESHOLD:.0%}")
+          print(f"   Workflow: {WORKFLOW_UID[:8]}...")
+          print("")
+
           try:
               # Find CI model
+              print("📦 Finding CI model...")
               result["ci_version"], result["ci_metric"], ci_error = find_ci_model()
 
               if ci_error:
                   result["error"] = ci_error
               else:
+                  print(f"   ✓ CI model: v{result['ci_version']} ({METRIC}={result['ci_metric']:.4f})")
+                  print("")
+
                   # Find champion
+                  print("🏆 Finding champion...")
                   result["prod_version"], result["prod_metric"], prod_error = find_champion()
 
                   if prod_error:
-                      # Champion exists but has issues (e.g., missing metric)
                       result["error"] = prod_error
                   else:
+                      if result["prod_version"]:
+                          print(f"   ✓ Champion: v{result['prod_version']} ({METRIC}={result['prod_metric']:.4f})")
+                      print("")
+
                       # Compare and maybe promote
+                      print("⚖️  Comparing...")
                       result["promoted"], result["message"] = should_promote(
                           result["ci_metric"], result["prod_metric"]
                       )
+                      print(f"   {result['message']}")
+                      print("")
 
                       if result["promoted"]:
+                          print("📤 Promoting to staging...")
                           result["staging_version"] = promote_to_staging(result["ci_version"])
+                          print(f"   ✓ Created {staging_model_name}/v{result['staging_version']} @candidate")
 
                       result["success"] = True
 
@@ -256,6 +293,7 @@ spec:
           # OUTPUT
           # =================================================================
           report = generate_report()
+          print("")
           print(report)
 
           with open("/tmp/comparison-report.md", "w") as f:
@@ -298,15 +336,14 @@ spec:
           import os
           import sys
 
-          import mlflow
           from mlflow.tracking import MlflowClient
+          from mlflow.exceptions import MlflowException
 
           MLFLOW_URI = os.environ["MLFLOW_TRACKING_URI"]
           MODEL_NAME = "{{inputs.parameters.model_name}}"
           STAGING_VERSION = "{{inputs.parameters.staging_version}}"
 
-          mlflow.set_tracking_uri(MLFLOW_URI)
-          client = MlflowClient()
+          client = MlflowClient(MLFLOW_URI)
 
           staging_model_name = f"staging.{MODEL_NAME}"
           prod_model_name = f"prod.{MODEL_NAME}"
@@ -321,28 +358,28 @@ spec:
           logs.append(f"  Target ....... {prod_model_name}")
           logs.append("")
 
+          # Demote current champion if exists
           try:
-              prod_versions = client.search_model_versions(f"name='{prod_model_name}'")
-              for v in prod_versions:
-                  if "champion" in v.aliases:
-                      client.delete_registered_model_alias(prod_model_name, "champion")
-                      client.set_registered_model_alias(prod_model_name, "previous", v.version)
-                      logs.append(f"  Demoted ...... v{v.version} → @previous")
-                      break
-          except Exception as e:
-              logs.append(f"  Demoted ...... (no existing champion)")
+              old_champ = client.get_model_version_by_alias(prod_model_name, "champion")
+              logs.append(f"  Demoting ..... v{old_champ.version} → @previous")
+              client.set_registered_model_alias(prod_model_name, "previous", old_champ.version)
+              client.delete_registered_model_alias(prod_model_name, "champion")
+          except MlflowException:
+              logs.append("  Demoting ..... (no existing champion)")
 
-          prod_version = mlflow.register_model(
+          # Copy staging to production (preserves run_id)
+          prod_mv = client.copy_model_version(
               f"models:/{staging_model_name}/{STAGING_VERSION}",
               prod_model_name
           )
 
-          client.set_registered_model_alias(prod_model_name, "champion", prod_version.version)
+          # Set new champion alias
+          client.set_registered_model_alias(prod_model_name, "champion", prod_mv.version)
 
           logs.append("")
           logs.append("--------------------------------------------------")
-          logs.append(f"✅ PROMOTED TO PRODUCTION")
-          logs.append(f"   {prod_model_name} v{prod_version.version} @champion")
+          logs.append("✅ PROMOTED TO PRODUCTION")
+          logs.append(f"   {prod_model_name} v{prod_mv.version} @champion")
           logs.append("--------------------------------------------------")
           logs.append("")
           logs.append("##################################################")
@@ -351,8 +388,10 @@ spec:
           output = "\n".join(logs)
           print(output)
 
-          with open("/tmp/promotion-report.md", "w") as f: f.write(output)
-          with open("/tmp/prod_version.txt", "w") as f: f.write(prod_version.version)
+          with open("/tmp/promotion-report.md", "w") as f:
+              f.write(output)
+          with open("/tmp/prod_version.txt", "w") as f:
+              f.write(prod_mv.version)
 
     # =========================================================================
     # Tag model with deployment info
@@ -380,21 +419,23 @@ spec:
           import sys
           from datetime import datetime
 
-          import mlflow
           from mlflow.tracking import MlflowClient
+          from mlflow.exceptions import MlflowException
 
           MLFLOW_URI = os.environ["MLFLOW_TRACKING_URI"]
           MODEL_URI = "{{inputs.parameters.model_uri}}"
           SERVING_IMAGE = "{{inputs.parameters.serving_image}}"
           DEPLOYED_BY = "{{inputs.parameters.deployed_by}}"
           WORKFLOW_NAME = "{{workflow.name}}"
+          WORKFLOW_UID = "{{workflow.uid}}"
 
-          mlflow.set_tracking_uri(MLFLOW_URI)
-          client = MlflowClient()
+          client = MlflowClient(MLFLOW_URI)
 
-          parts = MODEL_URI.replace("models:/", "").split("/")
+          # Parse model URI: models:/prod.wine-classifier/@champion or models:/prod.wine-classifier/5
+          uri_path = MODEL_URI.replace("models:/", "")
+          parts = uri_path.split("/")
           model_name = parts[0]
-          version = parts[1].replace("@", "")
+          version_or_alias = parts[1] if len(parts) > 1 else None
 
           logs = []
           logs.append("")
@@ -402,25 +443,49 @@ spec:
           logs.append("🏷️  TAG DEPLOYMENT INFO")
           logs.append("##################################################")
           logs.append("")
-          logs.append(f"  Model ........ {model_name} v{version}")
-          logs.append(f"  Image ........ {SERVING_IMAGE}")
-          logs.append(f"  Workflow ..... {WORKFLOW_NAME}")
-          logs.append("")
 
           try:
+              # Resolve alias to version number if needed
+              if version_or_alias and version_or_alias.startswith("@"):
+                  alias = version_or_alias[1:]  # Remove @ prefix
+                  logs.append(f"  Resolving .... {model_name}@{alias}")
+                  mv = client.get_model_version_by_alias(model_name, alias)
+                  version = mv.version
+                  logs.append(f"  Resolved ..... v{version}")
+              else:
+                  version = version_or_alias
+
+              logs.append(f"  Model ........ {model_name} v{version}")
+              logs.append(f"  Image ........ {SERVING_IMAGE}")
+              logs.append(f"  Workflow ..... {WORKFLOW_NAME}")
+              logs.append("")
+
               deployed_at = datetime.utcnow().isoformat()
-              client.set_model_version_tag(model_name, version, "deployed_at", deployed_at)
-              client.set_model_version_tag(model_name, version, "deployed_by", DEPLOYED_BY)
-              client.set_model_version_tag(model_name, version, "serving_image", SERVING_IMAGE)
-              client.set_model_version_tag(model_name, version, "workflow_name", WORKFLOW_NAME)
+              tags = {
+                  "deployed_at": deployed_at,
+                  "deployed_by": DEPLOYED_BY,
+                  "serving_image": SERVING_IMAGE,
+                  "workflow_name": WORKFLOW_NAME,
+                  "workflow_uid": WORKFLOW_UID,
+                  "deployment_status": "deployed",
+              }
+
+              for key, value in tags.items():
+                  client.set_model_version_tag(model_name, version, key, value)
 
               logs.append("--------------------------------------------------")
               logs.append("✅ TAGGED SUCCESSFULLY")
               logs.append(f"   deployed_at: {deployed_at}")
               logs.append("--------------------------------------------------")
+
+          except MlflowException as e:
+              logs.append("--------------------------------------------------")
+              logs.append(f"❌ TAGGING FAILED: {e}")
+              logs.append("--------------------------------------------------")
+
           except Exception as e:
               logs.append("--------------------------------------------------")
-              logs.append(f"⚠️  TAGGING FAILED: {e}")
+              logs.append(f"❌ UNEXPECTED ERROR: {e}")
               logs.append("--------------------------------------------------")
 
           logs.append("")
@@ -430,4 +495,5 @@ spec:
           output = "\n".join(logs)
           print(output)
 
-          with open("/tmp/tagging-report.md", "w") as f: f.write(output)
+          with open("/tmp/tagging-report.md", "w") as f:
+              f.write(output)
