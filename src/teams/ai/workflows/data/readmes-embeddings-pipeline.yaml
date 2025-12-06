@@ -101,3 +101,22 @@ spec:
                   value: "{{workflow.parameters.is_automated}}"
                 - name: message
                   value: "Embeddings generated from {{workflow.parameters.data_version}}"
+
+    - name: resolve-entrypoint
+      inputs:
+        parameters:
+          - name: force
+      outputs:
+        parameters:
+          - name: entrypoint
+            valueFrom:
+              path: /tmp/entrypoint.txt
+      script:
+        image: alpine:latest
+        command: [sh]
+        source: |
+          if [ "{{inputs.parameters.force}}" = "true" ]; then
+            echo -n "dvc repro --force" > /tmp/entrypoint.txt
+          else
+            echo -n "dvc repro" > /tmp/entrypoint.txt
+          fi
