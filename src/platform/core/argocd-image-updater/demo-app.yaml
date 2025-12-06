@@ -10,14 +10,15 @@ spec:
     gitConfig:
       repository: git@github.com:opencloudhub/gitops.git
       branch: main
+      writeBackTarget: "kustomization:."
   applicationRefs:
     - namePattern: "demo-app-genai-backend"
       images:
         - alias: "demo-app-genai-backend-api"
           imageName: "opencloudhuborg/demo-app-genai-backend"
-          commonUpdateSettings:
-            updateStrategy: "latest"
-            allowTags: "regexp:^main-[0-9a-f]+$"
+      commonUpdateSettings:
+        updateStrategy: "newest-build" # renamed from "latest"
+        allowTags: "regexp:^main-[0-9a-f]+$"
 
 ---
 apiVersion: argocd-image-updater.argoproj.io/v1alpha1
@@ -32,11 +33,12 @@ spec:
     gitConfig:
       repository: git@github.com:opencloudhub/gitops.git
       branch: main
+      writeBackTarget: "kustomization:."
   applicationRefs:
     - namePattern: "demo-app-frontend"
       images:
         - alias: "demo-app-frontend"
           imageName: "opencloudhuborg/demo-app-frontend"
       commonUpdateSettings:
-        updateStrategy: "latest"
+        updateStrategy: "newest-build"
         allowTags: "regexp:^main-[0-9a-f]+$"
