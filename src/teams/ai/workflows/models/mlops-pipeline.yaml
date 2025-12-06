@@ -35,6 +35,10 @@ spec:
   serviceAccountName: workflow-executor
   entrypoint: main
 
+  # Workflow name includes model for easy identification
+  # Results in: mlops-{model_name}-xxxxx
+  generateName: "mlops-pipeline-{{workflow.parameters.model_name}}-"
+
   arguments:
     parameters:
       # Model identity

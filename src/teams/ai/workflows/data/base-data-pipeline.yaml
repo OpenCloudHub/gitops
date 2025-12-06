@@ -8,9 +8,12 @@ metadata:
     workflows.argoproj.io/description: "Run DVC data pipelines with automatic versioning"
 spec:
   serviceAccountName: workflow-executor
-
+  generateName: "data-pipeline-{{workflow.parameters.dataset_name}}-"
   arguments:
     parameters:
+      - name: dataset_name
+        description: "Dataset identifier for workflow naming (e.g., readmes, embeddings)"
+        value: "dataset"
       - name: pipelines
         description: "JSON array of pipeline names to run"
         value: '["opencloudhub-readmes-download"]'
