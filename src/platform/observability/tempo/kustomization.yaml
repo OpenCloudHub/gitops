@@ -12,7 +12,7 @@ helmCharts:
       tempo:
         # Enable env var expansion in config
         extraArgs:
-          - "-config.expand-env=true"
+          config.expand-env: "true"
         extraEnvFrom:
           - secretRef:
               name: minio-tenant-secret
