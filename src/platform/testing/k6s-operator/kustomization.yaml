@@ -19,3 +19,15 @@ helmCharts:
           requests:
             cpu: 50m
             memory: 64Mi
+
+# Filter out namespace - managed centrally in security/namespaces
+patches:
+  - target:
+      kind: Namespace
+      name: k6-testing
+    patch: |
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: k6-testing
