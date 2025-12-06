@@ -17,6 +17,7 @@
 #   Secrets (minio-tenant-secret):  AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL
 #   Tracking (inline):              ARGO_WORKFLOW_UID, DOCKER_IMAGE_TAG, DVC_DATA_VERSION, REPLICAS
 #
+# TODO: Exit handler for ray job cleaning
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
