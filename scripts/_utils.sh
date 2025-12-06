@@ -259,5 +259,6 @@ wine-classifier.dashboard.${base}
 qwen-0.5b.dashboard.${base}
 api.${base}
 demo-app.${base}
+api.demo-app.${base}
 EOF
 }
