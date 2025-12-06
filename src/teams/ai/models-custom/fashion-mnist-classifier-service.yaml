@@ -18,6 +18,8 @@ spec:
         route_prefix: /models/custom/fashion-mnist-classifier
         deployments:
           - name: FashionMNISTClassifier
+            user_config:
+              model_uri: "models:/prod.fashion-mnist-classifier/@champion"
             num_replicas: auto  # Enable autoscaling!
             max_ongoing_requests: 50       # bigger queue buffer
             autoscaling_config:
@@ -43,7 +45,7 @@ spec:
         spec:
           containers:
             - name: ray-head
-              image: opencloudhuborg/fashion-mnist-classifier-serving:main-a1ea6d0
+              image: opencloudhuborg/fashion-mnist-classifier-serving:main-e5d6867
               imagePullPolicy: Always
               startupProbe:
                 httpGet:
@@ -109,7 +111,7 @@ spec:
           spec:
             containers:
               - name: ray-worker
-                image: opencloudhuborg/fashion-mnist-classifier-serving:main-a1ea6d0
+                image: opencloudhuborg/fashion-mnist-classifier-serving:main-e5d6867
                 imagePullPolicy: Always
                 readinessProbe:
                   exec:
