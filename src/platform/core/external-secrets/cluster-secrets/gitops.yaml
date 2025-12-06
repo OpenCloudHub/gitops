@@ -98,6 +98,8 @@ apiVersion: external-secrets.io/v1
 kind: ClusterExternalSecret
 metadata:
   name: arc-github-secret
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   externalSecretName: arc-github-secret-es
   namespaceSelectors:

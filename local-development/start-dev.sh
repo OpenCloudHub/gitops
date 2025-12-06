@@ -55,7 +55,7 @@ trap cleanup EXIT INT TERM
 # Minikube settings
 CLUSTER_NAME="minikube"
 MINIKUBE_CPUS="${MINIKUBE_CPUS:-16}"
-MINIKUBE_MEMORY="${MINIKUBE_MEMORY:-36g}"
+MINIKUBE_MEMORY="${MINIKUBE_MEMORY:-48g}"
 MINIKUBE_DISK="${MINIKUBE_DISK:-100g}"
 
 # Persistent data paths (inside Minikube VM, survives restarts)
@@ -231,7 +231,6 @@ step_wait_for_gateway_service() {
   return 1
 }
 
-# FIXME: failscurrnently
 step_start_tunnel() {
   log_step "Starting Minikube tunnel"
 
@@ -240,21 +239,37 @@ step_start_tunnel() {
     return 0
   fi
 
+  # Kill any existing tunnel
   pkill -f "minikube tunnel" 2>/dev/null || true
   sleep 2
 
-  # Cache sudo credentials upfront
   log_info "Tunnel requires sudo access..."
-  sudo -v
+  if ! sudo -v; then
+    log_error "sudo access required for tunnel"
+    log_info "Run manually: sudo -E minikube tunnel"
+    return 1
+  fi
 
+  # Use -E to preserve user environment (MINIKUBE_HOME, etc.)
+  # Or explicitly set MINIKUBE_HOME to current user's config
   log_info "Starting tunnel in background..."
-  nohup sudo minikube tunnel > /tmp/minikube-tunnel.log 2>&1 &
+  sudo -E minikube tunnel > /tmp/minikube-tunnel.log 2>&1 &
   TUNNEL_PID=$!
   echo "$TUNNEL_PID" > /tmp/minikube-tunnel.pid
 
-  sleep 5
+  sleep 3
+
+  # Verify tunnel is actually running
+  if ! ps -p "$TUNNEL_PID" &>/dev/null; then
+    log_error "Tunnel failed to start"
+    log_info "Check logs: cat /tmp/minikube-tunnel.log"
+    log_info "Run manually: sudo -E minikube tunnel"
+    return 1
+  fi
+
   log_success "Tunnel started (PID: $TUNNEL_PID)"
 }
+
 
 step_wait_for_gateway_ip() {
   log_step "Waiting for Gateway LoadBalancer IP"
@@ -300,28 +315,66 @@ step_configure_hosts() {
   local services
   services=$(get_exposed_services)
 
-  # Remove ALL old opencloudhub entries (handles different comment formats)
-  if sudo grep -q "opencloudhub" /etc/hosts 2>/dev/null; then
-    log_info "Removing all old opencloudhub /etc/hosts entries..."
-    # Remove our patterns
+  # Check if /etc/hosts exists and is writable with sudo
+  if [[ ! -f /etc/hosts ]]; then
+    log_warning "/etc/hosts not found - manual DNS configuration required"
+    print_manual_hosts_instructions "$services"
+    return 0
+  fi
+
+  # Try to update /etc/hosts
+  if ! sudo -n true 2>/dev/null; then
+    log_info "sudo access needed for /etc/hosts update"
+    if ! sudo -v; then
+      log_warning "Could not obtain sudo access - manual configuration required"
+      print_manual_hosts_instructions "$services"
+      return 0
+    fi
+  fi
+
+  # Remove old entries
+  if sudo grep -q "opencloudhub-local-dev" /etc/hosts 2>/dev/null; then
+    log_info "Removing old opencloudhub /etc/hosts entries..."
     sudo sed -i '/# opencloudhub-local-dev START/,/# opencloudhub-local-dev END/d' /etc/hosts
   fi
 
   # Add new entries
   log_info "Adding new /etc/hosts entries..."
   local entry_count=0
-  {
-    echo "# opencloudhub-local-dev START (added $(date '+%Y-%m-%d %H:%M:%S'))"
-    while IFS= read -r hostname; do
-      if [[ -n "$hostname" ]]; then
-        echo "${GATEWAY_IP} ${hostname}"
-        entry_count=$((entry_count + 1))
-      fi
-    done <<< "$services"
-    echo "# opencloudhub-local-dev END"
-  } | sudo tee -a /etc/hosts >/dev/null
+  local hosts_block
+  hosts_block="# opencloudhub-local-dev START (added $(date '+%Y-%m-%d %H:%M:%S'))"$'\n'
+  while IFS= read -r hostname; do
+    if [[ -n "$hostname" ]]; then
+      hosts_block+="${GATEWAY_IP} ${hostname}"$'\n'
+      entry_count=$((entry_count + 1))
+    fi
+  done <<< "$services"
+  hosts_block+="# opencloudhub-local-dev END"
 
-  log_success "/etc/hosts configured ($entry_count entries added)"
+  if echo "$hosts_block" | sudo tee -a /etc/hosts >/dev/null; then
+    log_success "/etc/hosts configured ($entry_count entries added)"
+  else
+    log_warning "Failed to update /etc/hosts - manual configuration required"
+    print_manual_hosts_instructions "$services"
+  fi
+}
+
+print_manual_hosts_instructions() {
+  local services="$1"
+
+  echo ""
+  log_info "Add the following to your DNS or hosts file:"
+  echo ""
+  echo "# opencloudhub-local-dev"
+  while IFS= read -r hostname; do
+    if [[ -n "$hostname" ]]; then
+      echo "${GATEWAY_IP} ${hostname}"
+    fi
+  done <<< "$services"
+  echo ""
+  log_info "On Linux/Mac: sudo nano /etc/hosts"
+  log_info "On Windows: C:\\Windows\\System32\\drivers\\etc\\hosts (as admin)"
+  echo ""
 }
 
 
