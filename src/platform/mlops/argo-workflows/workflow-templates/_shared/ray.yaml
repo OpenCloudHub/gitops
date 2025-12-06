@@ -140,7 +140,7 @@ spec:
             shutdownAfterJobFinishes: true
             ttlSecondsAfterFinished: 300
             rayClusterSpec:
-              rayVersion: "2.41.0"
+              rayVersion: "2.51.0"
               headGroupSpec:
                 rayStartParams:
                   dashboard-host: "0.0.0.0"

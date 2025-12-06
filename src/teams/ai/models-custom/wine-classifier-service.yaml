@@ -25,7 +25,7 @@ spec:
             ray_actor_options:
               num_cpus: 0.5
   rayClusterConfig:
-    rayVersion: "2.48.0"
+    rayVersion: "2.51.0"
     headGroupSpec:
       rayStartParams:
         dashboard-host: "0.0.0.0"
@@ -53,6 +53,9 @@ spec:
                 limits:
                   cpu: "2"
                   memory: "3Gi"
+              envFrom:
+                - secretRef:
+                    name: minio-tenant-secret
               env:
                 - name: MLFLOW_TRACKING_URI
                   value: "http://mlflow.mlops.svc.cluster.local:80"
@@ -62,18 +65,6 @@ spec:
                   value: "http://prometheus-server.observability.svc.cluster.local:80"
                 - name: RAY_GRAFANA_IFRAME_HOST
                   value: "https://grafana.internal.opencloudhub.org"
-                - name: AWS_ACCESS_KEY_ID
-                  valueFrom:
-                    secretKeyRef:
-                      name: minio-tenant-secret
-                      key: accesskey
-                - name: AWS_SECRET_ACCESS_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: minio-tenant-secret
-                      key: secretkey
-                - name: AWS_ENDPOINT_URL
-                  value: "https://minio-api.internal.opencloudhub.org"
     workerGroupSpecs:
       - groupName: serving-workers
         replicas: 1
@@ -105,21 +96,12 @@ spec:
                   limits:
                     cpu: "2"
                     memory: "3Gi"
+                envFrom:
+                  - secretRef:
+                      name: minio-tenant-secret
                 env:
                   - name: MLFLOW_TRACKING_URI
                     value: "http://mlflow.mlops.svc.cluster.local:80"
-                  - name: AWS_ACCESS_KEY_ID
-                    valueFrom:
-                      secretKeyRef:
-                        name: minio-tenant-secret
-                        key: accesskey
-                  - name: AWS_SECRET_ACCESS_KEY
-                    valueFrom:
-                      secretKeyRef:
-                        name: minio-tenant-secret
-                        key: secretkey
-                  - name: AWS_ENDPOINT_URL
-                    value: "https://minio-api.internal.opencloudhub.org"
 ---
 # HTTPRoute for model API (external access)
 apiVersion: gateway.networking.k8s.io/v1
