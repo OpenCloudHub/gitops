@@ -12,7 +12,6 @@ spec:
   hostnames:
     - demo-app.opencloudhub.org
   rules:
-    # Frontend (catch-all)
     - matches:
         - path:
             type: PathPrefix

@@ -80,23 +80,23 @@ spec:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "tempo.observability.svc.cluster.local:4317"
           # Liveness: Is the process alive? (checks if FastAPI is running)
-          # livenessProbe:
-          #   httpGet:
-          #     path: /api  # Just check if FastAPI responds
-          #     port: http
-          #   initialDelaySeconds: 30
-          #   periodSeconds: 10
-          #   timeoutSeconds: 5
-          #   failureThreshold: 3
-          # # Readiness: Is it ready to serve traffic? (checks if chain is loaded)
-          # readinessProbe:
-          #   httpGet:
-          #     path: /api  # Just check if FastAPI responds
-          #     port: http
-          #   initialDelaySeconds: 10
-          #   periodSeconds: 5
-          #   timeoutSeconds: 3
-          #   failureThreshold: 30  # Allow up to 150s (30*5s) to become ready
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness: Is it ready to serve traffic? (checks if chain is loaded)
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30 # Allow up to 150s (30*5s) to become ready
           resources:
             requests:
               memory: "512Mi"
