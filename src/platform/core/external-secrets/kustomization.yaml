@@ -6,6 +6,7 @@ namespace: external-secrets
 resources:
   - cluster-secret-stores.yaml
   - cluster-secrets
+  - external-secrets
 
 helmCharts:
   - name: external-secrets

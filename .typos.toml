@@ -1,0 +1,12 @@
+# Typos configuration
+# https://github.com/crate-ci/typos
+
+[default]
+extend-ignore-re = [
+  # Ignore docker image tags with git commit hashes (e.g., main-6ba5433)
+  ":[a-zA-Z0-9_-]+-[a-f0-9]{7,40}",
+]
+
+[default.extend-words]
+# Add false positives here if needed
+# ba = "ba"

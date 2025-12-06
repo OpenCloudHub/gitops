@@ -1,0 +1,46 @@
+# Common shared variables for all pipelines
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: models-job-env
+  namespace: mlops
+data:
+  MLFLOW_TRACKING_URI: "http://mlflow.mlops.svc.cluster.local:80"
+  DVC_REPO_URL: "https://github.com/OpenCloudHub/data-registry"
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "production"
+---
+# Specific to this model
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wine-classifier-env
+  namespace: mlops
+data:
+  MLFLOW_EXPERIMENT_NAME: "wine-quality"
+  MLFLOW_REGISTERED_MODEL_NAME: "ci.wine-classifier" # Downstream tasks loog for that ci.<model_name>
+
+  DVC_DATA_PATH: "data/wine-quality/processed/wine-quality.csv"
+  DVC_METRICS_PATH: "data/wine-quality/metadata.json"
+---
+# Fashion-MNIST classifier model
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fashion-mnist-classifier-env
+  namespace: mlops
+data:
+  MLFLOW_EXPERIMENT_NAME: "fashion-mnist"
+  MLFLOW_REGISTERED_MODEL_NAME: "ci.fashion-mnist-classifier"
+
+  # Ray options
+  RAY_STORAGE_ENDPOINT: "minio.minio-tenant.svc.cluster.local:80"
+  RAY_STORAGE_SCHEME: "http"
+  RAY_STORAGE_PATH: "ray-results"
+  RAY_NUM_WORKERS: "1"
+
+  # DVC paths
+  DVC_REPO: "https://github.com/OpenCloudHub/data-registry"
+  DVC_TRAIN_DATA_PATH: "data/fashion-mnist/processed/train/train.parquet"
+  DVC_VAL_DATA_PATH: "data/fashion-mnist/processed/val/val.parquet"
+  DVC_METRICS_PATH: "data/fashion-mnist/metadata.json"

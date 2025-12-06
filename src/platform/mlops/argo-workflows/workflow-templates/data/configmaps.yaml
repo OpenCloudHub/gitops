@@ -1,0 +1,34 @@
+# Common shared variables for all pipelines
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-job-env
+  namespace: mlops
+data:
+  MLFLOW_TRACKING_URI: "http://mlflow.mlops.svc.cluster.local:80"
+  DVC_REPO_URL: "https://github.com/OpenCloudHub/data-registry"
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "production"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: embeddings-env
+  namespace: mlops
+data:
+  # Data source
+  DVC_DATA_VERSION: "opencloudhub-readmes-v1.0.0"
+  DVC_DATA_PATH: "data/opencloudhub-readmes/raw"
+
+  # Embedding model
+  EMBEDDING_MODEL_NAME: "sentence-transformers/all-MiniLM-L6-v2"
+  EMBEDDING_CHUNK_SIZE: "800"
+  EMBEDDING_CHUNK_OVERLAP: "100"
+  EMBEDDING_BATCH_SIZE: "8"
+
+  # Quality filters
+  MIN_CHUNK_SIZE: "50"
+  MAX_NOISE_RATIO: "0.3"
+
+  # Output
+  ANALYZE_OUTPUT_FILE: "../../data/opencloudhub-readmes-embeddings/metadata.json"

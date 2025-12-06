@@ -2,17 +2,18 @@
 # Ray Job Templates
 # =============================================================================
 #
-# Shared templates for submitting and monitoring Ray training jobs.
+# Shared templates for submitting and monitoring Ray jobs.
+# Reusable for training, embeddings, data processing, or any Ray workload.
 # Provides log streaming from Ray job submitter pods to Argo UI.
 #
 # Templates:
-#   training-job    - Main entry: submit + wait with log streaming (DAG)
-#   submit-rayjob   - Create RayJob resource
-#   stream-and-wait - Stream logs and wait for completion
+#   submit-and-stream-rayjob - Main entry: submit + wait with log streaming (DAG)
+#   submit-rayjob            - Create RayJob resource
+#   stream-rayjob            - Stream logs and wait for completion
 #
 # Environment variables injected into Ray pods:
-#   Platform (mlops-platform-env):  MLFLOW_TRACKING_URI
-#   Model ({model}-env):            MLFLOW_EXPERIMENT_NAME, MLFLOW_REGISTERED_MODEL_NAME
+#   Platform (mlops-platform-env):  MLFLOW_TRACKING_URI, DVC_REPO_URL
+#   Job-specific ({job}-env):       Custom env vars per job type
 #   Secrets (minio-tenant-secret):  AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL
 #   Tracking (inline):              ARGO_WORKFLOW_UID, DOCKER_IMAGE_TAG, DVC_DATA_VERSION, REPLICAS
 #
@@ -36,7 +37,9 @@ spec:
           - name: job_prefix
           - name: image
           - name: entrypoint
-          - name: model_configmap
+          - name: base_configmap
+          - name: job_configmap
+          - name: job_secret
           - name: cpu
             default: "2"
           - name: memory
@@ -70,8 +73,8 @@ spec:
                   value: "{{inputs.parameters.image}}"
                 - name: entrypoint
                   value: "{{inputs.parameters.entrypoint}}"
-                - name: model_configmap
-                  value: "{{inputs.parameters.model_configmap}}"
+                - name: job_configmap
+                  value: "{{inputs.parameters.job_configmap}}"
                 - name: cpu
                   value: "{{inputs.parameters.cpu}}"
                 - name: memory
@@ -102,7 +105,9 @@ spec:
           - name: job_prefix
           - name: image
           - name: entrypoint
-          - name: model_configmap
+          - name: base_configmap
+          - name: job_configmap
+          - name: job_secret
           - name: cpu
           - name: memory
           - name: gpu
@@ -150,11 +155,11 @@ spec:
                             nvidia.com/gpu: "{{inputs.parameters.gpu}}"
                         envFrom:
                           - configMapRef:
-                              name: mlops-platform-env
+                              name: "{{inputs.parameters.base_configmap}}"
                           - configMapRef:
-                              name: "{{inputs.parameters.model_configmap}}"
+                              name: "{{inputs.parameters.job_configmap}}"
                           - secretRef:
-                              name: minio-tenant-secret
+                              name: "{{inputs.parameters.job_secret}}"
                         env:
                           - name: ARGO_WORKFLOW_UID
                             value: "{{workflow.uid}}"
@@ -184,12 +189,12 @@ spec:
                               memory: "{{inputs.parameters.memory}}"
                               nvidia.com/gpu: "{{inputs.parameters.gpu}}"
                           envFrom:
-                            - configMapRef:
-                                name: mlops-platform-env
-                            - configMapRef:
-                                name: "{{inputs.parameters.model_configmap}}"
-                            - secretRef:
-                                name: minio-tenant-secret
+                          - configMapRef:
+                              name: "{{inputs.parameters.base_configmap}}"
+                          - configMapRef:
+                              name: "{{inputs.parameters.job_configmap}}"
+                          - secretRef:
+                              name: "{{inputs.parameters.job_secret}}"
                           env:
                             - name: ARGO_WORKFLOW_UID
                               value: "{{workflow.uid}}"
@@ -235,7 +240,7 @@ spec:
           {
             echo ""
             echo "══════════════════════════════════════════════════"
-            echo "🚀 RAY TRAINING JOB"
+            echo "🚀 RAY JOB"
             echo "══════════════════════════════════════════════════"
             echo ""
             echo "  Job ......... $JOB_NAME"
@@ -281,7 +286,7 @@ spec:
           {
             echo ""
             echo "══════════════════════════════════════════════════"
-            echo "📝 TRAINING LOGS"
+            echo "📝 JOB LOGS"
             echo "══════════════════════════════════════════════════"
             echo ""
           } | tee -a /tmp/training-logs.txt
@@ -301,7 +306,7 @@ spec:
           if [ "$FINAL_STATUS" = "SUCCEEDED" ]; then
             {
               echo "--------------------------------------------------"
-              echo "✅ TRAINING COMPLETED SUCCESSFULLY"
+              echo "✅ JOB COMPLETED SUCCESSFULLY"
               echo "--------------------------------------------------"
             } | tee -a /tmp/training-logs.txt
             echo "SUCCEEDED" > /tmp/job_status.txt
@@ -312,7 +317,7 @@ spec:
           else
             {
               echo "--------------------------------------------------"
-              echo "❌ TRAINING FAILED: $FINAL_STATUS"
+              echo "❌ JOB FAILED: $FINAL_STATUS"
               echo "--------------------------------------------------"
               echo ""
               kubectl describe rayjob -n mlops "$JOB_NAME" | tail -30

@@ -116,8 +116,12 @@ spec:
                   value: "{{workflow.parameters.training_image}}"
                 - name: entrypoint
                   value: "{{workflow.parameters.training_entrypoint}} {{workflow.parameters.training_args}}"
-                - name: model_configmap
+                - name: base_configmap
+                  value: "models-job-env"
+                - name: job_configmap
                   value: "{{workflow.parameters.model_name}}-env"
+                - name: job_secret
+                  value: "models-job-secrets"
                 - name: cpu
                   value: "{{tasks.map-compute.outputs.parameters.cpu_request}}"
                 - name: memory

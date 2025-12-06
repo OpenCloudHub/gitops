@@ -1,0 +1,43 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: data-job-secrets
+  namespace: mlops
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: data-job-secrets
+    template:
+      data:
+        # MinIO / S3
+        AWS_ACCESS_KEY_ID: "{{ .minio_accesskey }}"
+        AWS_SECRET_ACCESS_KEY: "{{ .minio_secretkey }}"
+        AWS_ENDPOINT_URL: "http://minio.minio-tenant.svc.cluster.local:80"
+
+        # Demo App DB
+        DEMO_APP_DB_USER: "{{ .demo_app_db_user }}"
+        DEMO_APP_DB_PASSWORD: "{{ .demo_app_db_password }}"
+        DEMO_APP_DB_HOST: "demo-app-db-cluster-rw.storage.svc.cluster.local"
+        DEMO_APP_DB_NAME: "demo_app"
+  data:
+    # MinIO
+    - secretKey: minio_accesskey
+      remoteRef:
+        key: platform/storage/minio-tenant/credentials
+        property: accesskey
+    - secretKey: minio_secretkey
+      remoteRef:
+        key: platform/storage/minio-tenant/credentials
+        property: secretkey
+    # Demo App DB
+    - secretKey: demo_app_db_user
+      remoteRef:
+        key: demo-app/storage/cnpg/demo-app
+        property: username
+    - secretKey: demo_app_db_password
+      remoteRef:
+        key: demo-app/storage/cnpg/demo-app
+        property: password

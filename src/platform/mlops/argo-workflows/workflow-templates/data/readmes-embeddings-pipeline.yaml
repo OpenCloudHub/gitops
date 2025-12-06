@@ -35,9 +35,10 @@ spec:
 
   templates:
     - name: main
-      steps:
-        # Step 1: Map compute type to resource specs
-        - - name: map-compute
+      dag:
+        tasks:
+          # Phase 1: Map compute type to resources
+          - name: map-compute
             templateRef:
               name: compute-templates
               template: map-compute-config
@@ -46,56 +47,43 @@ spec:
                 - name: compute_type
                   value: "{{workflow.parameters.compute_type}}"
 
-        # Step 2: Generate unique run label
-        - - name: generate-run-label
-            template: generate-label
-
-        # Step 3: Create RayJob
-        - - name: create-rayjob
+          # Phase 2: Run embeddings job
+          - name: run-embeddings
+            depends: "map-compute.Succeeded"
             templateRef:
               name: ray-templates
-              template: create-rayjob-resource
+              template: submit-and-stream-rayjob
             arguments:
               parameters:
-                - name: run_label
-                  value: "{{steps.generate-run-label.outputs.result}}"
-                - name: data_version
-                  value: "{{workflow.parameters.data_version}}"
-                - name: force
-                  value: "{{workflow.parameters.force}}"
+                - name: job_prefix
+                  value: "embeddings"
                 - name: image
                   value: "{{workflow.parameters.image}}"
-                - name: workflow_uid
-                  value: "{{workflow.uid}}"
-                - name: cpu_request
-                  value: "{{steps.map-compute.outputs.parameters.cpu_request}}"
-                - name: cpu_limit
-                  value: "{{steps.map-compute.outputs.parameters.cpu_limit}}"
-                - name: memory_request
-                  value: "{{steps.map-compute.outputs.parameters.memory_request}}"
-                - name: memory_limit
-                  value: "{{steps.map-compute.outputs.parameters.memory_limit}}"
+                - name: entrypoint
+                  value: "python /workspace/project/pipelines/opencloudhub-readmes-embeddings/run_pipeline.py"
+                - name: base_configmap
+                  value: "data-job-env"
+                - name: job_configmap
+                  value: "embeddings-env"
+                - name: job_secret
+                  value: "data-job-secrets"
+                - name: cpu
+                  value: "{{tasks.map-compute.outputs.parameters.cpu_request}}"
+                - name: memory
+                  value: "{{tasks.map-compute.outputs.parameters.memory_request}}"
+                - name: gpu
+                  value: "{{tasks.map-compute.outputs.parameters.gpu}}"
                 - name: replicas
-                  value: "{{steps.map-compute.outputs.parameters.replicas}}"
+                  value: "{{tasks.map-compute.outputs.parameters.replicas}}"
+                - name: dvc_data_version
+                  value: "{{workflow.parameters.data_version}}"
 
-        # Step 4: Wait for job completion and get DVC change status
-        - - name: wait-for-rayjob
-            templateRef:
-              name: ray-templates
-              template: wait-for-rayjob
-            arguments:
-              parameters:
-                - name: job_name
-                  value: "{{steps.create-rayjob.outputs.parameters.job_name}}"
-                - name: timeout_seconds
-                  value: "3600"
-
-        # Step 5: Tag only if job succeeded AND DVC produced new outputs
-        - - name: git-tag
+          # Phase 3: Git tag if succeeded
+          - name: git-tag
+            depends: "run-embeddings.Succeeded"
             templateRef:
               name: git-templates
               template: git-tag-version
-            when: "{{steps.wait-for-rayjob.outputs.parameters.job_status}} == SUCCEEDED && {{steps.wait-for-rayjob.outputs.parameters.dvc_changed}} == true"
             arguments:
               parameters:
                 - name: tag_prefix
@@ -106,13 +94,3 @@ spec:
                   value: "{{workflow.parameters.is_automated}}"
                 - name: message
                   value: "Embeddings generated from {{workflow.parameters.data_version}}"
-
-    # ==========================================================================
-    # GENERATE UNIQUE RUN LABEL
-    # ==========================================================================
-    - name: generate-label
-      script:
-        image: alpine:3.19
-        command: [sh]
-        source: |
-          echo -n "emb$(date +%Y%m%d%H%M%S)"
