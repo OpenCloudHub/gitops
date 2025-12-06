@@ -4,25 +4,29 @@ metadata:
   name: root-app
   namespace: argocd
   finalizers:
-  - resources-finalizer.argocd.argoproj.io
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   sources:
-  # Security policies ApplicationSet and AppProjects
-  - repoURL: git@github.com:opencloudhub/gitops.git
-    path: src/app-projects
-    targetRevision: HEAD
-  - repoURL: git@github.com:opencloudhub/gitops.git
-    path: src/application-sets/security
-    targetRevision: HEAD
-  # Platform team apps
-  - repoURL: git@github.com:opencloudhub/gitops.git
-    path: src/application-sets/platform
-    targetRevision: HEAD
-  # Team Apps
-  - repoURL: git@github.com:opencloudhub/gitops.git
-    path: src/application-sets/teams
-    targetRevision: HEAD
+    # Security policies ApplicationSet and AppProjects
+    - repoURL: git@github.com:opencloudhub/gitops.git
+      path: src/app-projects
+      targetRevision: HEAD
+    - repoURL: git@github.com:opencloudhub/gitops.git
+      path: src/application-sets/security
+      targetRevision: HEAD
+    # Tests
+    - repoURL: git@github.com:opencloudhub/gitops.git
+      path: src/tests
+      targetRevision: HEAD
+    # Platform team apps
+    - repoURL: git@github.com:opencloudhub/gitops.git
+      path: src/application-sets/platform
+      targetRevision: HEAD
+    # Team Apps
+    - repoURL: git@github.com:opencloudhub/gitops.git
+      path: src/application-sets/teams
+      targetRevision: HEAD
 
   destination:
     namespace: argocd
