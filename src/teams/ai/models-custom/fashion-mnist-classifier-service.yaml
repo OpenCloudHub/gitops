@@ -103,7 +103,6 @@ spec:
                   value: "https://grafana.internal.opencloudhub.org"
     workerGroupSpecs:
       - groupName: serving-workers
-        replicas: 2
         minReplicas: 1
         maxReplicas: 2
         numOfHosts: 1
