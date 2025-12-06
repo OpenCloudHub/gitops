@@ -17,7 +17,7 @@ metadata:
   namespace: mlops
 data:
   # Data source
-  DVC_DATA_VERSION: "opencloudhub-readmes-v1.0.0"
+  DVC_DATA_VERSION: "opencloudhub-readmes-download-v1.0.0"
   DVC_DATA_PATH: "data/opencloudhub-readmes/raw"
   # Embedding model
   EMBEDDING_MODEL_NAME: "sentence-transformers/all-MiniLM-L6-v2"
