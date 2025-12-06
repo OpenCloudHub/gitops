@@ -48,13 +48,6 @@ spec:
               value: https://mlflow.internal.opencloudhub.org
             - name: MLFLOW_TRACKING_INSECURE_TLS
               value: "true"
-            # MinIO / S3
-            - name: AWS_ACCESS_KEY_ID
-              value: admin
-            - name: AWS_SECRET_ACCESS_KEY
-              value: "12345678"
-            - name: AWS_ENDPOINT_URL
-              value: https://minio-api.internal.opencloudhub.org
             # DVC / Data
             - name: DVC_REPO
               value: https://github.com/OpenCloudHub/data-registry
@@ -79,6 +72,9 @@ spec:
               value: "demo-app-genai-backend"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "tempo.observability.svc.cluster.local:4317"
+          envFrom:
+            - secretRef:
+                name: minio-tenant-secret
           # Liveness: Is the process alive? (checks if FastAPI is running)
           livenessProbe:
             httpGet:
