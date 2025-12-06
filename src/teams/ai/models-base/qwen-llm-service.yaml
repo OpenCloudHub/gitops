@@ -25,8 +25,8 @@ spec:
                 otlp_traces_endpoint: "grpc://k8s-monitoring-alloy-receiver.observability.svc.cluster.local:4317"
               deployment_config:
                 autoscaling_config:
-                  min_replicas: 0
-                  max_replicas: 0   # Could Scale this up later
+                  min_replicas: 1
+                  max_replicas: 1   # Could Scale this up later
                   target_ongoing_requests: 4
                 max_ongoing_requests: 8
               # Fractional GPU configuration
