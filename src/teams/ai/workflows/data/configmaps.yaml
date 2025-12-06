@@ -19,16 +19,19 @@ data:
   # Data source
   DVC_DATA_VERSION: "opencloudhub-readmes-v1.0.0"
   DVC_DATA_PATH: "data/opencloudhub-readmes/raw"
-
   # Embedding model
   EMBEDDING_MODEL_NAME: "sentence-transformers/all-MiniLM-L6-v2"
   EMBEDDING_CHUNK_SIZE: "800"
   EMBEDDING_CHUNK_OVERLAP: "100"
   EMBEDDING_BATCH_SIZE: "8"
-
   # Quality filters
   MIN_CHUNK_SIZE: "50"
   MAX_NOISE_RATIO: "0.3"
-
   # Output
   ANALYZE_OUTPUT_FILE: "../../data/opencloudhub-readmes-embeddings/metadata.json"
+  # PGVector (non-sensitive)
+  PGVECTOR_HOST: "demo-app-db-cluster-rw.storage.svc.cluster.local"
+  PGVECTOR_PORT: "5432"
+  PGVECTOR_DATABASE: "demo_app"
+  PGVECTOR_USER: "demo-app"
+  PGVECTOR_TABLE_NAME: "readme_embeddings"

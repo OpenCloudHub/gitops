@@ -271,46 +271,16 @@ step_install_external_secrets() {
     return 0
   fi
 
-  # Build and apply ESO manifests (operator + CRDs only, no ClusterSecretStore)
-  log_info "Building External Secrets Operator manifests..."
-  local manifests
-  if ! manifests=$(kustomize build --enable-helm "${REPO_ROOT}/src/platform/core/external-secrets"); then
-    log_error "Failed to build External Secrets manifests"
-    return 1
-  fi
-
+  # Build and apply ESO (operator + CRDs + ClusterSecretStore via sync-wave)
   log_info "Applying External Secrets Operator..."
-  echo "$manifests" | kubectl apply -f -
+  kustomize build --enable-helm "${REPO_ROOT}/src/platform/core/external-secrets" | kubectl apply -f -
 
-  # Wait for ESO to be ready before creating ClusterSecretStore
-  log_info "Waiting for External Secrets Operator to be ready..."
+  # Wait for operator to be ready
+  log_info "Waiting for External Secrets Operator..."
   kubectl wait --for=condition=available deployment/external-secrets \
     -n external-secrets --timeout="$KUBECTL_TIMEOUT"
-  kubectl wait --for=condition=available deployment/external-secrets-webhook \
-    -n external-secrets --timeout="$KUBECTL_TIMEOUT"
-  kubectl wait --for=condition=available deployment/external-secrets-cert-controller \
-    -n external-secrets --timeout="$KUBECTL_TIMEOUT"
 
-  # Wait for CRDs to be established
-  log_info "Waiting for External Secrets CRDs to be established..."
-  kubectl wait --for=condition=established crd/clustersecretstores.external-secrets.io --timeout=60s
-  kubectl wait --for=condition=established crd/externalsecrets.external-secrets.io --timeout=60s
-  kubectl wait --for=condition=established crd/clusterexternalsecrets.external-secrets.io --timeout=60s
-
-  # Now create the ClusterSecretStore (Vault connection)
-  log_info "Creating ClusterSecretStore for Vault..."
-  kubectl apply -f "${REPO_ROOT}/src/platform/core/external-secrets/cluster-secret-stores.yaml"
-
-  # Verify ClusterSecretStore is ready
-  log_info "Waiting for ClusterSecretStore to be ready..."
-  sleep 5  # Give it a moment to reconcile
-  if kubectl get clustersecretstore vault-backend -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' | grep -q "True"; then
-    log_success "ClusterSecretStore vault-backend is ready"
-  else
-    log_warning "ClusterSecretStore may not be fully ready yet (Vault connectivity)"
-  fi
-
-  log_success "External Secrets Operator installed successfully"
+  log_success "External Secrets Operator ready"
 }
 
 step_deploy_applications() {
@@ -321,40 +291,24 @@ step_deploy_applications() {
     return 0
   fi
 
-  # Stage 1: Projects
-  log_info "Stage 1: Deploying ArgoCD projects..."
+  # Projects
+  log_info "Deploying ArgoCD projects..."
   kubectl apply -k "${REPO_ROOT}/src/app-projects/"
 
-  # Stage 2: Security ApplicationSet (namespaces, RBAC, secrets)
-  # ESO is already installed, so ExternalSecrets can be created
-  log_info "Stage 2: Deploying security policies (namespaces, RBAC, secrets)..."
+  # Security first (namespaces, RBAC, secrets) - ESO is ready
+  log_info "Deploying security ApplicationSet..."
   kubectl apply -f "${REPO_ROOT}/src/application-sets/security/applicationset.yaml"
+  sleep 10
 
-  # Wait for namespaces to be created before platform apps
-  log_info "Waiting for security resources to sync..."
-  sleep 15
-
-  # Stage 3: Platform ApplicationSet (creates all platform apps)
-  # ESO will be detected as already in-sync
-  log_info "Stage 3: Deploying platform ApplicationSet..."
+  # Platform (ESO will sync as already applied)
+  log_info "Deploying platform ApplicationSet..."
   kubectl apply -f "${REPO_ROOT}/src/application-sets/platform/applicationset.yaml"
 
-  # Stage 4: Wait for core infrastructure
-  log_info "Stage 4: Waiting for core infrastructure..."
-
-  log_info "Waiting for cert-manager..."
-  kubectl wait --for=condition=available deployment/cert-manager \
-    -n cert-manager --timeout="$KUBECTL_TIMEOUT" 2>/dev/null || true
-
-  log_info "Waiting for istiod..."
-  kubectl wait --for=condition=available deployment/istiod \
-    -n istio-system --timeout="$KUBECTL_TIMEOUT" 2>/dev/null || true
-
-  # Stage 5: Root app (adds teams apps now that platform is ready)
-  log_info "Stage 5: Deploying root application..."
+  # Root app (teams)
+  log_info "Deploying root application..."
   kubectl apply -f "${REPO_ROOT}/src/root-app.yaml"
 
-  log_success "Applications deployed successfully"
+  log_success "Applications deployed"
 }
 
 step_create_summary() {
@@ -438,7 +392,7 @@ main() {
   step_check_prerequisites
   step_prepare_cluster
   step_install_argocd
-  step_install_external_secrets  # ESO + ClusterSecretStore before security appset
+  step_install_external_secrets
   step_deploy_applications
   step_create_summary
   print_completion_summary
