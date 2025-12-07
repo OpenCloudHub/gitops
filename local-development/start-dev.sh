@@ -1,417 +1,126 @@
 #!/bin/bash
 # =============================================================================
-# local-dev/start-dev.sh
-# Sets up complete local development environment with Minikube
+# local-development/start-dev.sh
+# Orchestrates complete local development environment setup
 # =============================================================================
 #
 # Usage:
-#   ./start-dev.sh                    # Full setup
-#   DRY_RUN=true ./start-dev.sh       # Preview without changes
-#   SKIP_VAULT=true ./start-dev.sh    # Skip Vault setup (reuse existing)
-#   SKIP_BOOTSTRAP=true ./start-dev.sh # Skip GitOps bootstrap
+#   ./start-dev.sh                        # Full setup
+#   LOAD_IMAGES=true ./start-dev.sh       # Include image pre-loading
+#   SKIP_VAULT=true ./start-dev.sh        # Skip Vault setup
+#   SKIP_BOOTSTRAP=true ./start-dev.sh    # Skip GitOps bootstrap
+#   SKIP_NETWORK=true ./start-dev.sh      # Skip tunnel/hosts setup
+#   DRY_RUN=true ./start-dev.sh           # Preview all steps
 #
-# Prerequisites:
-#   - Docker installed and running
-#   - Minikube installed
-#   - kubectl installed
-#   - NVIDIA drivers + nvidia-container-toolkit (for GPU support)
-#   - .env.secrets file configured (see .env.secrets.example)
-#   - SSH keys for ArgoCD in ~/.ssh/opencloudhub/
-#
-# This script:
-#   1. Starts Minikube with GPU support
-#   2. Creates persistent storage for MinIO and PostgreSQL
-#   3. Starts local Vault and seeds secrets
-#   4. Bootstraps GitOps (ArgoCD + applications)
-#   5. Waits for Gateway Service, then starts tunnel
-#   6. Configures /etc/hosts for local access
+# Steps:
+#   1. Setup Minikube (delete + fresh start + PVs)
+#   2. Load images (optional, opt-in with LOAD_IMAGES=true)
+#   3. Setup Vault (local Docker Vault for secrets)
+#   4. Bootstrap GitOps (ArgoCD + applications)
+#   5. Setup Network (tunnel + /etc/hosts)
 #
 # =============================================================================
 
 set -euo pipefail
-
-# =============================================================================
-# Load Utilities
-# =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "${REPO_ROOT}/scripts/_utils.sh"
 
 # =============================================================================
-# Cleanup on exit
-# =============================================================================
-
-cleanup() {
-  rm -f /tmp/minikube-tunnel.pid
-}
-
-trap cleanup EXIT INT TERM
-
-# =============================================================================
 # Configuration
 # =============================================================================
 
-# Minikube settings
-CLUSTER_NAME="minikube"
-MINIKUBE_CPUS="${MINIKUBE_CPUS:-16}"
-MINIKUBE_MEMORY="${MINIKUBE_MEMORY:-48g}"
-MINIKUBE_DISK="${MINIKUBE_DISK:-100g}"
-
-# Persistent data paths (inside Minikube VM, survives restarts)
-MINIO_DATA_PATH="/data/minio"
-POSTGRES_DATA_PATH="/data/postgres"
-
-# Skip flags
+LOAD_IMAGES="${LOAD_IMAGES:-false}"
 SKIP_VAULT="${SKIP_VAULT:-false}"
 SKIP_BOOTSTRAP="${SKIP_BOOTSTRAP:-false}"
+SKIP_NETWORK="${SKIP_NETWORK:-false}"
 DRY_RUN="${DRY_RUN:-false}"
 
-# Output directory
 SUMMARY_OUTPUT_DIR="${SCRIPT_DIR}/output"
 
-# Timeout for kubectl wait operations
-KUBECTL_TIMEOUT="1200s"
-
 # =============================================================================
-# Runtime Variables
+# Main
 # =============================================================================
 
-GATEWAY_IP=""
-TUNNEL_PID=""
-START_TIME=""
+main() {
+  local start_time
+  start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# =============================================================================
-# Setup Steps
-# =============================================================================
+  print_banner "Local Development Setup" "minikube"
 
-step_check_prerequisites() {
-  log_step "Checking prerequisites"
+  # Export for child scripts
+  export DRY_RUN
+  export SUMMARY_OUTPUT_DIR
 
-  validate_command_exists docker "https://docs.docker.com/get-docker/"
-  validate_command_exists minikube "https://minikube.sigs.k8s.io/docs/start/"
-  validate_command_exists kubectl "https://kubernetes.io/docs/tasks/tools/"
+  # Step 1: Minikube
+  log_step "Step 1/5: Minikube Setup"
+  bash "${SCRIPT_DIR}/01-setup-minikube.sh"
 
-  # Check for NVIDIA container toolkit (optional but warn if missing)
-  if ! command -v nvidia-smi &>/dev/null; then
-    log_warning "nvidia-smi not found - GPU support may not work"
+  # Step 2: Images (opt-in)
+  log_step "Step 2/5: Image Loading"
+  if [[ "$LOAD_IMAGES" == "true" ]]; then
+    bash "${SCRIPT_DIR}/02-load-images.sh"
+  else
+    log_info "Skipping image loading (set LOAD_IMAGES=true to enable)"
   fi
 
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_warning "DRY RUN MODE - No changes will be applied"
-  fi
-
-  log_success "Prerequisites check passed"
-}
-
-step_start_minikube() {
-  log_step "Starting Minikube cluster"
-
-  # Clean up any existing cluster
-  log_info "Removing existing Minikube cluster (if any)..."
-  minikube delete 2>/dev/null || true
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) Would start Minikube with:"
-    log_info "  CPUs: $MINIKUBE_CPUS"
-    log_info "  Memory: $MINIKUBE_MEMORY"
-    log_info "  Disk: $MINIKUBE_DISK"
-    return 0
-  fi
-
-  log_info "Starting Minikube with GPU support..."
-  minikube start \
-    --driver docker \
-    --container-runtime docker \
-    --cpus "$MINIKUBE_CPUS" \
-    --memory "$MINIKUBE_MEMORY" \
-    --disk-size "$MINIKUBE_DISK" \
-    --gpus all
-
-  log_success "Minikube started successfully"
-}
-
-# TODO: make this work
-step_create_persistent_storage() {
-  log_step "Creating persistent storage directories"
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) Would create directories in Minikube VM"
-    return 0
-  fi
-
-  log_info "Creating data directories inside Minikube VM..."
-  minikube ssh "
-    # MinIO directories (uid 1000)
-    sudo mkdir -p ${MINIO_DATA_PATH}/data-0 ${MINIO_DATA_PATH}/data-1
-    sudo chown -R 1000:1000 ${MINIO_DATA_PATH}
-    sudo chmod -R 755 ${MINIO_DATA_PATH}
-
-    # PostgreSQL directories (uid 26 for CNPG)
-    sudo mkdir -p ${POSTGRES_DATA_PATH}/mlflow-1 ${POSTGRES_DATA_PATH}/mlflow-2
-    sudo mkdir -p ${POSTGRES_DATA_PATH}/demo-app-1 ${POSTGRES_DATA_PATH}/demo-app-2
-    sudo chown -R 26:26 ${POSTGRES_DATA_PATH}
-    sudo chmod -R 700 ${POSTGRES_DATA_PATH}
-  "
-
-  log_info "Applying storage manifests..."
-  kubectl apply -k "${SCRIPT_DIR}/manifests"
-
-  log_success "Persistent storage configured"
-}
-
-step_setup_vault() {
-  log_step "Setting up local Vault"
-
+  # Step 3: Vault
+  log_step "Step 3/5: Vault Setup"
   if [[ "$SKIP_VAULT" == "true" ]]; then
     log_info "Skipping Vault setup (SKIP_VAULT=true)"
-    return 0
+  else
+    bash "${SCRIPT_DIR}/03-setup-vault.sh"
   fi
 
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) Would run setup-vault.sh"
-    return 0
-  fi
-
-  bash "${SCRIPT_DIR}/setup-vault.sh"
-  sleep 5
-
-  log_success "Vault setup complete"
-}
-
-step_bootstrap_gitops() {
-  log_step "Bootstrapping GitOps stack"
-
+  # Step 4: Bootstrap
+  log_step "Step 4/5: GitOps Bootstrap"
   if [[ "$SKIP_BOOTSTRAP" == "true" ]]; then
     log_info "Skipping bootstrap (SKIP_BOOTSTRAP=true)"
-    return 0
-  fi
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) Would run bootstrap.sh"
-    return 0
-  fi
-
-  # Pass the summary output dir to bootstrap
-  SUMMARY_OUTPUT_DIR="$SUMMARY_OUTPUT_DIR" bash "${REPO_ROOT}/scripts/bootstrap.sh"
-
-  log_success "GitOps bootstrap complete"
-}
-
-step_wait_for_gateway_service() {
-  log_step "Waiting for Gateway Service to be ready"
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) Would wait for gateway service"
-    return 0
-  fi
-
-  local max_attempts=120
-  local attempt=1
-
-  log_info "Waiting for gateway to be ready (up to 20 minutes)..."
-  while [[ $attempt -le $max_attempts ]]; do
-    # Check if pod exists and is ready
-    local ready=$(kubectl get pods -n istio-ingress \
-      -l gateway.networking.k8s.io/gateway-name=ingress-gateway \
-      -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
-
-    if [[ "$ready" == "True" ]]; then
-      log_success "Gateway pod is ready"
-      return 0
-    fi
-
-    echo -n "."
-    sleep 10
-    ((attempt++))
-  done
-
-  echo ""
-  log_error "Gateway not ready after 20 minutes"
-  return 1
-}
-
-step_start_tunnel() {
-  log_step "Starting Minikube tunnel"
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) Would start Minikube tunnel"
-    return 0
-  fi
-
-  # Kill any existing tunnel
-  pkill -f "minikube tunnel" 2>/dev/null || true
-  sleep 2
-
-  log_info "Tunnel requires sudo access..."
-  if ! sudo -v; then
-    log_error "sudo access required for tunnel"
-    log_info "Run manually: sudo -E minikube tunnel"
-    return 1
-  fi
-
-  # Use -E to preserve user environment (MINIKUBE_HOME, etc.)
-  # Or explicitly set MINIKUBE_HOME to current user's config
-  log_info "Starting tunnel in background..."
-  sudo -E minikube tunnel > /tmp/minikube-tunnel.log 2>&1 &
-  TUNNEL_PID=$!
-  echo "$TUNNEL_PID" > /tmp/minikube-tunnel.pid
-
-  sleep 3
-
-  # Verify tunnel is actually running
-  if ! ps -p "$TUNNEL_PID" &>/dev/null; then
-    log_error "Tunnel failed to start"
-    log_info "Check logs: cat /tmp/minikube-tunnel.log"
-    log_info "Run manually: sudo -E minikube tunnel"
-    return 1
-  fi
-
-  log_success "Tunnel started (PID: $TUNNEL_PID)"
-}
-
-
-step_wait_for_gateway_ip() {
-  log_step "Waiting for Gateway LoadBalancer IP"
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) Would wait for gateway IP"
-    return 0
-  fi
-
-  log_info "Waiting for external IP assignment (up to 2 minutes)..."
-  local max_attempts=12
-  for ((i=1; i<=max_attempts; i++)); do
-    GATEWAY_IP=$(kubectl get svc -n istio-ingress ingress-gateway-istio \
-      -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
-
-    if [[ -n "$GATEWAY_IP" ]]; then
-      log_success "Gateway IP: $GATEWAY_IP"
-      return 0
-    fi
-    echo -n "."
-    sleep 10
-  done
-
-  echo ""
-  log_error "Gateway IP not assigned - check tunnel status"
-  return 1
-}
-
-step_configure_hosts() {
-  log_step "Configuring /etc/hosts"
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) Would update /etc/hosts"
-    return 0
-  fi
-
-  if [[ -z "$GATEWAY_IP" ]]; then
-    log_warning "No gateway IP - skipping /etc/hosts configuration"
-    return 0
-  fi
-
-  # Get list of services
-  local services
-  services=$(get_exposed_services)
-
-  # Check if /etc/hosts exists and is writable with sudo
-  if [[ ! -f /etc/hosts ]]; then
-    log_warning "/etc/hosts not found - manual DNS configuration required"
-    print_manual_hosts_instructions "$services"
-    return 0
-  fi
-
-  # Try to update /etc/hosts
-  if ! sudo -n true 2>/dev/null; then
-    log_info "sudo access needed for /etc/hosts update"
-    if ! sudo -v; then
-      log_warning "Could not obtain sudo access - manual configuration required"
-      print_manual_hosts_instructions "$services"
-      return 0
-    fi
-  fi
-
-  # Remove old entries
-  if sudo grep -q "opencloudhub-local-dev" /etc/hosts 2>/dev/null; then
-    log_info "Removing old opencloudhub /etc/hosts entries..."
-    sudo sed -i '/# opencloudhub-local-dev START/,/# opencloudhub-local-dev END/d' /etc/hosts
-  fi
-
-  # Add new entries
-  log_info "Adding new /etc/hosts entries..."
-  local entry_count=0
-  local hosts_block
-  hosts_block="# opencloudhub-local-dev START (added $(date '+%Y-%m-%d %H:%M:%S'))"$'\n'
-  while IFS= read -r hostname; do
-    if [[ -n "$hostname" ]]; then
-      hosts_block+="${GATEWAY_IP} ${hostname}"$'\n'
-      entry_count=$((entry_count + 1))
-    fi
-  done <<< "$services"
-  hosts_block+="# opencloudhub-local-dev END"
-
-  if echo "$hosts_block" | sudo tee -a /etc/hosts >/dev/null; then
-    log_success "/etc/hosts configured ($entry_count entries added)"
   else
-    log_warning "Failed to update /etc/hosts - manual configuration required"
-    print_manual_hosts_instructions "$services"
+    bash "${REPO_ROOT}/scripts/bootstrap.sh"
   fi
+
+  # Step 5: Network
+  log_step "Step 5/5: Network Setup"
+  if [[ "$SKIP_NETWORK" == "true" ]]; then
+    log_info "Skipping network setup (SKIP_NETWORK=true)"
+  else
+    bash "${SCRIPT_DIR}/04-setup-network.sh"
+  fi
+
+  # Final summary
+  _create_summary "$start_time"
+  _print_completion
 }
 
-print_manual_hosts_instructions() {
-  local services="$1"
-
-  echo ""
-  log_info "Add the following to your DNS or hosts file:"
-  echo ""
-  echo "# opencloudhub-local-dev"
-  while IFS= read -r hostname; do
-    if [[ -n "$hostname" ]]; then
-      echo "${GATEWAY_IP} ${hostname}"
-    fi
-  done <<< "$services"
-  echo ""
-  log_info "On Linux/Mac: sudo nano /etc/hosts"
-  log_info "On Windows: C:\\Windows\\System32\\drivers\\etc\\hosts (as admin)"
-  echo ""
-}
-
-
-step_create_summary() {
-  log_step "Creating development environment summary"
+_create_summary() {
+  local start_time="$1"
 
   if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) No summary created"
     return 0
   fi
 
   mkdir -p "$SUMMARY_OUTPUT_DIR"
 
-  local end_time
-  end_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
   local summary_file="${SUMMARY_OUTPUT_DIR}/dev-summary.json"
   cat > "$summary_file" <<EOF
 {
   "environment": {
-    "started": "$START_TIME",
-    "completed": "$end_time",
-    "cluster": "$CLUSTER_NAME"
+    "started": "$start_time",
+    "completed": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+    "cluster": "minikube"
   },
-  "minikube": {
-    "cpus": "$MINIKUBE_CPUS",
-    "memory": "$MINIKUBE_MEMORY",
-    "disk": "$MINIKUBE_DISK"
+  "options": {
+    "load_images": $LOAD_IMAGES,
+    "skip_vault": $SKIP_VAULT,
+    "skip_bootstrap": $SKIP_BOOTSTRAP,
+    "skip_network": $SKIP_NETWORK
   },
-  "network": {
-    "gateway_ip": "${GATEWAY_IP:-null}",
-    "tunnel_pid": "${TUNNEL_PID:-null}",
-    "tunnel_log": "/tmp/minikube-tunnel.log"
-  },
-  "related_summaries": {
+  "summaries": {
     "vault": "${SUMMARY_OUTPUT_DIR}/vault-summary.json",
-    "bootstrap": "${SUMMARY_OUTPUT_DIR}/bootstrap-summary.json"
+    "bootstrap": "${SUMMARY_OUTPUT_DIR}/bootstrap-summary.json",
+    "network": "${SUMMARY_OUTPUT_DIR}/network-summary.json"
   }
 }
 EOF
@@ -419,26 +128,15 @@ EOF
   log_success "Summary saved to: $summary_file"
 }
 
-print_completion_summary() {
+_print_completion() {
   print_section_header "Development Environment Ready"
 
   if [[ "$DRY_RUN" == "true" ]]; then
     echo ""
     log_info "DRY RUN completed - no changes were applied"
-    echo ""
     return 0
   fi
 
-  echo ""
-  echo -e "  ${GREEN}Cluster:${NC}"
-  echo -e "    Name:   $CLUSTER_NAME"
-  echo -e "    CPUs:   $MINIKUBE_CPUS"
-  echo -e "    Memory: $MINIKUBE_MEMORY"
-  echo -e "    Disk:   $MINIKUBE_DISK"
-  echo ""
-  echo -e "  ${GREEN}Network:${NC}"
-  echo -e "    Gateway IP: ${GATEWAY_IP:-<pending>}"
-  echo -e "    Tunnel PID: ${TUNNEL_PID:-<not started>}"
   echo ""
   echo -e "  ${CYAN}Quick Access:${NC}"
   echo -e "    ArgoCD:  https://argocd.internal.opencloudhub.org"
@@ -446,36 +144,14 @@ print_completion_summary() {
   echo -e "    MLflow:  https://mlflow.ai.internal.opencloudhub.org"
   echo ""
   echo -e "  ${CYAN}Summaries:${NC}"
-  echo -e "    ${SUMMARY_OUTPUT_DIR}/vault-summary.json"
-  echo -e "    ${SUMMARY_OUTPUT_DIR}/bootstrap-summary.json"
   echo -e "    ${SUMMARY_OUTPUT_DIR}/dev-summary.json"
   echo ""
-  echo -e "  ${YELLOW}To stop:${NC}"
-  echo -e "    kill ${TUNNEL_PID:-\$(cat /tmp/minikube-tunnel.pid)}"
-  echo -e "    minikube delete"
+  echo -e "  ${YELLOW}Individual scripts:${NC}"
+  echo -e "    ./1-setup-minikube.sh   # Minikube + PVs"
+  echo -e "    ./2-load-images.sh      # Pre-load images"
+  echo -e "    ./3-setup-vault.sh      # Local Vault"
+  echo -e "    ./4-setup-network.sh    # Tunnel + hosts"
   echo ""
-}
-
-# =============================================================================
-# Main Entry Point
-# =============================================================================
-
-main() {
-  START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-  print_banner "Local Development Setup" "$CLUSTER_NAME"
-
-  step_check_prerequisites
-  step_start_minikube
-  step_create_persistent_storage
-  step_setup_vault
-  step_bootstrap_gitops
-  step_wait_for_gateway_service
-  step_start_tunnel
-  step_wait_for_gateway_ip
-  step_configure_hosts
-  step_create_summary
-  print_completion_summary
 }
 
 main "$@"

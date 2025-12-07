@@ -4,16 +4,15 @@
 # GitOps Bootstrap - Installs ArgoCD and configures GitOps for the cluster
 # =============================================================================
 #
-# Overview:
-#   This script bootstraps a Kubernetes cluster with GitOps infrastructure,
-#   preparing it for ArgoCD-managed deployments. It follows a three-phase
-#   approach: prerequisites validation, GitOps foundation setup, and
-#   application deployment.
-#
-# Bootstrap Phases:
-#   1. Prerequisites    - Validate tools, cluster connectivity, SSH keys
-#   2. GitOps Foundation - Namespaces, CRDs, secrets, ArgoCD, External Secrets ( This makes deployment smoother and ensures essential components are in place before self-management )
-#   3. Applications     - Deploy ApplicationSets and root app
+# Bootstrap Order:
+#   1. Prerequisites check (kubectl, kustomize, SSH keys)
+#   2. Prepare cluster (namespaces, CRDs, Vault token secret)
+#   3. Install ArgoCD (Helm chart via kustomize)
+#   4. Install External Secrets Operator + ClusterSecretStore (Vault connection)
+#   5. Deploy ApplicationSets:
+#      - Security (namespaces, RBAC, secrets) - can now use ExternalSecrets
+#      - Platform (all other platform components)
+#      - Root app (teams)
 #
 # Usage:
 #   ./bootstrap.sh                    # Bootstrap current kubectl context
@@ -55,6 +54,8 @@ fi
 VAULT_TOKEN="${VAULT_TOKEN:-1234}"
 
 # SSH keys directory for ArgoCD repository access
+# Each repository needs a deploy key file in this directory
+# Override with: SSH_KEYS_BASE_PATH=/path/to/keys ./bootstrap.sh
 SSH_KEYS_BASE_PATH="${SSH_KEYS_BASE_PATH:-${HOME}/.ssh/opencloudhub}"
 
 # Dry run mode - set to "true" to preview without applying
@@ -70,46 +71,28 @@ KUBECTL_TIMEOUT="1200s"
 # ArgoCD Repository Configuration
 # -----------------------------------------------------------------------------
 # Format: "secret_name|repo_url|ssh_key_filename"
+# - secret_name: Name of the Kubernetes secret to create
+# - repo_url: Git SSH URL for the repository
+# - ssh_key_filename: Name of the SSH private key file in SSH_KEYS_BASE_PATH
+#
+# To add more repositories, add entries to this array:
 ARGOCD_REPOS=(
   "gitops|git@github.com:opencloudhub/gitops.git|argocd_gitops_ed25519"
+  # "another-repo|git@github.com:opencloudhub/another.git|another_key_ed25519"
 )
 
 # =============================================================================
-# Runtime Variables
+# Runtime Variables (set during execution)
 # =============================================================================
 
 BOOTSTRAP_TIMESTAMP=""
 KUBECTL_CONTEXT=""
 
 # =============================================================================
-# Phase 1: Prerequisites
+# Helper Functions
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# step_check_prerequisites
-# Validates all required tools, cluster connectivity, and SSH keys
-# -----------------------------------------------------------------------------
-step_check_prerequisites() {
-  log_step "Checking prerequisites"
-
-  # Validate required CLI tools
-  validate_command_exists kubectl "https://kubernetes.io/docs/tasks/tools/"
-  validate_command_exists kustomize "https://kubectl.docs.kubernetes.io/installation/kustomize/"
-
-  # Verify cluster connectivity
-  _check_cluster_connectivity
-
-  # Verify SSH keys for repository access
-  _check_ssh_keys
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_warning "DRY RUN MODE - No changes will be applied"
-  fi
-
-  log_success "Prerequisites check passed"
-}
-
-_check_cluster_connectivity() {
+check_cluster_connectivity() {
   local current_context
   if ! current_context=$(kubectl config current-context 2>/dev/null); then
     log_error "No kubectl context found. Please configure kubectl first."
@@ -126,13 +109,14 @@ _check_cluster_connectivity() {
   fi
 }
 
-_check_ssh_keys() {
+check_ssh_keys() {
   if [[ ! -d "$SSH_KEYS_BASE_PATH" ]]; then
     log_error "SSH keys directory not found: $SSH_KEYS_BASE_PATH"
     log_info "Create the directory and add your ArgoCD deploy keys, or set SSH_KEYS_BASE_PATH"
     return 1
   fi
 
+  # Verify each configured repo has its SSH key
   for repo_config in "${ARGOCD_REPOS[@]}"; do
     IFS='|' read -r secret_name repo_url key_file <<< "$repo_config"
     if [[ ! -f "${SSH_KEYS_BASE_PATH}/${key_file}" ]]; then
@@ -147,84 +131,74 @@ _check_ssh_keys() {
 }
 
 # =============================================================================
-# Phase 2: GitOps Foundation
+# Bootstrap Steps
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# step_bootstrap_gitops
-# Sets up all infrastructure required before ArgoCD can manage the cluster
-# -----------------------------------------------------------------------------
-step_bootstrap_gitops() {
-  log_step "Bootstrapping GitOps infrastructure"
+step_check_prerequisites() {
+  log_step "Checking prerequisites"
+
+  validate_command_exists kubectl "https://kubernetes.io/docs/tasks/tools/"
+  validate_command_exists kustomize "https://kubectl.docs.kubernetes.io/installation/kustomize/"
+
+  check_cluster_connectivity
+  check_ssh_keys
+
+  # Future: Enable git status check for production deployments
+  # check_git_status
 
   if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "(DRY RUN) Would bootstrap GitOps infrastructure"
-    return 0
+    log_warning "DRY RUN MODE - No changes will be applied"
   fi
 
-  _wait_for_api_server
-  _create_namespaces
-  _install_crds
-  _create_secrets
-  _install_argocd
-  _install_external_secrets
-
-  log_success "GitOps infrastructure ready"
+  log_success "Prerequisites check passed"
 }
 
-# -----------------------------------------------------------------------------
-# _wait_for_api_server
-# Ensures Kubernetes API server is responsive before proceeding
-# -----------------------------------------------------------------------------
-_wait_for_api_server() {
+step_prepare_cluster() {
+  log_step "Preparing cluster (namespaces, CRDs, secrets)"
+
+  # Wait for API server readiness
   log_info "Waiting for Kubernetes API server..."
   kubectl wait --for=condition=Ready --timeout=60s \
     -n kube-system pod -l component=kube-apiserver 2>/dev/null || true
   sleep 3
-}
 
-# -----------------------------------------------------------------------------
-# _create_namespaces
-# Creates essential namespaces required for bootstrap components
-# -----------------------------------------------------------------------------
-_create_namespaces() {
-  log_info "Creating bootstrap namespaces..."
-  kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-  kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
-}
+  # Create essential namespaces
+  log_info "Creating namespaces..."
+  if [[ "$DRY_RUN" != "true" ]]; then
+    kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+  fi
 
-# -----------------------------------------------------------------------------
-# _install_crds
-# Installs Custom Resource Definitions required by platform components
-# -----------------------------------------------------------------------------
-_install_crds() {
+  # Create Vault token secret for External Secrets Operator
+  log_info "Creating Vault token secret..."
+  if [[ "$DRY_RUN" != "true" ]]; then
+    kubectl create secret generic vault-token \
+      --from-literal=token="$VAULT_TOKEN" \
+      -n external-secrets \
+      --dry-run=client -o yaml | kubectl apply -f -
+  fi
+
+  # Install required CRDs
   log_info "Installing ServiceMonitor CRD..."
-  kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+  if [[ "$DRY_RUN" != "true" ]]; then
+    kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+  fi
 
   log_info "Installing Gateway API CRDs..."
-  kubectl get crd gateways.gateway.networking.k8s.io &>/dev/null || \
-    kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/experimental-install.yaml
+  if [[ "$DRY_RUN" != "true" ]]; then
+    kubectl get crd gateways.gateway.networking.k8s.io &>/dev/null || \
+      kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/experimental-install.yaml
+  fi
 
-  log_info "Installing External Secrets CRDs..."
-  kubectl apply --server-side -f https://raw.githubusercontent.com/external-secrets/external-secrets/main/deploy/crds/bundle.yaml
-}
-
-# -----------------------------------------------------------------------------
-# _create_secrets
-# Creates secrets required by ArgoCD and External Secrets Operator
-# -----------------------------------------------------------------------------
-_create_secrets() {
-  # Vault token for External Secrets Operator
-  log_info "Creating Vault token secret..."
-  kubectl create secret generic vault-token \
-    --from-literal=token="$VAULT_TOKEN" \
-    -n external-secrets \
-    --dry-run=client -o yaml | kubectl apply -f -
-
-  # ArgoCD repository secrets
+  # Create ArgoCD repository secrets
   log_info "Creating ArgoCD repository secrets..."
   for repo_config in "${ARGOCD_REPOS[@]}"; do
     IFS='|' read -r secret_name repo_url key_file <<< "$repo_config"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+      log_info "(DRY RUN) Would create secret: $secret_name"
+      continue
+    fi
 
     cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -242,46 +216,61 @@ $(sed 's/^/    /' "${SSH_KEYS_BASE_PATH}/${key_file}")
 EOF
     log_debug "Created repository secret: $secret_name"
   done
+
+  log_success "Cluster preparation complete"
 }
 
-# -----------------------------------------------------------------------------
-# _install_argocd
-# Installs ArgoCD via Helm chart rendered through Kustomize
-# -----------------------------------------------------------------------------
-_install_argocd() {
-  local argocd_path="${REPO_ROOT}/src/platform/core/argocd/base"
+step_install_argocd() {
+  log_step "Installing ArgoCD"
 
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log_info "(DRY RUN) Would install ArgoCD"
+    return 0
+  fi
+
+  # Build and apply ArgoCD manifests
   log_info "Building ArgoCD manifests..."
   local manifests
-  if ! manifests=$(kustomize build --enable-helm "$argocd_path"); then
+  if ! manifests=$(kustomize build --enable-helm "${REPO_ROOT}/src/platform/core/argocd/base"); then
     log_error "Failed to build ArgoCD manifests"
     return 1
   fi
 
-  # Clean up helm chart cache
-  rm -rf "${argocd_path}/charts"
-
   log_info "Applying ArgoCD manifests..."
   echo "$manifests" | kubectl apply -f -
 
-  # Wait for critical components
-  log_info "Waiting for ArgoCD components..."
+  # Wait for critical ArgoCD components
+  log_info "Waiting for ArgoCD components to be ready..."
+
+  # Wait for Deployments
   for deployment in argocd-server argocd-repo-server; do
-    kubectl wait --for=condition=available --timeout="$KUBECTL_TIMEOUT" \
-      deployment/$deployment -n argocd
+    if ! kubectl wait --for=condition=available --timeout="$KUBECTL_TIMEOUT" \
+      deployment/$deployment -n argocd; then
+      log_error "$deployment failed to become ready"
+      return 1
+    fi
     log_info "$deployment is ready"
   done
 
-  kubectl rollout status statefulset/argocd-application-controller \
-    -n argocd --timeout="$KUBECTL_TIMEOUT"
+  # Wait for StatefulSet (argocd-application-controller is a StatefulSet in ArgoCD v3.x)
+  log_info "Waiting for argocd-application-controller StatefulSet..."
+  if ! kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout="$KUBECTL_TIMEOUT"; then
+    log_error "argocd-application-controller StatefulSet failed to become ready"
+    return 1
+  fi
   log_info "argocd-application-controller is ready"
+
+  log_success "ArgoCD installed successfully"
 }
 
-# -----------------------------------------------------------------------------
-# _install_external_secrets
-# Installs External Secrets Operator and configures Vault ClusterSecretStore
-# -----------------------------------------------------------------------------
-_install_external_secrets() {
+step_install_external_secrets() {
+  log_step "Installing External Secrets Operator"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log_info "(DRY RUN) Would install External Secrets Operator"
+    return 0
+  fi
+
   local eso_path="${REPO_ROOT}/src/platform/core/external-secrets"
 
   log_info "Building External Secrets manifests..."
@@ -291,54 +280,25 @@ _install_external_secrets() {
     return 1
   fi
 
+  # Clean up helm chart cache
   rm -rf "${eso_path}/charts"
 
   log_info "Applying External Secrets manifests..."
   echo "$manifests" | kubectl apply --server-side -f -
 
-  # Wait for ALL deployments
+  log_info "Waiting for CRDs to be established..."
+  kubectl wait --for=condition=Established crd/clustersecretstores.external-secrets.io --timeout=60s
+
+  log_info "Applying ClusterSecretStore..."
+  echo "$manifests" | kubectl apply --server-side -f -
+
   log_info "Waiting for External Secrets Operator..."
   kubectl wait --for=condition=available deployment/external-secrets \
     -n external-secrets --timeout="$KUBECTL_TIMEOUT"
 
-  log_info "Waiting for External Secrets Webhook..."
-  kubectl wait --for=condition=available deployment/external-secrets-webhook \
-    -n external-secrets --timeout="$KUBECTL_TIMEOUT"
-
-  log_info "Waiting for External Secrets Cert Controller..."
-  kubectl wait --for=condition=available deployment/external-secrets-cert-controller \
-    -n external-secrets --timeout="$KUBECTL_TIMEOUT"
-
-  # Wait for webhook endpoint to actually have addresses (critical!)
-  log_info "Waiting for webhook endpoint to be ready..."
-  local retries=30
-  while (( retries > 0 )); do
-    if kubectl get endpoints external-secrets-webhook -n external-secrets -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null | grep -q .; then
-      break
-    fi
-    sleep 2
-    ((retries--))
-  done
-
-  if (( retries == 0 )); then
-    log_error "Webhook endpoint never became ready"
-    return 1
-  fi
-
-  # Extra buffer for webhook to register with API server
-  sleep 5
-
   log_success "External Secrets Operator ready"
 }
 
-# =============================================================================
-# Phase 3: Application Deployment
-# =============================================================================
-
-# -----------------------------------------------------------------------------
-# step_deploy_applications
-# Deploys ArgoCD ApplicationSets and root application
-# -----------------------------------------------------------------------------
 step_deploy_applications() {
   log_step "Deploying ArgoCD applications"
 
@@ -347,34 +307,26 @@ step_deploy_applications() {
     return 0
   fi
 
-  # ArgoCD Projects
+  # Projects
   log_info "Deploying ArgoCD projects..."
   kubectl apply -k "${REPO_ROOT}/src/app-projects/"
 
-  # Security ApplicationSet (namespaces, RBAC, secrets)
+  # Security first (namespaces, RBAC, secrets) - ESO is ready
   log_info "Deploying security ApplicationSet..."
   kubectl apply -f "${REPO_ROOT}/src/application-sets/security/applicationset.yaml"
   sleep 10
 
-  # Platform ApplicationSet (core platform components)
+  # Platform (ESO will sync as already applied)
   log_info "Deploying platform ApplicationSet..."
   kubectl apply -f "${REPO_ROOT}/src/application-sets/platform/applicationset.yaml"
 
-  # Root application (team repositories)
+  # Root app (teams)
   log_info "Deploying root application..."
   kubectl apply -f "${REPO_ROOT}/src/root-app.yaml"
 
   log_success "Applications deployed"
 }
 
-# =============================================================================
-# Phase 4: Summary
-# =============================================================================
-
-# -----------------------------------------------------------------------------
-# step_create_summary
-# Generates bootstrap summary file with access credentials
-# -----------------------------------------------------------------------------
 step_create_summary() {
   log_step "Creating bootstrap summary"
 
@@ -383,14 +335,17 @@ step_create_summary() {
     return 0
   fi
 
+  # Ensure output directory exists
   mkdir -p "$SUMMARY_OUTPUT_DIR"
 
+  # Get ArgoCD admin password
   local argocd_password="<not yet available>"
   if kubectl get secret argocd-initial-admin-secret -n argocd &>/dev/null; then
     argocd_password=$(kubectl -n argocd get secret argocd-initial-admin-secret \
       -o jsonpath="{.data.password}" 2>/dev/null | base64 -d || echo "<failed to retrieve>")
   fi
 
+  # Create summary JSON
   local summary_file="${SUMMARY_OUTPUT_DIR}/bootstrap-summary.json"
   cat > "$summary_file" <<EOF
 {
@@ -417,10 +372,6 @@ EOF
   log_success "Summary saved to: $summary_file"
 }
 
-# -----------------------------------------------------------------------------
-# print_completion_summary
-# Displays final bootstrap status and access information
-# -----------------------------------------------------------------------------
 print_completion_summary() {
   print_section_header "Bootstrap Complete"
 
@@ -454,16 +405,11 @@ main() {
 
   print_banner "GitOps Bootstrap" "${KUBECTL_CONTEXT:-initializing}"
 
-  # Phase 1: Prerequisites
   step_check_prerequisites
-
-  # Phase 2: GitOps Foundation
-  step_bootstrap_gitops
-
-  # Phase 3: Applications
+  step_prepare_cluster
+  step_install_argocd
+  step_install_external_secrets
   step_deploy_applications
-
-  # Phase 4: Summary
   step_create_summary
   print_completion_summary
 }
