@@ -31,7 +31,7 @@ source "${REPO_ROOT}/scripts/_utils.sh"
 # Configuration
 # =============================================================================
 
-LOAD_IMAGES="${LOAD_IMAGES:-false}"
+LOAD_IMAGES="${LOAD_IMAGES:-true}"
 SKIP_VAULT="${SKIP_VAULT:-false}"
 SKIP_BOOTSTRAP="${SKIP_BOOTSTRAP:-false}"
 SKIP_NETWORK="${SKIP_NETWORK:-false}"

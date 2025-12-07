@@ -149,13 +149,13 @@ load_images() {
     if docker image inspect "$img" &>/dev/null; then
       log_info "Loading: $img"
       if minikube image load "$img" 2>/dev/null; then
-        ((loaded++))
+        loaded=$((loaded + 1))
       else
         failed+=("$img")
       fi
     else
       log_debug "Skipping (not on host): $img"
-      ((skipped++))
+      skipped=$((skipped + 1))
     fi
   done
 
