@@ -7,4 +7,4 @@ resources:
   - http-route.yaml
 images:
   - name: opencloudhuborg/demo-app-genai-backend
-    newTag: main-6ba5433
+    newTag: main-dc41d35
