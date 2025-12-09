@@ -17,7 +17,11 @@
 #   Secrets (minio-tenant-secret):  AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL
 #   Tracking (inline):              ARGO_WORKFLOW_UID, DOCKER_IMAGE_TAG, DVC_DATA_VERSION, REPLICAS
 #
-# TODO: Exit handler for ray job cleaning
+# Known Limitation:
+#   Ray job cleanup on workflow failure is handled by RayJob's TTL
+#   (ttlSecondsAfterFinished: 300). For immediate cleanup, implement
+#   an Argo exit handler that deletes the RayJob resource.
+#
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1

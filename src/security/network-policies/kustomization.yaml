@@ -3,3 +3,4 @@ kind: Kustomization
 
 resources:
   - demo-app.yaml
+  - models.yaml

@@ -80,12 +80,14 @@ IMAGES=(
   "ghcr.io/opencost/opencost:1.117.6"
   "prom/memcached-exporter:v0.15.3"
   "memcached:1.6.39-alpine"
+  "ghcr.io/grafana/helm-chart-toolbox-kubectl:0.1.1"
 
   # MLOps
-  "burakince/mlflow:3.5.1"
+  "burakince/mlflow:3.6.0"
   "quay.io/argoproj/argocli:v3.7.3"
   "quay.io/argoproj/workflow-controller:v3.7.3"
   "quay.io/kuberay/operator:v1.5.1"
+  "rayproject/ray-llm:2.51.0-py311-cu128"
   "ghcr.io/grafana/k6-operator:controller-v1.1.0"
 
   # GitHub Actions Runner Controller
@@ -94,6 +96,8 @@ IMAGES=(
   # Demo Apps
   "opencloudhuborg/demo-app-frontend:main-da9e301"
   "opencloudhuborg/demo-app-genai-backend:main-dc41d35"
+  "opencloudhuborg/fashion-mnist-classifier-serving:main-8718b6e"
+  "opencloudhuborg/wine-classifier-serving:main-7fe444c"
 
   # Utilities
   "docker.io/curlimages/curl:8.9.1"
@@ -180,16 +184,20 @@ main() {
     --list)
       show_list
       ;;
+    --pull-only)
+      pull_images
+      ;;
     --pull)
       pull_images
       load_images
       ;;
     --help|-h)
-      echo "Usage: $0 [--list|--pull]"
+      echo "Usage: $0 [--list|--pull-only|--pull]"
       echo ""
-      echo "  (no args)  Load cached images from host Docker into Minikube"
-      echo "  --list     Show image list without loading"
-      echo "  --pull     Pull images to host first, then load into Minikube"
+      echo "  (no args)    Load cached images from host Docker into Minikube"
+      echo "  --list       Show image list without loading"
+      echo "  --pull-only  Pull images to host Docker only (no Minikube required)"
+      echo "  --pull       Pull images to host, then load into Minikube"
       ;;
     *)
       load_images
