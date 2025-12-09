@@ -29,7 +29,7 @@ metadata:
   name: mlops-pipeline
   namespace: mlops
   annotations:
-    # workflows.argoproj.io/title: "**MLOPS Pipeline**"
+    workflows.argoproj.io/title: "**MLOPS Pipeline**"
     workflows.argoproj.io/description: "End-to-end MLOps pipeline: Train -> Compare -> Promote -> Deploy"
 spec:
   serviceAccountName: workflow-executor
