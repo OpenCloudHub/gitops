@@ -3,5 +3,6 @@ kind: Kustomization
 
 resources:
   - mlops-pipeline.yaml
+  - rag-evaluation-pipeline.yaml
   - configmaps.yaml
   - modules/

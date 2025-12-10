@@ -1,0 +1,122 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: rag-evaluation-pipeline
+  namespace: mlops
+  annotations:
+    workflows.argoproj.io/description: "Evaluate RAG prompt versions and reload endpoint with best"
+spec:
+  serviceAccountName: workflow-executor
+
+  arguments:
+    parameters:
+      - name: image
+        description: "Docker image for evaluation"
+      - name: prompt_versions
+        description: "Comma-separated prompt versions to evaluate (e.g., 1,2,3)"
+        default: "1,2,3"
+      - name: dvc_data_version
+        description: "DVC data version for evaluation dataset"
+        default: "opencloudhub-readmes-rag-evaluation-v1.0.0"
+      - name: auto_promote
+        description: "Auto-promote best prompt to @champion"
+        default: "true"
+      - name: prompt_name
+        description: "MLflow prompt name"
+        default: "readme-rag-prompt"
+
+  entrypoint: main
+
+  templates:
+    - name: main
+      steps:
+        - - name: run-evaluation
+            template: evaluate-prompts
+
+        - - name: reload-rag-endpoint
+            template: reload-endpoint
+            when: "{{workflow.parameters.auto_promote}} == true"
+
+    # ==========================================================================
+    # EVALUATE PROMPTS
+    # ==========================================================================
+    - name: evaluate-prompts
+      container:
+        image: "{{workflow.parameters.image}}"
+        command: [python, -m, src.prompts.evaluate_prompts]
+        args:
+          - --prompt-name
+          - "{{workflow.parameters.prompt_name}}"
+          - --prompt-versions
+          - "{{workflow.parameters.prompt_versions}}"
+          - --dvc-data-version
+          - "{{workflow.parameters.dvc_data_version}}"
+          - --auto-promote
+        env:
+          # MLflow
+          - name: MLFLOW_TRACKING_URI
+            value: "https://mlflow.internal.opencloudhub.org"
+          - name: MLFLOW_TRACKING_INSECURE_TLS
+            value: "true"
+          # Database
+          - name: DB_HOST
+            value: "demo-app-db-cluster-rw.storage.svc.cluster.local"
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: demo-app-db-user
+                key: username
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: demo-app-db-user
+                key: password
+          - name: DB_TABLE_NAME
+            value: "readme_embeddings"
+          - name: DB_TOP_K
+            value: "5"
+          # LLM
+          - name: LLM_BASE_URL
+            value: "https://api.opencloudhub.org/models/base/qwen-0.5b/v1"
+          - name: LLM_MODEL
+            value: "qwen2.5-0.5b-instruct"
+          - name: API_KEY
+            value: "dummy"
+          # Embeddings
+          - name: EMBEDDING_MODEL
+            value: "sentence-transformers/all-MiniLM-L6-v2"
+          # DVC
+          - name: DVC_REPO
+            value: "https://github.com/OpenCloudHub/data-registry"
+          - name: EVAL_DATA_PATH
+            value: "data/opencloudhub-readmes/rag-evaluation/questions.csv"
+          # Lineage
+          - name: DOCKER_IMAGE_TAG
+            value: "{{workflow.parameters.image}}"
+          - name: ARGO_WORKFLOW_UID
+            value: "{{workflow.uid}}"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+
+    # ==========================================================================
+    # RELOAD RAG ENDPOINT
+    # ==========================================================================
+    - name: reload-endpoint
+      container:
+        image: curlimages/curl:8.5.0
+        command: [sh, -c]
+        args:
+          - |
+            echo "Reloading RAG endpoint with @champion prompt..."
+            curl -X POST \
+              http://demo-app-genai-backend.demo-app.svc.cluster.local:8000/admin/reload-prompt \
+              -H "Content-Type: application/json" \
+              -d '{"prompt_version": null}' \
+              --fail --silent --show-error
+            echo ""
+            echo "✓ RAG endpoint reloaded with champion prompt"
