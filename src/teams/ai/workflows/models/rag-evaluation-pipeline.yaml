@@ -52,45 +52,16 @@ spec:
           - --dvc-data-version
           - "{{workflow.parameters.dvc_data_version}}"
           - --auto-promote
+        envFrom:
+          - configMapRef:
+              name: models-job-env
+          - configMapRef:
+              name: rag-evaluation-env
+          - secretRef:
+              name: models-job-secrets
+          - secretRef:
+              name: demo-app-db-user
         env:
-          # MLflow
-          - name: MLFLOW_TRACKING_URI
-            value: "https://mlflow.internal.opencloudhub.org"
-          - name: MLFLOW_TRACKING_INSECURE_TLS
-            value: "true"
-          # Database
-          - name: DB_HOST
-            value: "demo-app-db-cluster-rw.storage.svc.cluster.local"
-          - name: DB_USER
-            valueFrom:
-              secretKeyRef:
-                name: demo-app-db-user
-                key: username
-          - name: DB_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: demo-app-db-user
-                key: password
-          - name: DB_TABLE_NAME
-            value: "readme_embeddings"
-          - name: DB_TOP_K
-            value: "5"
-          # LLM
-          - name: LLM_BASE_URL
-            value: "https://api.opencloudhub.org/models/base/qwen-0.5b/v1"
-          - name: LLM_MODEL
-            value: "qwen2.5-0.5b-instruct"
-          - name: API_KEY
-            value: "dummy"
-          # Embeddings
-          - name: EMBEDDING_MODEL
-            value: "sentence-transformers/all-MiniLM-L6-v2"
-          # DVC
-          - name: DVC_REPO
-            value: "https://github.com/OpenCloudHub/data-registry"
-          - name: EVAL_DATA_PATH
-            value: "data/opencloudhub-readmes/rag-evaluation/questions.csv"
-          # Lineage
           - name: DOCKER_IMAGE_TAG
             value: "{{workflow.parameters.image}}"
           - name: ARGO_WORKFLOW_UID
