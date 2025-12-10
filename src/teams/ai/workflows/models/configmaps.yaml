@@ -44,6 +44,7 @@ data:
   DVC_TRAIN_DATA_PATH: "data/fashion-mnist/processed/train/train.parquet"
   DVC_VAL_DATA_PATH: "data/fashion-mnist/processed/val/val.parquet"
   DVC_METRICS_PATH: "data/fashion-mnist/metadata.json"
+  DVC_REMOTE: "minikube"
 ---
 # Qwen VL Radiology model
 apiVersion: v1
