@@ -47,13 +47,6 @@ spec:
                 - name: compute_type
                   value: "{{workflow.parameters.compute_type}}"
 
-          # - name: resolve-entrypoint
-          #   template: resolve-entrypoint
-          #   arguments:
-          #     parameters:
-          #       - name: force
-          #         value: "{{workflow.parameters.force}}"
-
           # Phase 2: Run embeddings job
           - name: run-embeddings
             depends: "map-compute.Succeeded"

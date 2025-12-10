@@ -199,7 +199,7 @@ spec:
                 - name: model_name
                   value: "{{workflow.parameters.model_name}}"
                 - name: model_uri
-                  value: "models:/prod.{{workflow.parameters.model_name}}/@champion"
+                  value: "models:/prod.{{workflow.parameters.model_name}}/{{tasks.promote-production.outputs.parameters.prod_version}}"
                 - name: serving_image
                   value: "{{workflow.parameters.serving_image}}"
 
