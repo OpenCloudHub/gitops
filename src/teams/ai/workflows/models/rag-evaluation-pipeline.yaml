@@ -52,6 +52,13 @@ spec:
           - --dvc-data-version
           - "{{workflow.parameters.dvc_data_version}}"
           - --auto-promote
+        envFrom:
+          - configMapRef:
+              name: models-job-env
+          - configMapRef:
+              name: rag-evaluation-env
+          - secretRef:
+              name: models-job-secrets
         env:
           - name: DB_USER
             valueFrom:
