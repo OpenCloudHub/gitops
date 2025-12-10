@@ -51,7 +51,7 @@ spec:
         deployments:
           - name: WineClassifier
             user_config:
-              model_uri: "models:/prod.wine-classifier/2"
+              model_uri: "models:/prod.wine-classifier/3"
             num_replicas: 2
             max_ongoing_requests: 5
             ray_actor_options:
@@ -66,7 +66,7 @@ spec:
         spec:
           containers:
             - name: ray-head
-              image: opencloudhuborg/wine-classifier-serving:main-86cc153
+              image: opencloudhuborg/wine-classifier-serving:main-f882255
               imagePullPolicy: Always
               ports:
                 - containerPort: 8000
@@ -107,7 +107,7 @@ spec:
           spec:
             containers:
               - name: ray-worker
-                image: opencloudhuborg/wine-classifier-serving:main-86cc153
+                image: opencloudhuborg/wine-classifier-serving:main-f882255
                 imagePullPolicy: Always
                 # Override the readiness probe - workers don't run Serve
                 readinessProbe:
