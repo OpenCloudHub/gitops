@@ -28,5 +28,4 @@ helmCharts:
     valuesInline:
       cors:
         allowOrigin: "*"
-      security:
-        proxy: null
+      security: ""
