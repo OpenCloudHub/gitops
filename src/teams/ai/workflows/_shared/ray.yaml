@@ -139,7 +139,7 @@ spec:
 
       resource:
         action: create
-        successCondition: status.jobId != ""
+        successCondition: status.jobStatus in (PENDING, RUNNING)
         failureCondition: status.jobDeploymentStatus == Failed
         manifest: |
           apiVersion: ray.io/v1
