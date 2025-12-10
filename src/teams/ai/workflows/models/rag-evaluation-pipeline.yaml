@@ -41,17 +41,22 @@ spec:
     # EVALUATE PROMPTS
     # ==========================================================================
     - name: evaluate-prompts
+      outputs:
+        artifacts:
+          - name: evaluation-report
+            path: /tmp/output.log
+            archive:
+              none: {}
       container:
         image: "{{workflow.parameters.image}}"
-        command: [python, -m, src.prompts.evaluate_prompts]
+        command: [sh, -c]
         args:
-          - --prompt-name
-          - "{{workflow.parameters.prompt_name}}"
-          - --prompt-versions
-          - "{{workflow.parameters.prompt_versions}}"
-          - --dvc-data-version
-          - "{{workflow.parameters.dvc_data_version}}"
-          - --auto-promote
+          - |
+            python -m src.prompts.evaluate_prompts \
+              --prompt-name "{{workflow.parameters.prompt_name}}" \
+              --prompt-versions "{{workflow.parameters.prompt_versions}}" \
+              --dvc-data-version "{{workflow.parameters.dvc_data_version}}" \
+              --auto-promote 2>&1 | tee /tmp/output.log
         envFrom:
           - configMapRef:
               name: models-job-env
@@ -86,16 +91,68 @@ spec:
     # RELOAD RAG ENDPOINT
     # ==========================================================================
     - name: reload-endpoint
-      container:
+      outputs:
+        artifacts:
+          - name: reload-report
+            path: /tmp/reload-report.md
+            archive:
+              none: {}
+      script:
         image: curlimages/curl:8.5.0
-        command: [sh, -c]
-        args:
-          - |
-            echo "Reloading RAG endpoint with @champion prompt..."
-            curl -X POST \
-              http://demo-app-genai-backend.demo-app.svc.cluster.local:8000/admin/reload-prompt \
-              -H "Content-Type: application/json" \
-              -d '{"prompt_version": null}' \
-              --fail --silent --show-error
-            echo ""
-            echo "✓ RAG endpoint reloaded with champion prompt"
+        command: [sh]
+        source: |
+          echo ""
+          echo "══════════════════════════════════════════════════"
+          echo "🔄 RELOAD RAG ENDPOINT"
+          echo "══════════════════════════════════════════════════"
+          echo ""
+          echo "  Endpoint ..... demo-app-genai-backend:8000"
+          echo "  Action ....... Load @champion prompt"
+          echo ""
+
+          RESPONSE=$(curl -X POST \
+            http://demo-app-genai-backend.demo-app.svc.cluster.local:8000/admin/reload-prompt \
+            -H "Content-Type: application/json" \
+            -d '{"prompt_version": null}' \
+            --fail --silent --show-error 2>&1) || {
+              echo "--------------------------------------------------"
+              echo "❌ RELOAD FAILED"
+              echo "   $RESPONSE"
+              echo "--------------------------------------------------"
+
+              cat > /tmp/reload-report.md << EOF
+          ══════════════════════════════════════════════════
+          🔄 RELOAD RAG ENDPOINT
+          ══════════════════════════════════════════════════
+
+            Status ....... FAILED
+            Error ........ $RESPONSE
+
+          ══════════════════════════════════════════════════
+          EOF
+              exit 1
+          }
+
+          echo "--------------------------------------------------"
+          echo "✅ ENDPOINT RELOADED"
+          echo "   Prompt @champion now active"
+          echo "--------------------------------------------------"
+          echo ""
+          echo "══════════════════════════════════════════════════"
+          echo ""
+
+          cat > /tmp/reload-report.md << EOF
+          ══════════════════════════════════════════════════
+          🔄 RELOAD RAG ENDPOINT
+          ══════════════════════════════════════════════════
+
+            Endpoint ..... demo-app-genai-backend:8000
+            Status ....... SUCCESS
+            Prompt ....... @champion
+
+          --------------------------------------------------
+          ✅ ENDPOINT RELOADED SUCCESSFULLY
+          --------------------------------------------------
+
+          ══════════════════════════════════════════════════
+          EOF
