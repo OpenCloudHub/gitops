@@ -41,8 +41,8 @@ data:
 
   # DVC paths
   DVC_REPO: "https://github.com/OpenCloudHub/data-registry"
-  DVC_TRAIN_DATA_PATH: "data/fashion-mnist/processed/train/train.parquet"
-  DVC_VAL_DATA_PATH: "data/fashion-mnist/processed/val/val.parquet"
+  DVC_TRAIN_DATA_PATH: "data/fashion-mnist/processed/train"
+  DVC_VAL_DATA_PATH: "data/fashion-mnist/processed/val"
   DVC_METRICS_PATH: "data/fashion-mnist/metadata.json"
 ---
 # Qwen VL Radiology model

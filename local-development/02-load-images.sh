@@ -1,13 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# local-development/2-load-images.sh
+# local-development/02-load-images.sh
 # Load pre-pulled Docker images into Minikube (optional, speeds up bootstrap)
 # =============================================================================
 #
 # Usage:
-#   ./2-load-images.sh           # Load all cached images
-#   ./2-load-images.sh --list    # Show image list without loading
-#   ./2-load-images.sh --pull    # Pull images to host first, then load
+#   ./02-load-images.sh           # Load all cached images
+#   ./02-load-images.sh --list    # Show image list without loading
+#   ./02-load-images.sh --pull    # Pull images to host first, then load
 #
 # Note:
 #   Images loaded with 'minikube image load' persist across stop/start
@@ -96,8 +96,8 @@ IMAGES=(
   # Demo Apps
   "opencloudhuborg/demo-app-frontend:main-da9e301"
   "opencloudhuborg/demo-app-genai-backend:main-dc41d35"
-  "opencloudhuborg/fashion-mnist-classifier-serving:main-8718b6e"
-  "opencloudhuborg/wine-classifier-serving:main-7fe444c"
+  "opencloudhuborg/fashion-mnist-classifier-serving:main-b045a81"
+  "opencloudhuborg/wine-classifier-serving:main-f882255"
 
   # Utilities
   "docker.io/curlimages/curl:8.9.1"

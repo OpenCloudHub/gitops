@@ -1,12 +1,12 @@
 #!/bin/bash
 # =============================================================================
-# local-development/1-setup-minikube.sh
+# local-development/01-setup-minikube.sh
 # Sets up Minikube cluster with GPU support and persistent storage
 # =============================================================================
 #
 # Usage:
-#   ./1-setup-minikube.sh                    # Full setup (deletes existing)
-#   DRY_RUN=true ./1-setup-minikube.sh       # Preview without changes
+#   ./01-setup-minikube.sh                    # Full setup (deletes existing)
+#   DRY_RUN=true ./01-setup-minikube.sh       # Preview without changes
 #
 # Prerequisites:
 #   - Docker installed and running

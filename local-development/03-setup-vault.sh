@@ -1,11 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# local-dev/setup-vault.sh
+# local-development/03-setup-vault.sh
 # Starts a local HashCorp Vault in dev mode and seeds it with secrets
 # =============================================================================
 #
 # Usage:
-#   ./setup-vault.sh              # Start Vault and seed secrets
+#   ./03-setup-vault.sh              # Start Vault and seed secrets
 #   DRY_RUN=true ./setup-vault.sh # Preview without changes
 #
 # Prerequisites:

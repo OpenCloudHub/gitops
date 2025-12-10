@@ -1,12 +1,12 @@
 #!/bin/bash
 # =============================================================================
-# local-development/4-setup-network.sh
+# local-development/04-setup-network.sh
 # Sets up Minikube tunnel and configures /etc/hosts for local access
 # =============================================================================
 #
 # Usage:
-#   ./4-setup-network.sh                    # Start tunnel + configure hosts
-#   DRY_RUN=true ./4-setup-network.sh       # Preview without changes
+#   ./04-setup-network.sh                    # Start tunnel + configure hosts
+#   DRY_RUN=true ./04-setup-network.sh       # Preview without changes
 #
 # Prerequisites:
 #   - Minikube running with Gateway deployed
