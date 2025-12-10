@@ -23,7 +23,7 @@ spec:
             num_replicas: auto  # Enable autoscaling!
             max_ongoing_requests: 50       # bigger queue buffer
             autoscaling_config:
-              min_replicas: 2
+              min_replicas: 1
               max_replicas: 4
               target_ongoing_requests: 2   # trigger scaling earlier
               upscale_delay_s: 2           # react faster
