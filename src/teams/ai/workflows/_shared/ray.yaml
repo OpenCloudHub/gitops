@@ -299,10 +299,22 @@ spec:
           } | tee -a /tmp/training-logs.txt
 
           # Stream logs via Ray API using actual job ID
-          ray job logs --address "http://$HEAD_SVC" "$JOB_ID" --follow 2>&1 | tee -a /tmp/training-logs.txt || true
+          ray job logs --address "http://$HEAD_SVC" "$JOB_ID" --follow 2>&1 | tee -a /tmp/training-logs.txt
+          LOG_EXIT_CODE=$?
 
-          # Check final status via Ray API
-          FINAL_STATUS=$(ray job status --address "http://$HEAD_SVC" "$JOB_ID" 2>/dev/null | grep -oP 'Status: \K\w+' || echo "UNKNOWN")
+          # Check final status via Ray API (cluster may have shut down)
+          FINAL_STATUS=$(ray job status --address "http://$HEAD_SVC" "$JOB_ID" 2>/dev/null | grep -E "^Status:" | awk '{print $2}' || echo "")
+
+          # If we can't reach cluster (shutdown), check if logs indicate success
+          if [ -z "$FINAL_STATUS" ]; then
+            if grep -q "succeeded" /tmp/training-logs.txt; then
+              FINAL_STATUS="SUCCEEDED"
+            elif grep -q "failed" /tmp/training-logs.txt; then
+              FINAL_STATUS="FAILED"
+            else
+              FINAL_STATUS="UNKNOWN"
+            fi
+          fi
 
           if [ "$FINAL_STATUS" = "SUCCEEDED" ]; then
             {
