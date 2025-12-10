@@ -124,6 +124,10 @@ load-models: load-fashion-mnist
 load-fashion-mnist:
 	@$(SCRIPT) load-model-fashion-mnist load model-fashion-mnist 02-load/models/custom/fashion-mnist.js $(CPU_MODEL) $(MEM_MODEL)
 
+.PHONY: load-wine
+load-wine:
+	@$(SCRIPT) load-model-wine load model-wine 02-load/models/custom/wine.js $(CPU_MODEL) $(MEM_MODEL)
+
 # ============================================================================
 # STRESS TESTS
 # ============================================================================
