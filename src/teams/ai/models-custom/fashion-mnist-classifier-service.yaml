@@ -43,7 +43,7 @@ spec:
         spec:
           containers:
             - name: ray-head
-              image: opencloudhuborg/fashion-mnist-classifier-serving:main-e5d6867
+              image: opencloudhuborg/fashion-mnist-classifier-serving:main-b045a81
               imagePullPolicy: Always
               startupProbe:
                 httpGet:
@@ -108,7 +108,7 @@ spec:
           spec:
             containers:
               - name: ray-worker
-                image: opencloudhuborg/fashion-mnist-classifier-serving:main-e5d6867
+                image: opencloudhuborg/fashion-mnist-classifier-serving:main-b045a81
                 imagePullPolicy: Always
                 readinessProbe:
                   exec:

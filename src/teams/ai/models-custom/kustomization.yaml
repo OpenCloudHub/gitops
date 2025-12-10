@@ -3,4 +3,4 @@ kind: Kustomization
 namespace: models
 resources:
   - wine-classifier-service.yaml
-  # - fashion-mnist-classifier-service.yaml
+  - fashion-mnist-classifier-service.yaml
