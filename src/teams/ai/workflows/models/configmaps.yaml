@@ -84,4 +84,4 @@ data:
   EMBEDDING_MODEL: "sentence-transformers/all-MiniLM-L6-v2"
   # DVC
   DVC_REPO: "https://github.com/OpenCloudHub/data-registry"
-  EVAL_DATA_PATH: "data/opencloudhub-readmes/rag-evaluation/questions.csv"
+  EVAL_DATA_PATH: "data/opencloudhub-readmes-rag-evaluation/questions.csv"
