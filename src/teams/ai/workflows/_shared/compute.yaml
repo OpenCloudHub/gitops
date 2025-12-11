@@ -78,6 +78,11 @@ spec:
               MEM_REQ="8Gi"  ; MEM_LIM="10Gi"
               REPLICAS="1"   ; GPU="0"
               ;;
+            cpu-medium-distributed)
+              CPU_REQ="4"    ; CPU_LIM="6"
+              MEM_REQ="8Gi"  ; MEM_LIM="10Gi"
+              REPLICAS="2"   ; GPU="0"
+              ;;
             cpu-large)
               CPU_REQ="8"    ; CPU_LIM="12"
               MEM_REQ="16Gi" ; MEM_LIM="20Gi"

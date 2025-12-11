@@ -70,6 +70,7 @@ spec:
             cpu-small,
             cpu-small-distributed,
             cpu-medium,
+            cpu-medium-distributed,
             cpu-large,
             gpu-small,
             gpu-medium,
