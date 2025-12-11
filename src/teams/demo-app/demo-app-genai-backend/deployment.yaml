@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: demo-app-genai-backend-api
-          image: opencloudhuborg/demo-app-genai-backend:main-6ba5433
+          image: opencloudhuborg/demo-app-genai-backend:latest
           # Container-level security context
           securityContext:
             allowPrivilegeEscalation: false

@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: demo-app-frontend
-          image: opencloudhuborg/demo-app-frontend:main-2418fc7
+          image: opencloudhuborg/demo-app-frontend:latest
           # Container-level security context
           securityContext:
             allowPrivilegeEscalation: false
