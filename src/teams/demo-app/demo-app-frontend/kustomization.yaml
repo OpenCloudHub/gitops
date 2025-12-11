@@ -7,4 +7,4 @@ resources:
   - http-route.yaml
 images:
   - name: opencloudhuborg/demo-app-frontend
-    newTag: main-74c5d8f
+    newTag: main-7650d74
