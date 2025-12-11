@@ -44,7 +44,7 @@ spec:
       outputs:
         artifacts:
           - name: evaluation-report
-            path: /tmp/output.log
+            path: /tmp/evaluation-report.md # Created by script at runtime
             archive:
               none: {}
       container:
@@ -56,7 +56,7 @@ spec:
               --prompt-name "{{workflow.parameters.prompt_name}}" \
               --prompt-versions "{{workflow.parameters.prompt_versions}}" \
               --dvc-data-version "{{workflow.parameters.dvc_data_version}}" \
-              --auto-promote 2>&1 | tee /tmp/output.log
+              --auto-promote
         envFrom:
           - configMapRef:
               name: models-job-env
