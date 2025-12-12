@@ -22,7 +22,7 @@ spec:
             num_replicas: 2
             max_ongoing_requests: 10
             ray_actor_options:
-              num_cpus: 2
+              num_cpus: 1
               num_gpus: 0.4
               memory: 8053063680  # ~7.5GB per replica
     http_options:
