@@ -17,6 +17,8 @@ spec:
         route_prefix: /models/custom/qwen-vl-radiology-vqa
         deployments:
           - name: QwenVLRadiologyVQAService
+            user_config:
+              model_uri: "models:/prod.qwen-vl-radiology-vqa/1"
             num_replicas: 1
             max_ongoing_requests: 10
             ray_actor_options:
@@ -37,7 +39,7 @@ spec:
         spec:
           containers:
             - name: ray-head
-              image: opencloudhuborg/qwen-vl-radiology-vqa-serving:main-131210e
+              image: opencloudhuborg/qwen-vl-radiology-vqa-serving:main-3dab2e5
               imagePullPolicy: IfNotPresent
               startupProbe:
                 httpGet:
@@ -102,7 +104,7 @@ spec:
           spec:
             containers:
               - name: ray-worker
-                image: opencloudhuborg/qwen-vl-radiology-vqa-serving:main-131210e
+                image: opencloudhuborg/qwen-vl-radiology-vqa-serving:main-3dab2e5
                 imagePullPolicy: IfNotPresent
                 readinessProbe:
                   exec:
