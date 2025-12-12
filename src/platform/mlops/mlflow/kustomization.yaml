@@ -61,5 +61,6 @@ patches:
           - --port=5000
           - --backend-store-uri=postgresql+psycopg2://
           - --artifacts-destination=s3://mlflow/
+          - --serve-artifacts
           - --expose-prometheus=/mlflow/metrics
           - --disable-security-middleware
