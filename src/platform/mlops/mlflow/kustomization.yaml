@@ -25,7 +25,7 @@ helmCharts:
           usernameKey: "username"
           passwordKey: "password"
       artifactRoot:
-        proxiedArtifactStorage: true
+        proxiedArtifactStorage: false
         s3:
           enabled: true
           bucket: "mlflow"
