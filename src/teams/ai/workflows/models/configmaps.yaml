@@ -82,9 +82,9 @@ data:
   # DVC paths
   DVC_PROCESSED_PATH: "data/roco-radiology/processed"
   DVC_METADATA_PATH: "data/roco-radiology/metadata.json"
-  # Ray storage (for checkpoints to MinIO)
-  RAY_STORAGE_ENDPOINT: "minio.minio-tenant.svc.cluster.local:80"
-  RAY_STORAGE_SCHEME: "http"
-  RAY_STORAGE_PATH: "ray-results"
+  # Ray storage - MUST be full S3 URI
+  RAY_STORAGE_PATH: "s3://ray-results/"
   RAY_NUM_WORKERS: "1"
   RAY_GPU_FRACTION: "1.0"
+  # PyArrow needs this for S3/MinIO
+  AWS_ENDPOINT_URL: "http://minio.minio-tenant.svc.cluster.local:80"
