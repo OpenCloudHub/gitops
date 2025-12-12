@@ -4,4 +4,4 @@ namespace: models
 resources:
   # - wine-classifier-service.yaml
   # - fashion-mnist-classifier-service.yaml
-  - qwen-vl-radiology-vqa.yaml
+  # - qwen-vl-radiology-vqa.yaml
