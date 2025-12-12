@@ -24,7 +24,7 @@ spec:
             ray_actor_options:
               num_cpus: 1
               num_gpus: 0.4
-              memory: 8053063680  # ~7.5GB per replica
+              memory: 5368709120  # ~5GB per replica (10GB total)
     http_options:
       host: "0.0.0.0"
       port: 8000
