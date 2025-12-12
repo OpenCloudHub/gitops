@@ -3,7 +3,6 @@ kind: Kustomization
 namespace: mlops
 resources:
   - http-route.yaml
-
 helmCharts:
   - name: mlflow
     releaseName: mlflow
@@ -12,7 +11,6 @@ helmCharts:
     valuesInline:
       extraArgs:
         host: "0.0.0.0"
-        # gunicornOpts: "" # Remove gunicorn, use default uvicorn
       backendStore:
         postgres:
           enabled: true
@@ -20,12 +18,12 @@ helmCharts:
           port: 5432
           database: "mlflow"
           driver: "psycopg2"
-        existingDatabaseSecret:
-          name: "mlflow-db-user"
-          usernameKey: "username"
-          passwordKey: "password"
+          existingDatabaseSecret:
+            name: "mlflow-db-user"
+            usernameKey: "username"
+            passwordKey: "password"
       artifactRoot:
-        proxiedArtifactStorage: true
+        proxiedArtifactStorage: false # <-- CHANGED TO FALSE
         s3:
           enabled: true
           bucket: "mlflow"
@@ -36,7 +34,6 @@ helmCharts:
       extraEnvVars:
         MLFLOW_S3_ENDPOINT_URL: "http://minio-hl.minio-tenant.svc.cluster.local:9000"
         MLFLOW_S3_IGNORE_TLS: "true"
-        UVICORN_TIMEOUT_KEEP_ALIVE: "600"
       service:
         port: 80
         containerPort: 5000
