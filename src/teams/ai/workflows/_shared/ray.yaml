@@ -171,7 +171,7 @@ spec:
                             memory: "4Gi"
                           limits:
                             cpu: "1"
-                            memory: "6Gi"
+                            memory: "12Gi"
                         envFrom:
                           - configMapRef:
                               name: "{{inputs.parameters.base_configmap}}"
