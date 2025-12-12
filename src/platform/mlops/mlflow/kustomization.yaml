@@ -13,7 +13,7 @@ helmCharts:
       extraArgs:
         host: "0.0.0.0"
         gunicornOpts: "" # Remove gunicorn, use default uvicorn
-        workers: 4
+        workers: "4"
       backendStore:
         postgres:
           enabled: true
