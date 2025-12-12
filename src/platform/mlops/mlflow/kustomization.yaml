@@ -12,8 +12,7 @@ helmCharts:
     valuesInline:
       extraArgs:
         host: "0.0.0.0"
-        gunicornOpts: "" # Remove gunicorn, use default uvicorn
-        workers: "4"
+        gunicornOpts: ""
       backendStore:
         postgres:
           enabled: true
@@ -34,12 +33,12 @@ helmCharts:
             name: "minio-tenant-secret"
             keyOfAccessKeyId: "AWS_ACCESS_KEY_ID"
             keyOfSecretAccessKey: "AWS_SECRET_ACCESS_KEY"
+      extraFlags:
+        - serveArtifacts
+        - disableSecurityMiddleware
       extraEnvVars:
         MLFLOW_S3_ENDPOINT_URL: "http://minio-hl.minio-tenant.svc.cluster.local:9000"
         MLFLOW_S3_IGNORE_TLS: "true"
-        UVICORN_TIMEOUT_KEEP_ALIVE: "600"
-      extraFlags:
-        - serveArtifacts
       service:
         port: 80
         containerPort: 5000
