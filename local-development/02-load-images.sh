@@ -94,14 +94,14 @@ IMAGES=(
   "ghcr.io/actions/gha-runner-scale-set-controller:0.13.0"
 
   # Demo Apps
-  "opencloudhuborg/demo-app-frontend:main-da9e301"
-  "opencloudhuborg/demo-app-genai-backend:main-dc41d35"
-  "opencloudhuborg/fashion-mnist-classifier-serving:main-b045a81"
-  "opencloudhuborg/wine-classifier-serving:main-f882255"
+  # "opencloudhuborg/demo-app-frontend:main-da9e301"
+  # "opencloudhuborg/demo-app-genai-backend:main-dc41d35"
+  # "opencloudhuborg/fashion-mnist-classifier-serving:main-b045a81"
+  # "opencloudhuborg/wine-classifier-serving:main-f882255"
 
   # Qwen VL (large - load separately if needed)
-  "opencloudhuborg/qwen-vl-radiology-vqa-training:main-259da40"
-  "opencloudhuborg/qwen-vl-radiology-vqa-serving:main-259da40"
+  "opencloudhuborg/qwen-vl-radiology-vqa-training:main-3dab2e5"
+  "opencloudhuborg/qwen-vl-radiology-vqa-serving:main-3dab2e5"
 
   # Utilities
   "docker.io/curlimages/curl:8.9.1"
