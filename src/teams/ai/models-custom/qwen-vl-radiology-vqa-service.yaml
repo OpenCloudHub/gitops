@@ -19,12 +19,12 @@ spec:
           - name: QwenVLRadiologyVQAService
             user_config:
               model_uri: "models:/prod.qwen-vl-radiology-vqa/1"
-            num_replicas: 1
+            num_replicas: 2
             max_ongoing_requests: 10
             ray_actor_options:
               num_cpus: 2
-              num_gpus: 0.6
-              memory: 16106127360  # 15GB
+              num_gpus: 0.4
+              memory: 8053063680  # ~7.5GB per replica
     http_options:
       host: "0.0.0.0"
       port: 8000
