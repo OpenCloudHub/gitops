@@ -9,8 +9,6 @@ helmCharts:
     version: 1.8.0
     repo: https://community-charts.github.io/helm-charts
     valuesInline:
-      extraArgs:
-        host: "0.0.0.0"
       backendStore:
         postgres:
           enabled: true
@@ -18,22 +16,17 @@ helmCharts:
           port: 5432
           database: "mlflow"
           driver: "psycopg2"
-          existingDatabaseSecret:
-            name: "mlflow-db-user"
-            usernameKey: "username"
-            passwordKey: "password"
       artifactRoot:
-        proxiedArtifactStorage: false # <-- CHANGED TO FALSE
+        proxiedArtifactStorage: false
         s3:
           enabled: true
           bucket: "mlflow"
-          existingSecret:
-            name: "minio-tenant-secret"
-            keyOfAccessKeyId: "AWS_ACCESS_KEY_ID"
-            keyOfSecretAccessKey: "AWS_SECRET_ACCESS_KEY"
       extraEnvVars:
         MLFLOW_S3_ENDPOINT_URL: "http://minio-hl.minio-tenant.svc.cluster.local:9000"
         MLFLOW_S3_IGNORE_TLS: "true"
+      extraSecretNamesForEnvFrom:
+        - mlflow-db-user
+        - minio-tenant-secret
       service:
         port: 80
         containerPort: 5000
