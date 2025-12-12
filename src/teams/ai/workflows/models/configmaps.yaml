@@ -46,22 +46,6 @@ data:
   DVC_METRICS_PATH: "data/fashion-mnist/metadata.json"
   DVC_REMOTE: "minikube"
 ---
-# Qwen VL Radiology model
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: qwen-vl-radiology-vqa-env
-  namespace: mlops
-data:
-  MLFLOW_EXPERIMENT_NAME: "qwen-vl-radiology-vqa"
-  MLFLOW_REGISTERED_MODEL_NAME: "ci.qwen-vl-radiology-vqa"
-  # DVC paths
-  DVC_PROCESSED_PATH: "data/roco-radiology/processed"
-  DVC_METADATA_PATH: "data/roco-radiology/metadata.json"
-  # Ray
-  RAY_STORAGE_PATH: "/tmp/ray_results"
-  RAY_NUM_WORKERS: "1"
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
