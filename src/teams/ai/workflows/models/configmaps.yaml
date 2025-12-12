@@ -79,6 +79,8 @@ data:
   MLFLOW_EXPERIMENT_NAME: "qwen-vl-radiology-vqa"
   MLFLOW_REGISTERED_MODEL_NAME: "ci.qwen-vl-radiology-vqa"
   MLFLOW_S3_ENDPOINT_URL: "http://minio.minio-tenant.svc.cluster.local:80"
+  MLFLOW_HTTP_REQUEST_TIMEOUT: "300"
+  MLFLOW_ARTIFACT_UPLOAD_DOWNLOAD_TIMEOUT: "600"
   # DVC paths
   DVC_PROCESSED_PATH: "data/roco-radiology/processed"
   DVC_METADATA_PATH: "data/roco-radiology/metadata.json"
