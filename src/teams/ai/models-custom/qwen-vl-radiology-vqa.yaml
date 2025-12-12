@@ -37,7 +37,7 @@ spec:
         spec:
           containers:
             - name: ray-head
-              image: opencloudhuborg/qwen-vl-radiology-vqa-serving:main-259da40
+              image: opencloudhuborg/qwen-vl-radiology-vqa-serving:main-4ba13b7
               imagePullPolicy: IfNotPresent
               startupProbe:
                 httpGet:
@@ -102,7 +102,7 @@ spec:
           spec:
             containers:
               - name: ray-worker
-                image: opencloudhuborg/qwen-vl-radiology-vqa-serving:main-259da40
+                image: opencloudhuborg/qwen-vl-radiology-vqa-serving:main-4ba13b7
                 imagePullPolicy: IfNotPresent
                 readinessProbe:
                   exec:
