@@ -1,0 +1,184 @@
+# Qwen-VL Radiology VQA - Complete Service Definition
+---
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: qwen-vl-radiology-vqa-service
+  namespace: models
+  labels:
+    app.kubernetes.io/name: qwen-vl-radiology-vqa
+spec:
+  serviceUnhealthySecondThreshold: 900
+  deploymentUnhealthySecondThreshold: 300
+  serveConfigV2: |
+    applications:
+      - name: qwen-vl-radiology-vqa-api
+        import_path: src.serving.serve:app_builder
+        route_prefix: /models/custom/qwen-vl-radiology-vqa
+        deployments:
+          - name: QwenVLRadiology
+            num_replicas: 1
+            max_ongoing_requests: 10
+            ray_actor_options:
+              num_cpus: 2
+              num_gpus: 0.9
+              memory: 16106127360  # 15GB
+    http_options:
+      host: "0.0.0.0"
+      port: 8000
+  rayClusterConfig:
+    rayVersion: "2.51.0"
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        metrics-export-port: "8080"
+        num-cpus: "0"
+      template:
+        spec:
+          containers:
+            - name: ray-head
+              image: opencloudhuborg/qwen-vl-radiology-vqa-serving:main-259da40
+              imagePullPolicy: IfNotPresent
+              startupProbe:
+                httpGet:
+                  path: /api/gcs_healthz
+                  port: 8265
+                initialDelaySeconds: 10
+                periodSeconds: 10
+                timeoutSeconds: 5
+                failureThreshold: 18
+              readinessProbe:
+                httpGet:
+                  path: /api/gcs_healthz
+                  port: 8265
+                initialDelaySeconds: 5
+                periodSeconds: 5
+                timeoutSeconds: 3
+                successThreshold: 1
+                failureThreshold: 3
+              livenessProbe:
+                httpGet:
+                  path: /api/gcs_healthz
+                  port: 8265
+                initialDelaySeconds: 180
+                periodSeconds: 30
+                timeoutSeconds: 10
+                failureThreshold: 5
+              ports:
+                - containerPort: 8000
+                  name: serve
+                  protocol: TCP
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                - containerPort: 8265
+                  name: dashboard
+                  protocol: TCP
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "4Gi"
+                limits:
+                  cpu: "1"
+                  memory: "6Gi"
+              envFrom:
+                - secretRef:
+                    name: minio-tenant-secret
+              env:
+                - name: MLFLOW_TRACKING_URI
+                  value: "http://mlflow.mlops.svc.cluster.local:80"
+                - name: RAY_GRAFANA_HOST
+                  value: "http://grafana.observability.svc.cluster.local:80"
+                - name: RAY_PROMETHEUS_HOST
+                  value: "http://prometheus-server.observability.svc.cluster.local:80"
+                - name: RAY_GRAFANA_IFRAME_HOST
+                  value: "https://grafana.internal.opencloudhub.org"
+    workerGroupSpecs:
+      - groupName: gpu-workers
+        minReplicas: 1
+        maxReplicas: 1
+        numOfHosts: 1
+        template:
+          spec:
+            containers:
+              - name: ray-worker
+                image: opencloudhuborg/qwen-vl-radiology-vqa-serving:main-259da40
+                imagePullPolicy: IfNotPresent
+                readinessProbe:
+                  exec:
+                    command:
+                      - bash
+                      - -c
+                      - wget --tries 1 -T 2 -q -O- http://localhost:52365/api/local_raylet_healthz | grep success
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
+                  timeoutSeconds: 2
+                  successThreshold: 1
+                  failureThreshold: 3
+                resources:
+                  requests:
+                    cpu: "2"
+                    memory: "16Gi"
+                    nvidia.com/gpu: "1"
+                  limits:
+                    cpu: "4"
+                    memory: "20Gi"
+                    nvidia.com/gpu: "1"
+                envFrom:
+                  - secretRef:
+                      name: minio-tenant-secret
+                env:
+                  - name: MLFLOW_TRACKING_URI
+                    value: "http://mlflow.mlops.svc.cluster.local:80"
+---
+# HTTPRoute for model API (external access)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qwen-vl-radiology-vqa-api-route
+  namespace: models
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ingress-gateway
+      namespace: istio-ingress
+  hostnames:
+    - "api.opencloudhub.org"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /models/custom/qwen-vl-radiology-vqa
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: qwen-vl-radiology-vqa-service-serve-svc
+          port: 8000
+          weight: 1
+---
+# HTTPRoute for Ray Dashboard
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qwen-vl-radiology-vqa-dashboard-route
+  namespace: models
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: ingress-gateway
+      namespace: istio-ingress
+  hostnames:
+    - "qwen-vl-radiology-vqa.dashboard.opencloudhub.org"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/"
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: qwen-vl-radiology-vqa-service-head-svc
+          port: 8265
+          weight: 1

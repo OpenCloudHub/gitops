@@ -99,6 +99,10 @@ IMAGES=(
   "opencloudhuborg/fashion-mnist-classifier-serving:main-b045a81"
   "opencloudhuborg/wine-classifier-serving:main-f882255"
 
+  # Qwen VL (large - load separately if needed)
+  "opencloudhuborg/qwen-vl-radiology-vqa-training:main-259da40"
+  "opencloudhuborg/qwen-vl-radiology-vqa-serving:main-259da40"
+
   # Utilities
   "docker.io/curlimages/curl:8.9.1"
 )
@@ -152,7 +156,7 @@ load_images() {
   for img in "${IMAGES[@]}"; do
     if docker image inspect "$img" &>/dev/null; then
       log_info "Loading: $img"
-      if minikube image load "$img" 2>/dev/null; then
+      if minikube image load --daemon "$img" 2>/dev/null; then
         loaded=$((loaded + 1))
       else
         failed+=("$img")

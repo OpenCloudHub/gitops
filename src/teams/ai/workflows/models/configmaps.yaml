@@ -85,3 +85,21 @@ data:
   # DVC
   DVC_REPO: "https://github.com/OpenCloudHub/data-registry"
   EVAL_DATA_PATH: "data/opencloudhub-readmes-rag-evaluation/questions.csv"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qwen-vl-radiology-vqa-env
+  namespace: mlops
+data:
+  MLFLOW_EXPERIMENT_NAME: "qwen-vl-radiology-vqa"
+  MLFLOW_REGISTERED_MODEL_NAME: "ci.qwen-vl-radiology-vqa"
+  # DVC paths
+  DVC_PROCESSED_PATH: "data/roco-radiology/processed"
+  DVC_METADATA_PATH: "data/roco-radiology/metadata.json"
+  # Ray storage (for checkpoints to MinIO)
+  RAY_STORAGE_ENDPOINT: "minio.minio-tenant.svc.cluster.local:80"
+  RAY_STORAGE_SCHEME: "http"
+  RAY_STORAGE_PATH: "ray-results"
+  RAY_NUM_WORKERS: "1"
+  RAY_GPU_FRACTION: "1.0"
