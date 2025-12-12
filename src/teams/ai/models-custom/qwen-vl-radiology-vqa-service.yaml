@@ -18,7 +18,7 @@ spec:
         deployments:
           - name: QwenVLRadiologyVQAService
             user_config:
-              model_uri: "models:/prod.qwen-vl-radiology-vqa/1"
+              model_uri: "models:/prod.qwen-vl-radiology-vqa/2"
             num_replicas: 2
             max_ongoing_requests: 10
             ray_actor_options:
