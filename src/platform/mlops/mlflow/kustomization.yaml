@@ -12,7 +12,7 @@ helmCharts:
     valuesInline:
       extraArgs:
         host: "0.0.0.0"
-        gunicornOpts: "" # Remove gunicorn, use default uvicorn
+        # gunicornOpts: "" # Remove gunicorn, use default uvicorn
       backendStore:
         postgres:
           enabled: true
