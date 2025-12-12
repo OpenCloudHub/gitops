@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: models
-# resources:
-# - wine-classifier-service.yaml
-# - fashion-mnist-classifier-service.yaml
-# - qwen-vl-radiology-vqa.yaml
+resources:
+  # - wine-classifier-service.yaml
+  # - fashion-mnist-classifier-service.yaml
+  - qwen-vl-radiology-vqa.yaml
