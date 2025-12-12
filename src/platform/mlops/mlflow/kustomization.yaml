@@ -63,3 +63,4 @@ patches:
           - --artifacts-destination=s3://mlflow/
           - --serve-artifacts
           - --expose-prometheus=/mlflow/metrics
+          - --disable-security-middleware
