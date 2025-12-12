@@ -21,7 +21,7 @@ spec:
             max_ongoing_requests: 10
             ray_actor_options:
               num_cpus: 2
-              num_gpus: 0.9
+              num_gpus: 0.6
               memory: 16106127360  # 15GB
     http_options:
       host: "0.0.0.0"
@@ -130,6 +130,8 @@ spec:
                 env:
                   - name: MLFLOW_TRACKING_URI
                     value: "http://mlflow.mlops.svc.cluster.local:80"
+                  - name: SERVE_QUANTIZED
+                    value: "true"
 ---
 # HTTPRoute for model API (external access)
 apiVersion: gateway.networking.k8s.io/v1
